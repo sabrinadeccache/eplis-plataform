@@ -24,6 +24,16 @@ ainda não configurado).
 - Migrations ficam em `supabase/migrations/`, aplicadas via conexão Postgres direta
   (`SUPABASE_DB_URL` em `.env.local`) enquanto não há Supabase CLI/MCP autorizado nesta
   máquina.
+- **Toda migration que cria uma tabela nova precisa de `GRANT` explícito pro role
+  `authenticated`** (`grant select/insert/update on public.<tabela> to authenticated;`),
+  além das RLS policies — RLS só é avaliado depois que o GRANT de tabela já passou.
+  A migration inicial esqueceu isso e toda query autenticada falhava silenciosamente
+  ("permission denied for table X") até ser corrigido na Fase 4 — ver
+  `docs/project-status.md`.
+- Proteção de rotas fica em `src/proxy.ts` — **não** `middleware.ts`. Next.js 16 renomeou
+  a convenção (`middleware` → `proxy`), e como o app mora em `src/app/`, o arquivo
+  precisa ficar em `src/proxy.ts`; na raiz do repo ele simplesmente não executa, sem
+  erro nenhum.
 - `.env.local` nunca vai para o git. Segredos novos (chaves de IA, etc.) entram lá, não
   em nenhum arquivo versionado.
 

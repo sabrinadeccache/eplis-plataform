@@ -1,8 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const PUBLIC_PATHS = ["/login", "/cadastro"];
+
 // Refreshes the Supabase auth session on every request that passes through
-// middleware.ts, keeping cookies valid for both Server Components and Route Handlers.
+// proxy.ts, keeping cookies valid for both Server Components and Route Handlers,
+// and gates access to authenticated routes before any page code runs.
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -27,7 +30,20 @@ export async function updateSession(request: NextRequest) {
 
   // Do not remove — this call refreshes the session token and must run before
   // any route logic reads the user.
-  await supabase.auth.getUser();
+  const { data } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+  const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
+
+  if (!data.user && !isPublicPath && pathname !== "/") {
+    const loginUrl = new URL("/login", request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (data.user && isPublicPath) {
+    const dashboardUrl = new URL("/dashboard", request.url);
+    return NextResponse.redirect(dashboardUrl);
+  }
 
   return supabaseResponse;
 }

@@ -22,8 +22,9 @@ Responsável: Sabrina Deccache.
   `SUPABASE_DB_URL` com a senha do Postgres, usado para aplicar migrations diretamente
   via `pg` (não temos Supabase CLI nem o MCP autorizado nesta máquina — ver seção
   "Ferramentas indisponíveis" abaixo).
-- `OPENAI_API_KEY` e `ANTHROPIC_API_KEY` ainda **não** preenchidas — necessárias antes
-  de começar a Fase 5 (módulo Fase 2 / IA).
+- `OPENAI_API_KEY` **preenchida** (usada na Fase 4 para gerar os áudios de teste via TTS
+  — `scripts/seed-phase1.mjs`). `ANTHROPIC_API_KEY` ainda **não** preenchida — necessária
+  antes de começar a Fase 5 (engine da entrevista/correção).
 
 ## Ferramentas indisponíveis nesta máquina (checar de novo em nova sessão)
 
@@ -42,6 +43,21 @@ Migration `supabase/migrations/20260727000000_init_schema.sql` aplicada e verifi
 RLS habilitado em todas com policies de isolamento por usuário, trigger
 `on_auth_user_created` criando a linha em `public.users` no cadastro via Supabase Auth.
 
+Migration `supabase/migrations/20260727010000_signup_metadata.sql` aplicada e
+verificada: estende `handle_new_user()` para ler `role`, `target_exam` e
+`operational_profile` do `raw_user_meta_data` enviado pelo formulário de cadastro
+(Fase 3), em vez de deixar tudo no default e exigir edição de perfil depois.
+
+Migration `supabase/migrations/20260728000000_grant_authenticated_privileges.sql`
+aplicada e verificada: **corrige um bug crítico presente desde a Fase 2** — a migration
+inicial criou as RLS policies mas nunca deu `GRANT` de privilégio de tabela ao role
+`authenticated` (RLS só é avaliado depois que o GRANT de tabela já passou). Sem isso,
+toda query autenticada contra qualquer uma das 8 tabelas falhava com "permission denied
+for table X", silenciosamente — o app não dava erro visível porque as páginas tratam
+"sem dado" como "sem usuário" e redirecionam pro login, então isso passou despercebido
+até a Fase 4. Se aparecer esse erro em uma tabela nova no futuro, é isso: falta
+`grant select/insert/update on public.<tabela> to authenticated;`.
+
 Consulte `docs/database-schema.md` para o modelo completo e as decisões de design
 (perfil operacional, timers da Fase 2, state machine).
 
@@ -51,13 +67,33 @@ Consulte `docs/database-schema.md` para o modelo completo e as decisões de desi
       configurado (Auth pronto no banco via trigger, RLS ativo), estrutura de pastas.
 - [ ] **Fase 1 — pendente**: ambiente de deploy (Vercel — precisa da conta da Sabrina
       conectada ao GitHub; não configurado ainda).
-- [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; faltam seeds iniciais
-      (áudios/perguntas/prompts de exemplo) e cadastro do primeiro lote de conteúdo real.
-- [ ] **Fase 3 — Fluxo do usuário**: login, dashboard, páginas Fase 1/Fase 2, histórico.
-      **Próximo passo em aberto** — ficou decidido perguntar se seguimos por aqui ou
-      fechamos o deploy na Vercel primeiro; a conversa foi interrompida antes da resposta.
-- [ ] **Fase 4 — Módulo Fase 1**: sorteio de 30 questões, player de áudio, correção,
-      score.
+- [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; seeds de teste da Fase 1 feitos
+      (10 áudios sintéticos, ver Fase 4 abaixo); faltam seeds/prompts da Fase 2 e o
+      cadastro do primeiro lote de conteúdo real (áudios oficiais, não sintéticos).
+- [x] **Fase 3 — Fluxo do usuário**: cadastro (`/cadastro`) e login (`/login`) via
+      Server Actions + Supabase Auth, proteção de rotas no `src/proxy.ts` (redireciona
+      não-autenticado para `/login` e autenticado para fora das páginas públicas),
+      dashboard (`/dashboard`) e placeholders autenticados de Fase 1/Fase 2/Histórico
+      (`AppShell` compartilhado com navegação e logout). Testado ponta a ponta via
+      Supabase Auth API (signup real, trigger populando `role`/`target_exam`/
+      `operational_profile`, depois usuário de teste removido). Falta: nenhuma tela de
+      "recuperar senha" ainda — não fazia parte do pedido desta rodada.
+      **Nota importante:** o arquivo de proteção de rotas chama-se `proxy.ts`, não
+      `middleware.ts` — no Next.js 16 o convention foi renomeado (`middleware` →
+      `proxy`), e como este projeto usa `src/app/`, o arquivo tem que ficar em
+      `src/proxy.ts` (raiz do repo não funciona). Um `middleware.ts` na raiz simplesmente
+      não executa nesta versão, sem erro nenhum — se algo parecer "não estar protegido",
+      confira isso primeiro.
+- [x] **Fase 4 — Módulo Fase 1**: cadastro de 10 áudios de teste (sintetizados via TTS
+      da OpenAI, `scripts/seed-phase1.mjs`, upload pro bucket `phase1-audios` do
+      Supabase Storage) + suas perguntas de múltipla escolha. Fluxo completo: sorteio de
+      até 30 questões ativas (`/fase1` → botão inicia tentativa → `/fase1/simulado/[id]`
+      → timers oficiais de 30s leitura / 1min resposta com reescuta dentro da mesma
+      janela, conforme Manual do Examinando 1.2.1 → `/fase1/resultado/[id]` com score e
+      gabarito). Testado ponta a ponta via HTTP real (login, criação de tentativa,
+      renderização de pergunta+áudio real, grading, tela de resultado) — não só
+      build/lint. Falta: conteúdo oficial real (os 10 áudios atuais são só para
+      desenvolvimento, 3 deles ficam abaixo do mínimo de 10s da especificação).
 - [ ] **Fase 5 — Módulo Fase 2**: state machine da entrevista (ver
       `docs/state-machine.md`), gravação, transcrição (OpenAI), engine de prompts
       (Claude), modos practice/official.
