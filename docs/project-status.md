@@ -22,9 +22,10 @@ Responsável: Sabrina Deccache.
   `SUPABASE_DB_URL` com a senha do Postgres, usado para aplicar migrations diretamente
   via `pg` (não temos Supabase CLI nem o MCP autorizado nesta máquina — ver seção
   "Ferramentas indisponíveis" abaixo).
-- `OPENAI_API_KEY` **preenchida** (usada na Fase 4 para gerar os áudios de teste via TTS
-  — `scripts/seed-phase1.mjs`). `ANTHROPIC_API_KEY` ainda **não** preenchida — necessária
-  antes de começar a Fase 5 (engine da entrevista/correção).
+- `OPENAI_API_KEY` **preenchida** (usada inicialmente pra gerar áudios de teste via TTS
+  na Fase 4, hoje substituídos por gravações reais — ver seção "Banco de dados"
+  abaixo). `ANTHROPIC_API_KEY` ainda **não** preenchida — necessária antes de começar a
+  Fase 5 (engine da entrevista/correção).
 
 ## Ferramentas indisponíveis nesta máquina (checar de novo em nova sessão)
 
@@ -58,6 +59,19 @@ for table X", silenciosamente — o app não dava erro visível porque as págin
 até a Fase 4. Se aparecer esse erro em uma tabela nova no futuro, é isso: falta
 `grant select/insert/update on public.<tabela> to authenticated;`.
 
+Migration `supabase/migrations/20260728010000_grant_service_role_privileges.sql`
+aplicada e verificada: mesma lacuna, mas para o role `service_role` (que ignora RLS por
+padrão no Supabase, mas ainda precisa do GRANT de tabela para ser acessado via API REST
+com a service key — só não travou o app porque os scripts administrativos usam conexão
+Postgres direta, que ignora GRANT).
+
+Conteúdo real da Fase 1 (ver Fase 4 no roadmap abaixo): os 10 áudios sintéticos (TTS) de
+teste foram substituídos por 10 gravações reais de comunicações ATC (bucket
+`phase1-audios`, script `scripts/replace-phase1-audios.mjs`), com perguntas baseadas nas
+transcrições reais (`Material Didático/Phase 1 - Audios/transcricoes_audios.pdf`, fora
+do repo) e dificuldade variada (3 easy, 4 medium, 3 hard) proporcional à complexidade de
+cada gravação.
+
 Consulte `docs/database-schema.md` para o modelo completo e as decisões de design
 (perfil operacional, timers da Fase 2, state machine).
 
@@ -67,9 +81,9 @@ Consulte `docs/database-schema.md` para o modelo completo e as decisões de desi
       configurado (Auth pronto no banco via trigger, RLS ativo), estrutura de pastas.
 - [ ] **Fase 1 — pendente**: ambiente de deploy (Vercel — precisa da conta da Sabrina
       conectada ao GitHub; não configurado ainda).
-- [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; seeds de teste da Fase 1 feitos
-      (10 áudios sintéticos, ver Fase 4 abaixo); faltam seeds/prompts da Fase 2 e o
-      cadastro do primeiro lote de conteúdo real (áudios oficiais, não sintéticos).
+- [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; conteúdo real da Fase 1 já
+      cadastrado (10 áudios reais, ver Fase 4 abaixo); falta ainda cadastrar
+      seeds/prompts reais da Fase 2 (entrevista simulada).
 - [x] **Fase 3 — Fluxo do usuário**: cadastro (`/cadastro`) e login (`/login`) via
       Server Actions + Supabase Auth, proteção de rotas no `src/proxy.ts` (redireciona
       não-autenticado para `/login` e autenticado para fora das páginas públicas),
@@ -84,16 +98,19 @@ Consulte `docs/database-schema.md` para o modelo completo e as decisões de desi
       `src/proxy.ts` (raiz do repo não funciona). Um `middleware.ts` na raiz simplesmente
       não executa nesta versão, sem erro nenhum — se algo parecer "não estar protegido",
       confira isso primeiro.
-- [x] **Fase 4 — Módulo Fase 1**: cadastro de 10 áudios de teste (sintetizados via TTS
-      da OpenAI, `scripts/seed-phase1.mjs`, upload pro bucket `phase1-audios` do
-      Supabase Storage) + suas perguntas de múltipla escolha. Fluxo completo: sorteio de
-      até 30 questões ativas (`/fase1` → botão inicia tentativa → `/fase1/simulado/[id]`
-      → timers oficiais de 30s leitura / 1min resposta com reescuta dentro da mesma
-      janela, conforme Manual do Examinando 1.2.1 → `/fase1/resultado/[id]` com score e
-      gabarito). Testado ponta a ponta via HTTP real (login, criação de tentativa,
-      renderização de pergunta+áudio real, grading, tela de resultado) — não só
-      build/lint. Falta: conteúdo oficial real (os 10 áudios atuais são só para
-      desenvolvimento, 3 deles ficam abaixo do mínimo de 10s da especificação).
+- [x] **Fase 4 — Módulo Fase 1**: fluxo completo — sorteio de até 30 questões ativas
+      (`/fase1` → botão inicia tentativa → `/fase1/simulado/[id]` → timers oficiais de
+      30s leitura / 1min resposta com reescuta dentro da mesma janela, conforme Manual
+      do Examinando 1.2.1 → `/fase1/resultado/[id]` com score e gabarito). Testado ponta
+      a ponta via HTTP real (login, criação de tentativa, renderização de
+      pergunta+áudio real, grading, tela de resultado) — não só build/lint.
+      **Conteúdo**: os 10 áudios são gravações reais de comunicações ATC (fornecidas
+      pela Sabrina, `Material Didático/Phase 1 - Audios/`, fora do repo), com perguntas
+      próprias baseadas na transcrição real e dificuldade alternada (3 easy/4 medium/3
+      hard) — não é mais placeholder sintético. Script de carga:
+      `scripts/replace-phase1-audios.mjs` (idempotente — roda de novo se precisar
+      recadastrar). Falta: só tem 10 itens (a Fase 1 real sorteia até 30); mais áudios
+      reais precisam ser adicionados quando disponíveis.
 - [ ] **Fase 5 — Módulo Fase 2**: state machine da entrevista (ver
       `docs/state-machine.md`), gravação, transcrição (OpenAI), engine de prompts
       (Claude), modos practice/official.
