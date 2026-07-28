@@ -17,6 +17,12 @@ Next.js (App Router) + TypeScript, Tailwind, Supabase (Postgres + Auth + Storage
 OpenAI (transcrição), Anthropic Claude (engine de entrevista/correção), Vercel (deploy,
 ainda não configurado).
 
+## Rodando localmente
+
+`npm run dev` sobe tudo em `http://localhost:3000` — é um monólito, sem backend
+separado. Ver `docs/project-status.md` → "Como testar localmente" para a pegadinha da
+confirmação de e-mail no cadastro.
+
 ## Convenções
 
 - Não reabrir decisões já registradas em `docs/project-status.md` sem motivo novo —

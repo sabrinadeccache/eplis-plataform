@@ -27,6 +27,20 @@ Responsável: Sabrina Deccache.
   abaixo). `ANTHROPIC_API_KEY` ainda **não** preenchida — necessária antes de começar a
   Fase 5 (engine da entrevista/correção).
 
+## Como testar localmente
+
+`npm run dev` na raiz do projeto sobe tudo (é um monólito Next.js — não tem backend
+separado) em `http://localhost:3000`. Sem sessão, redireciona pra `/login`.
+
+**Pegadinha do fluxo de cadastro**: o projeto Supabase exige confirmação de e-mail antes
+do login funcionar. Ao testar `/cadastro` manualmente, é preciso abrir o e-mail recebido
+e confirmar antes de conseguir logar — senão o login falha silenciosamente com "E-mail ou
+senha inválidos" (mensagem genérica de propósito, não é bug). Pra pular essa etapa em
+teste manual, dá pra confirmar um usuário direto via API admin do Supabase
+(`POST /auth/v1/admin/users` com `email_confirm: true`, ou `PUT
+/auth/v1/admin/users/{id}` com o mesmo campo pra um usuário já existente) usando a
+`SUPABASE_SERVICE_ROLE_KEY`.
+
 ## Ferramentas indisponíveis nesta máquina (checar de novo em nova sessão)
 
 - `gh` (GitHub CLI) — não instalado. Push feito via `git push` com credenciais já
@@ -74,6 +88,15 @@ cada gravação.
 
 Consulte `docs/database-schema.md` para o modelo completo e as decisões de design
 (perfil operacional, timers da Fase 2, state machine).
+
+## Próximo passo em aberto
+
+Fases 3 e 4 completas e testadas (inclusive manualmente pela Sabrina em
+`localhost:3000`). **Ainda não decidido** o que vem a seguir — opções sobre a mesa:
+(a) fechar o deploy na Vercel agora que já há algo funcional pra publicar; (b) seguir
+pra Fase 5 (módulo Fase 2/entrevista simulada — precisa da `ANTHROPIC_API_KEY`, ainda
+não preenchida); (c) completar o conteúdo da Fase 1 com mais áudios reais (hoje só 10
+de até 30 possíveis por tentativa). Perguntar à Sabrina antes de escolher.
 
 ## Roadmap (SPD seção 12 / SRS seção 5)
 
