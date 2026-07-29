@@ -173,9 +173,7 @@ type Phase1AnswerInsert = Omit<Phase1AnswerRow, "id" | "created_at">;
 type Phase2PromptInsert = Partial<Omit<Phase2PromptRow, "id" | "created_at">> &
   Pick<Phase2PromptRow, "part" | "prompt_text" | "expected_duration_seconds">;
 
-type Phase2ResponseInsert = Partial<
-  Omit<Phase2ResponseRow, "id" | "created_at" | "processing_status" | "repetition_count">
-> &
+type Phase2ResponseInsert = Partial<Omit<Phase2ResponseRow, "id" | "created_at">> &
   Pick<Phase2ResponseRow, "simulation_attempt_id" | "prompt_id" | "response_stage">;
 
 type SimulationFeedbackInsert = Partial<Omit<SimulationFeedbackRow, "id" | "created_at">> &

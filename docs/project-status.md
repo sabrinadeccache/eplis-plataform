@@ -22,10 +22,10 @@ Responsável: Sabrina Deccache.
   `SUPABASE_DB_URL` com a senha do Postgres, usado para aplicar migrations diretamente
   via `pg` (não temos Supabase CLI nem o MCP autorizado nesta máquina — ver seção
   "Ferramentas indisponíveis" abaixo).
-- `OPENAI_API_KEY` **preenchida** (usada inicialmente pra gerar áudios de teste via TTS
-  na Fase 4, hoje substituídos por gravações reais — ver seção "Banco de dados"
-  abaixo). `ANTHROPIC_API_KEY` ainda **não** preenchida — necessária antes de começar a
-  Fase 5 (engine da entrevista/correção).
+- `OPENAI_API_KEY` **preenchida** — usada na Fase 4 (áudios de teste via TTS, depois
+  substituídos por gravações reais) e agora também na Fase 5 (transcrição via Whisper e
+  TTS da voz da IA na entrevista simulada). `ANTHROPIC_API_KEY` **preenchida e testada**
+  (Fase 5) — usada no engine de feedback/correção da entrevista (`claude-sonnet-5`).
 
 ## Como testar localmente
 
@@ -91,12 +91,26 @@ Consulte `docs/database-schema.md` para o modelo completo e as decisões de desi
 
 ## Próximo passo em aberto
 
-Fases 3 e 4 completas e testadas (inclusive manualmente pela Sabrina em
-`localhost:3000`). **Ainda não decidido** o que vem a seguir — opções sobre a mesa:
-(a) fechar o deploy na Vercel agora que já há algo funcional pra publicar; (b) seguir
-pra Fase 5 (módulo Fase 2/entrevista simulada — precisa da `ANTHROPIC_API_KEY`, ainda
-não preenchida); (c) completar o conteúdo da Fase 1 com mais áudios reais (hoje só 10
-de até 30 possíveis por tentativa). Perguntar à Sabrina antes de escolher.
+Fase 5 (modo `practice` da entrevista simulada — ver seção "Fase 5" no roadmap abaixo)
+implementada e **testada manualmente pela Sabrina em `localhost:3000` com microfone
+real** — a Parte 1 completa (4 perguntas, gravação, transcrição, feedback falado)
+funcionou bem, incluindo vários bugs reais encontrados e corrigidos nessa rodada de
+testes (todos documentados na seção "Fase 5" abaixo — vale ler antes de mexer nesse
+código, para não reintroduzir os mesmos bugs). **Ainda não testadas manualmente as
+Partes 2, 3 e 4** nem o relatório final ponta a ponta (o parsing do relatório final foi
+corrigido, mas só testado isoladamente via script, não dentro do fluxo real do app).
+
+A performance (cada resposta leva alguns segundos entre upload → transcrição → feedback
+→ TTS do feedback) foi discutida com a Sabrina e **decisão fechada: não otimizar agora**
+— ela considerou aceitável pra fase de testes, e vamos seguir o princípio já registrado
+neste documento ("síncrono primeiro, otimizar só se a medição em produção mostrar
+necessidade") em vez de otimizar preventivamente.
+
+Próximos passos, em ordem sugerida: (1) terminar o teste manual ponta a ponta das
+Partes 2-4 e do relatório final; (2) depois disso, perguntar à Sabrina entre — fechar o
+deploy na Vercel, implementar o modo `official` da Fase 2 (timers rígidos, limite de
+repetição por parte), substituir o conteúdo placeholder da Fase 2 por prompts reais, ou
+completar o conteúdo da Fase 1 com mais áudios reais.
 
 ## Roadmap (SPD seção 12 / SRS seção 5)
 
@@ -134,9 +148,79 @@ de até 30 possíveis por tentativa). Perguntar à Sabrina antes de escolher.
       `scripts/replace-phase1-audios.mjs` (idempotente — roda de novo se precisar
       recadastrar). Falta: só tem 10 itens (a Fase 1 real sorteia até 30); mais áudios
       reais precisam ser adicionados quando disponíveis.
-- [ ] **Fase 5 — Módulo Fase 2**: state machine da entrevista (ver
-      `docs/state-machine.md`), gravação, transcrição (OpenAI), engine de prompts
-      (Claude), modos practice/official.
+- [x] **Fase 5 — Módulo Fase 2 (modo practice)**: entrevista simulada completa —
+      4 partes sorteadas de forma determinística por tentativa (PRNG seedado pelo
+      `attemptId`, sem persistir os prompts sorteados em coluna/tabela nova — ver
+      `src/services/simulations/phase2/queries.ts` e `state-machine.ts`), narração da
+      IA via TTS real (OpenAI `tts-1`, gerado sob demanda, sem cache — mesmo princípio
+      de "síncrono primeiro" já usado no resto do projeto), gravação da resposta via
+      `MediaRecorder` no browser, transcrição via OpenAI Whisper, feedback curto por
+      resposta e relatório final (6 critérios ICAO + regra do menor valor, nunca média)
+      via Anthropic Claude (`claude-sonnet-5`). Testado via `npm run lint` + `npm run
+      build` + smoke test de rotas — **falta o teste manual ponta a ponta com
+      microfone real pela Sabrina**.
+      **Achado corrigido nesta rodada**: `simulation_feedbacks` tinha só policy/GRANT de
+      `select`, sem `insert` — mesma classe de bug do GRANT ausente já documentada
+      acima; corrigido em `20260729000000_phase2_feedback_insert.sql`.
+      **Escopo desta rodada**: só modo `practice` (sem timer de 20s pra começar a
+      falar, sem limite rígido de repetição por parte) — modo `official` fica para uma
+      rodada futura. Sub-estágios dentro de um item (ex.: `situation_intro` →
+      `situation_check` → `suggestion` na Parte 2) vivem só no estado local do client
+      component, não são persistidos — um reload no meio de um item reinicia os
+      sub-estágios daquele item, mas não perde a posição de item (`current_part`/
+      `current_item_index`, esses sim persistidos).
+      **Conteúdo**: `phase2_prompts` está com conteúdo **placeholder** (perfil
+      `general`), script `scripts/seed-phase2-prompts.mjs` (idempotente — mesmo padrão
+      do `replace-phase1-audios.mjs`). Imagens da Parte 4 apontam pra `picsum.photos`
+      (placeholder). Falta substituir por conteúdo real quando disponível.
+      **Storage**: bucket `phase2-recordings` criado via
+      `scripts/create-phase2-recordings-bucket.mjs` (público para leitura, como
+      `phase1-audios`), com policy de INSERT restrita ao dono da tentativa em
+      `20260729010000_phase2_recordings_storage_policy.sql`.
+      **Achado corrigido (2ª rodada de testes manuais)**: só a policy de INSERT não
+      bastou — a API de Storage faz um `INSERT ... RETURNING` internamente pra devolver
+      os metadados do objeto, e o Postgres exige que a linha também seja visível por uma
+      policy de SELECT (sem ela, o RETURNING falha com "new row violates row-level
+      security policy" mesmo com a policy de INSERT correta e satisfeita — confirmado
+      isolando o problema em SQL direto). Corrigido em
+      `20260729020000_phase2_recordings_storage_select_policy.sql`. Lição: toda vez que
+      criar uma policy de INSERT em uma tabela usada com `RETURNING` (a maioria dos
+      clients faz isso por padrão), checar se também existe policy de SELECT.
+      **Achado corrigido (mesma rodada, client component)**: o TTS de cada estágio
+      remontava um `<audio>` novo a cada pergunta, e navegadores bloqueiam autoplay em
+      elementos de mídia recém-criados sem gesto recente do usuário — a partir da 2ª
+      pergunta a tela travava esperando um evento `ended` que nunca disparava. Corrigido
+      usando um único elemento `<audio>` persistente (nunca remontado) durante toda a
+      entrevista, com fallback: se o autoplay for bloqueado mesmo assim, o código trata
+      como "terminou de falar" na hora em vez de travar. Também trocado o texto visível
+      da pergunta por apenas o áudio + indicador "IA está falando", e os controles de
+      resposta agora são Falar/Pausar/Continuar falando/Recomeçar/Concluir e enviar
+      (usando pause()/resume() nativos do MediaRecorder), a pedido da Sabrina.
+      **Achado corrigido (3ª rodada de testes manuais)**: o feedback curto por resposta
+      sumia de forma intermitente (apareceu nas questões 3 e 4 da Parte 1, mas não nas
+      1 e 2). Causa: `claude-sonnet-5` usa "thinking" adaptativo por padrão, e quando o
+      modelo decide pensar, `content[0]` da resposta pode ser um bloco de raciocínio em
+      vez do texto — o código indexava direto em `content[0]`, então o feedback saía
+      vazio sempre que o modelo pensava antes de responder. Corrigido em
+      `src/lib/ai/anthropic.ts`: `thinking: {type: "disabled"}` nas duas chamadas (não
+      precisam de raciocínio) + busca explícita pelo primeiro bloco `type === "text"`
+      em vez de indexar `[0]`, como defesa extra. Testado repetindo a chamada 4x — antes
+      da correção, tipo do bloco variava; depois, sempre `text`.
+      **Ajustes de idioma (decisão final desta rodada)**: a entrevista em si — narração
+      da IA (introduções, instruções, situações da Parte 2/4) e o feedback curto falado
+      após cada resposta — é toda em inglês (o aluno treina o ouvido antes do exame de
+      verdade). O **relatório final** (`simulation_feedbacks.general_feedback`, exibido
+      em `/fase2/resultado/[id]`) é em **português**, já que fica salvo como registro de
+      progresso do aluno; o prompt pede explicitamente que explique cada um dos 6
+      critérios individualmente (com exemplo concreto da resposta do candidato), não só
+      uma impressão geral. Feedback curto por resposta é falado em voz alta (TTS) além
+      de exibido na tela.
+      **Achado corrigido (parsing do relatório final)**: ao pedir explicação mais
+      detalhada por critério, o modelo às vezes envolve o JSON em cercas de código
+      (` ```json ... ``` `) mesmo com a instrução de responder só JSON — isso quebrava o
+      `JSON.parse` e caía no relatório de fallback. Corrigido removendo as cercas antes
+      de parsear; `max_tokens` do relatório final também subiu de 1000 para 2000 (a
+      explicação por critério é mais longa e estava sendo cortada no meio).
 - [ ] **Fase 6 — Relatórios**: histórico, evolução por critério ICAO.
 - [ ] **Fase 7 — Refino e lançamento**: responsividade, testes, observabilidade, deploy
       público.
@@ -159,6 +243,15 @@ de até 30 possíveis por tentativa). Perguntar à Sabrina antes de escolher.
 - Nota final por critério ICAO = sempre o **menor** valor entre os 6 critérios, nunca
   média — regra de segurança operacional da OACI, deve estar explícita no prompt de
   correção da IA.
+- Idioma da Fase 2: a entrevista em si (narração da IA, feedback curto falado após cada
+  resposta) é **toda em inglês**, pra o aluno treinar o ouvido antes do exame de
+  verdade. O relatório final salvo (`simulation_feedbacks.general_feedback`) é em
+  **português**, já que fica como registro de progresso do aluno — explicando cada um
+  dos 6 critérios individualmente, não só uma impressão geral.
+- Performance da Fase 5 (latência de alguns segundos por resposta): decisão fechada de
+  **não otimizar preventivamente** (sem cache de TTS, sem paralelizar as chamadas de IA)
+  até haver medição em produção mostrando necessidade — consistente com o princípio já
+  registrado acima pro pipeline de IA.
 
 ## Documentos-fonte (só existiram como PDFs anexados no chat, não estão no repo)
 
