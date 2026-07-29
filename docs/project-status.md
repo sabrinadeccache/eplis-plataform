@@ -100,6 +100,17 @@ código, para não reintroduzir os mesmos bugs). **Ainda não testadas manualmen
 Partes 2, 3 e 4** nem o relatório final ponta a ponta (o parsing do relatório final foi
 corrigido, mas só testado isoladamente via script, não dentro do fluxo real do app).
 
+**Atualização (2026-07-29)**: Parte 2 foi ajustada antes desse teste manual (ver
+"Atualização (2026-07-29)" na seção Fase 5 abaixo) — passou de 3 para 2 estágios por
+item (`situation_check` já engloba a descrição + "What's the situation?" obrigatório,
+sem o antigo `situation_intro` separado), conteúdo dos 12 prompts da Parte 2
+reseedado com a nova frase fixa, e o script `scripts/seed-phase2-prompts.mjs` foi
+reescrito de delete-and-reinsert para upsert (achado real: o delete-and-reinsert já
+não funcionava mais, ver detalhes na seção Fase 5). Também foi feita uma auditoria
+completa de RLS/GRANT nas 8 tabelas + storage — tudo certo, sem pendência. **O teste
+manual ponta a ponta das Partes 2-4 com esse novo fluxo da Parte 2 ainda está por
+fazer.**
+
 A performance (cada resposta leva alguns segundos entre upload → transcrição → feedback
 → TTS do feedback) foi discutida com a Sabrina e **decisão fechada: não otimizar agora**
 — ela considerou aceitável pra fase de testes, e vamos seguir o princípio já registrado
@@ -164,15 +175,49 @@ completar o conteúdo da Fase 1 com mais áudios reais.
       acima; corrigido em `20260729000000_phase2_feedback_insert.sql`.
       **Escopo desta rodada**: só modo `practice` (sem timer de 20s pra começar a
       falar, sem limite rígido de repetição por parte) — modo `official` fica para uma
-      rodada futura. Sub-estágios dentro de um item (ex.: `situation_intro` →
-      `situation_check` → `suggestion` na Parte 2) vivem só no estado local do client
-      component, não são persistidos — um reload no meio de um item reinicia os
-      sub-estágios daquele item, mas não perde a posição de item (`current_part`/
-      `current_item_index`, esses sim persistidos).
+      rodada futura. Sub-estágios dentro de um item (ex.: `situation_check` →
+      `suggestion` na Parte 2) vivem só no estado local do client component, não são
+      persistidos — um reload no meio de um item reinicia os sub-estágios daquele item,
+      mas não perde a posição de item (`current_part`/`current_item_index`, esses sim
+      persistidos).
+      **Atualização (2026-07-29)**: Parte 2 mudou de 3 para 2 estágios por item —
+      `situation_intro` foi removido; a IA agora descreve a situação e já termina o
+      mesmo turno com "What's the situation?" obrigatório (conteúdo do
+      `scripts/seed-phase2-prompts.mjs` ajustado para terminar todos os 12 itens da
+      Parte 2 com essa frase fixa), habilitando o botão de resposta assim que a fala
+      termina — sem pausa automática de 3s no meio. Também ficou explícito nos prompts
+      de avaliação (`src/lib/ai/anthropic.ts`) que repetir/parafrasear a descrição da
+      IA nessa resposta é permitido no exame real e não deve ser penalizado. Ver
+      `docs/state-machine.md`.
       **Conteúdo**: `phase2_prompts` está com conteúdo **placeholder** (perfil
-      `general`), script `scripts/seed-phase2-prompts.mjs` (idempotente — mesmo padrão
-      do `replace-phase1-audios.mjs`). Imagens da Parte 4 apontam pra `picsum.photos`
-      (placeholder). Falta substituir por conteúdo real quando disponível.
+      `general`), script `scripts/seed-phase2-prompts.mjs`. Imagens da Parte 4 apontam
+      pra `picsum.photos` (placeholder). Falta substituir por conteúdo real quando
+      disponível.
+      **Achado corrigido (script de seed deixou de ser idempotente na prática)**:
+      `scripts/seed-phase2-prompts.mjs` era "apaga tudo com `operational_profile =
+      'general'` e reinsere" — funcionava enquanto o banco só tinha dados de seed, mas
+      quebrou assim que passou a existir `phase2_responses` real (de tentativas de
+      teste) referenciando `phase2_prompts.id`: o `DELETE` passou a falhar com
+      "violates foreign key constraint" (23503). Reescrito para fazer **UPSERT** de
+      verdade (update se já existe, insert se não) casando por uma chave natural — Parte
+      2 usa `order_index` (já existia e é estável), Partes 1 e 3 usam `prompt_text`
+      (único dentro de cada parte), Parte 4 usa `image_url` (as 3 imagens compartilham o
+      mesmo `prompt_text`, "Describe what you see in this image." — usar texto como
+      chave ali colapsava as 3 linhas em 1, bug real encontrado e corrigido durante o
+      teste). Item que sai da lista atual é só desativado (`is_active = false`), nunca
+      apagado, pra não quebrar `phase2_responses` históricas. Testado rodando o script 2x
+      seguidas: contagens estáveis (6/12/6/3, todas `is_active = true`), sem erro de FK.
+      Lição geral: **qualquer script de seed que faça `DELETE` de linhas que podem ter
+      sido referenciadas por FK de dados reais de usuário precisa ser upsert, não
+      delete-and-reinsert** — ver convenção correspondente no `CLAUDE.md`.
+      **Auditoria de RLS (2026-07-29)**: conferidas as 8 tabelas do schema `public`
+      (`users`, `phase1_questions`, `phase1_audios`, `phase1_answers`, `phase2_prompts`,
+      `phase2_responses`, `simulation_attempts`, `simulation_feedbacks`) e o storage
+      (`storage.objects` para os buckets `phase1-audios` e `phase2-recordings`) — RLS
+      habilitado em todas, `GRANT` pro role `authenticated` e policies coerentes entre
+      si em todas (nenhum `GRANT` sem policy correspondente nem policy sem `GRANT`).
+      Nenhuma correção foi necessária; ver detalhes de cada policy em
+      `docs/database-schema.md` se precisar reconferir.
       **Storage**: bucket `phase2-recordings` criado via
       `scripts/create-phase2-recordings-bucket.mjs` (público para leitura, como
       `phase1-audios`), com policy de INSERT restrita ao dono da tentativa em

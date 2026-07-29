@@ -40,6 +40,14 @@ confirmação de e-mail no cadastro.
   a convenção (`middleware` → `proxy`), e como o app mora em `src/app/`, o arquivo
   precisa ficar em `src/proxy.ts`; na raiz do repo ele simplesmente não executa, sem
   erro nenhum.
+- **Scripts de seed (`scripts/seed-*.mjs`) precisam ser UPSERT, não delete-and-reinsert**
+  — assim que existe uma linha de dado real do usuário com FK pra tabela de conteúdo
+  (ex.: `phase2_responses.prompt_id` → `phase2_prompts.id`), um `DELETE` na tabela toda
+  passa a falhar com "violates foreign key constraint". Aconteceu de verdade com
+  `scripts/seed-phase2-prompts.mjs` assim que passou a haver tentativas de teste — ver
+  `docs/project-status.md`. Casar por uma chave natural estável (texto do prompt,
+  `order_index`, `image_url` etc.) e desativar (`is_active = false`) o que sair da lista
+  em vez de apagar.
 - `.env.local` nunca vai para o git. Segredos novos (chaves de IA, etc.) entram lá, não
   em nenhum arquivo versionado.
 

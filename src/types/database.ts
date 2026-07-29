@@ -21,7 +21,6 @@ export type AttemptStatus = "in_progress" | "completed" | "abandoned";
 export type Part = "part1" | "part2" | "part3" | "part4";
 export type ResponseStage =
   | "main"
-  | "situation_intro"
   | "situation_check"
   | "suggestion"
   | "image_observation"

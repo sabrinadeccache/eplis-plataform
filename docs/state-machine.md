@@ -15,8 +15,8 @@ PART_1_QUESTION x4
 PART_2_INTRO
  ↓
 PART_2_SCENARIO x10
-   ├─ situation_intro
-   ├─ situation_check
+   ├─ situation_check (a IA descreve a situação e termina obrigatoriamente com
+   │  "What's the situation?" — resposta do candidato já habilitada nesse turno)
    └─ suggestion
  ↓
 PART_3_INTRO
@@ -75,6 +75,12 @@ Cada pedido incrementa `phase2_responses.repetition_count`. O uso excessivo dess
 estratégias não bloqueia o candidato tecnicamente, mas é um sinal a considerar pela IA
 na avaliação do critério "Interações" — candidatos em NP5/NP6 não deveriam precisar
 delas com frequência.
+
+**Exceção — descrição da situação na Parte 2:** o candidato pode responder ao turno
+`situation_check` repetindo ou parafraseando de perto a própria descrição feita pela IA
+(permitido no exame real). Isso é diferente de "esclarecimento de vocabulário" (não
+permitido nessa parte) e não deve ser penalizado em nenhum critério — instrução
+explícita nos prompts de avaliação em `src/lib/ai/anthropic.ts`.
 
 ## Feedback
 

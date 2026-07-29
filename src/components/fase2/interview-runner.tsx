@@ -11,10 +11,9 @@ import type { Part, ResponseStage } from "@/types/database";
 // aluno já deve treinar o ouvido em inglês antes do exame de verdade.
 const PART_INTRO_TEXT: Record<Part, string> = {
   part1: "Let's begin Part 1. I will ask you a few personal questions about yourself and your work.",
-  part2: "Now Part 2. I will describe operational situations and you should react to each one.",
+  part2: "Now Part 2. I will describe operational situations. First, you'll tell me what the situation is, and then you'll make a suggestion.",
   part3: "Part 3. Now some more open questions about your field of work.",
-  part4:
-    "The last part. You will see an image. Describe it, and then tell a short story related to it.",
+  part4: "The last part. You will see an image. Describe it, and then tell a short story related to it.",
 };
 
 type StepKind = "auto" | "silent" | "response";
@@ -32,16 +31,15 @@ function buildSteps(part: Part, itemIndex: number, prompt: Phase2Prompt): Step[]
   }
 
   if (part === "part2") {
-    steps.push({ stage: "situation_intro", kind: "auto", durationSeconds: 3, text: prompt.promptText });
     steps.push({
       stage: "situation_check",
       kind: "response",
-      text: "What would you say in this situation?",
+      text: prompt.promptText,
     });
     steps.push({
       stage: "suggestion",
       kind: "response",
-      text: "What suggestion would you give to prevent this from happening again?",
+      text: "Make a suggestion.",
     });
     return steps;
   }
@@ -206,6 +204,7 @@ export function InterviewRunner({
 
     const step = stepAt(sequence, part, itemIndex, stepIndex);
     let finished = false;
+    let advanceTimeout: ReturnType<typeof setTimeout> | undefined;
 
     function onFinished() {
       if (finished) return;
@@ -213,7 +212,7 @@ export function InterviewRunner({
       if (step.kind === "response") {
         setRecorderState("ready");
       } else if (step.kind === "auto") {
-        setTimeout(() => goToNextStepRef.current(), 3000);
+        advanceTimeout = setTimeout(() => goToNextStepRef.current(), 3000);
       } else {
         setTtsEnded(true);
       }
@@ -223,16 +222,21 @@ export function InterviewRunner({
     audio.addEventListener("error", onFinished);
 
     let cancelled = false;
-    generateSpeech(step.text).then(({ audioBase64, mimeType }) => {
-      if (cancelled) return;
-      audio.src = `data:${mimeType};base64,${audioBase64}`;
-      audio.play().catch(() => {
+    generateSpeech(step.text)
+      .then(({ audioBase64, mimeType }) => {
+        if (cancelled) return;
+        audio.src = `data:${mimeType};base64,${audioBase64}`;
+        audio.play().catch(() => {
+          if (!cancelled) onFinished();
+        });
+      })
+      .catch(() => {
         if (!cancelled) onFinished();
       });
-    });
 
     return () => {
       cancelled = true;
+      if (advanceTimeout) clearTimeout(advanceTimeout);
       audio.removeEventListener("ended", onFinished);
       audio.removeEventListener("error", onFinished);
     };

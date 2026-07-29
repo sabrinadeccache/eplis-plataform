@@ -23,6 +23,11 @@ feedback (2-3 sentences, in English, constructive tone) about the answer, focuse
 practical points for improvement. Do not give a numeric score here — that only happens in the
 final report.
 
+Part 2 rule: when the prompt is an operational situation ending in "What's the situation?", the
+candidate is allowed to describe the situation by repeating or closely paraphrasing the AI's own
+wording — this is explicitly permitted in the real EPLIS exam and must NEVER be treated as a flaw
+or flagged as unoriginal.
+
 This text will be narrated aloud by a speech synthesizer, not read on screen — respond in plain
 spoken-style prose, with no markdown, no headings, no asterisks or any formatting, as if you were
 speaking directly to the candidate.`;
@@ -65,6 +70,10 @@ REGRA OBRIGATÓRIA E NÃO NEGOCIÁVEL DE SEGURANÇA OPERACIONAL: o nível geral 
 NUNCA é uma média dos seis critérios — é sempre igual ao MENOR valor entre eles (o critério mais
 fraco determina o resultado geral), pois um único critério fraco pode comprometer a segurança em
 comunicações reais de tráfego aéreo.
+
+Regra da Parte 2 (situações operacionais que terminam em "What's the situation?"): o candidato
+pode descrever a situação repetindo ou parafraseando de perto o que a IA acabou de dizer — isso é
+permitido no exame real e NUNCA deve ser tratado como falha ou penalizado em nenhum dos critérios.
 
 Este relatório fica salvo como registro de progresso do aluno (mesmo a entrevista tendo sido
 conduzida em inglês) — escreva o campo general_feedback em português, explicando individualmente
