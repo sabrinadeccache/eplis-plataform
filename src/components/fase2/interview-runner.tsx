@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { generateSpeech, submitResponse, advanceState } from "@/services/simulations/phase2/actions";
+import { generateSpeech, advanceState } from "@/services/simulations/phase2/actions";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
 import type { Phase2Sequence, Phase2Prompt } from "@/services/simulations/phase2/queries";
 import type { Part, ResponseStage } from "@/types/database";
@@ -100,6 +100,14 @@ function stepKey(part: Part, itemIndex: number, stepIndex: number): string {
   return `${part}-${itemIndex}-${stepIndex}`;
 }
 
+// Bloqueio de autoplay do navegador (ex.: entrando direto numa URL da
+// entrevista, sem nenhuma interação prévia na página) rejeita `audio.play()`
+// com esse erro específico — distinguimos de outras falhas (rede, etc.) pra
+// só mostrar o botão "ativar áudio" quando for realmente isso.
+function isAutoplayBlocked(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "NotAllowedError";
+}
+
 export function InterviewRunner({
   attemptId,
   sequence,
@@ -123,6 +131,8 @@ export function InterviewRunner({
   const [ttsEnded, setTtsEnded] = useState(false);
   const [recorderState, setRecorderState] = useState<RecorderState>("waiting_ai");
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [awaitingFeedbackSpeech, setAwaitingFeedbackSpeech] = useState(false);
+  const [audioBlocked, setAudioBlocked] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -148,6 +158,7 @@ export function InterviewRunner({
       setRecorderState("waiting_ai");
       setTtsEnded(false);
       setFeedback(null);
+      setAwaitingFeedbackSpeech(false);
       chunksRef.current = [];
     });
   }, [attemptId, part, itemIndex, router, startTransition]);
@@ -159,6 +170,7 @@ export function InterviewRunner({
       setRecorderState("waiting_ai");
       setTtsEnded(false);
       setFeedback(null);
+      setAwaitingFeedbackSpeech(false);
       setRepetitionCount(0);
       chunksRef.current = [];
     } else {
@@ -226,8 +238,10 @@ export function InterviewRunner({
       .then(({ audioBase64, mimeType }) => {
         if (cancelled) return;
         audio.src = `data:${mimeType};base64,${audioBase64}`;
-        audio.play().catch(() => {
-          if (!cancelled) onFinished();
+        audio.play().catch((err) => {
+          if (cancelled) return;
+          if (isAutoplayBlocked(err)) setAudioBlocked(true);
+          onFinished();
         });
       })
       .catch(() => {
@@ -241,6 +255,18 @@ export function InterviewRunner({
       audio.removeEventListener("error", onFinished);
     };
   }, [part, itemIndex, stepIndex, sequence]);
+
+  // Clique real do usuário — o navegador aceita isso como gesto válido pra
+  // desbloquear autoplay no elemento de áudio daqui em diante, mesmo que o
+  // conteúdo atual do `src` já tenha "terminado" (foi só o play() que falhou).
+  function unlockAudio() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio
+      .play()
+      .then(() => setAudioBlocked(false))
+      .catch(() => {});
+  }
 
   function replayAudio() {
     const audio = audioRef.current;
@@ -301,36 +327,61 @@ export function InterviewRunner({
   function finishAndSubmit() {
     setRecorderState("submitting");
     stopRecorderAndGetBlob().then((blob) => {
-      const mimeType = blob.type || "audio/webm";
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        const audioBase64 = dataUrl.split(",")[1] ?? "";
-        startTransition(async () => {
-          const result = await submitResponse(
-            attemptId,
-            currentPrompt.id,
-            currentStep.stage as ResponseStage,
-            audioBase64,
-            mimeType,
-            repetitionCount,
-          );
-          setFeedback(result.feedback);
-          setRecorderState("feedback");
+      startTransition(async () => {
+        // Upload via multipart/form-data numa route handler comum, NÃO uma
+        // Server Action — o áudio em base64 como argumento de Server Action
+        // estourava o limite interno de decodificação do protocolo Flight
+        // ("Maximum array nesting exceeded") em respostas mais longas, como a
+        // história da Parte 4 (achado real, erro 500 reproduzido). Ver
+        // src/app/api/phase2/submit-response/route.ts.
+        const formData = new FormData();
+        formData.append("attemptId", attemptId);
+        formData.append("promptId", currentPrompt.id);
+        formData.append("stage", currentStep.stage as ResponseStage);
+        formData.append("repetitionCount", String(repetitionCount));
+        formData.append("audio", blob, `audio.${blob.type.includes("mp4") ? "mp4" : "webm"}`);
 
-          // A IA "fala" o feedback, como um entrevistador de verdade, além de
-          // mostrar o texto na tela.
-          if (result.feedback) {
+        const res = await fetch("/api/phase2/submit-response", { method: "POST", body: formData });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? "Não foi possível enviar a resposta.");
+        }
+        const result = (await res.json()) as { transcript: string; feedback: string };
+
+        setFeedback(result.feedback);
+        setRecorderState("feedback");
+
+        // A IA "fala" o feedback, como um entrevistador de verdade, além de
+        // mostrar o texto na tela. O botão "Continuar" fica bloqueado
+        // (awaitingFeedbackSpeech) enquanto esse áudio é gerado e tocado —
+        // sem isso, dava pra clicar antes do áudio começar ou no meio dele,
+        // cortando o feedback e emendando direto na próxima pergunta.
+        if (result.feedback) {
+          setAwaitingFeedbackSpeech(true);
+          try {
             const speech = await generateSpeech(result.feedback);
             const audio = audioRef.current;
-            if (audio) {
-              audio.src = `data:${speech.mimeType};base64,${speech.audioBase64}`;
-              audio.play().catch(() => {});
+            if (!audio) {
+              setAwaitingFeedbackSpeech(false);
+              return;
             }
+            const onDone = () => {
+              setAwaitingFeedbackSpeech(false);
+              audio.removeEventListener("ended", onDone);
+              audio.removeEventListener("error", onDone);
+            };
+            audio.addEventListener("ended", onDone);
+            audio.addEventListener("error", onDone);
+            audio.src = `data:${speech.mimeType};base64,${speech.audioBase64}`;
+            audio.play().catch((err) => {
+              if (isAutoplayBlocked(err)) setAudioBlocked(true);
+              onDone();
+            });
+          } catch {
+            setAwaitingFeedbackSpeech(false);
           }
-        });
-      };
-      reader.readAsDataURL(blob);
+        }
+      });
     });
   }
 
@@ -338,11 +389,39 @@ export function InterviewRunner({
     <div className="space-y-6">
       <audio ref={audioRef} />
 
+      {audioBlocked && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <span>
+            O navegador bloqueou o áudio automático da IA (comum ao abrir a entrevista direto por
+            um link, sem nenhum clique antes). Clique para ativar.
+          </span>
+          <button
+            type="button"
+            onClick={unlockAudio}
+            className="shrink-0 rounded-md bg-amber-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-amber-200 dark:text-amber-950"
+          >
+            🔊 Ativar áudio
+          </button>
+        </div>
+      )}
+
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
         Parte {part.replace("part", "")} — item {itemIndex + 1}
       </p>
 
       <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+        {part === "part4" && currentPrompt.imageUrl && (
+          // Visível durante todo o item da Parte 4 (observação, descrição e a
+          // história) — o candidato precisa poder olhar pra imagem de novo ao
+          // contar a história, não só durante a observação inicial.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={currentPrompt.imageUrl}
+            alt="Imagem para descrição e história"
+            className="mb-4 max-h-96 w-full rounded-md object-contain"
+          />
+        )}
+
         {speaking && (
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">🔊 A IA está falando…</p>
         )}
@@ -427,13 +506,19 @@ export function InterviewRunner({
                 <p className="rounded-md bg-zinc-100 p-3 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
                   {feedback}
                 </p>
-                <button
-                  type="button"
-                  onClick={goToNextStep}
-                  className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                >
-                  Continuar
-                </button>
+                {awaitingFeedbackSpeech ? (
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Aguarde a IA terminar de falar o feedback…
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={goToNextStep}
+                    className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  >
+                    Continuar
+                  </button>
+                )}
               </div>
             )}
           </div>

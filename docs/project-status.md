@@ -86,6 +86,12 @@ transcrições reais (`Material Didático/Phase 1 - Audios/transcricoes_audios.p
 do repo) e dificuldade variada (3 easy, 4 medium, 3 hard) proporcional à complexidade de
 cada gravação.
 
+Bucket de Storage `phase2-images` criado em 2026-08-06 (`scripts/create-phase2-images-
+bucket.mjs`, público, mesmo padrão do `phase1-audios`/`phase2-recordings`) — imagens da
+Parte 4. Hoje tem 3 imagens `general` (picsum, placeholder original) + 2 imagens de teste
+marcadas `operational_profile = 'TWR'` (`scripts/seed-phase2-images-twr-test.mjs`, também
+picsum — só pra validar o sorteio por perfil, não são fotos reais de torre).
+
 Consulte `docs/database-schema.md` para o modelo completo e as decisões de design
 (perfil operacional, timers da Fase 2, state machine).
 
@@ -93,23 +99,56 @@ Consulte `docs/database-schema.md` para o modelo completo e as decisões de desi
 
 Fase 5 (modo `practice` da entrevista simulada — ver seção "Fase 5" no roadmap abaixo)
 implementada e **testada manualmente pela Sabrina em `localhost:3000` com microfone
-real** — a Parte 1 completa (4 perguntas, gravação, transcrição, feedback falado)
-funcionou bem, incluindo vários bugs reais encontrados e corrigidos nessa rodada de
-testes (todos documentados na seção "Fase 5" abaixo — vale ler antes de mexer nesse
-código, para não reintroduzir os mesmos bugs). **Ainda não testadas manualmente as
-Partes 2, 3 e 4** nem o relatório final ponta a ponta (o parsing do relatório final foi
-corrigido, mas só testado isoladamente via script, não dentro do fluxo real do app).
+real, cobrindo agora as 4 partes** (Parte 1 validada em rodada anterior; Partes 2, 3 e 4
+validadas em 2026-08-06 — ver "Atualização (2026-08-06)" logo abaixo e a seção "Fase 5"
+para o detalhe de cada achado). O relatório final ponta a ponta (gerado no fluxo real do
+app, não isolado via script) **ainda não foi validado manualmente com o tamanho oficial
+das partes** — ver próximos passos.
 
-**Atualização (2026-07-29)**: Parte 2 foi ajustada antes desse teste manual (ver
-"Atualização (2026-07-29)" na seção Fase 5 abaixo) — passou de 3 para 2 estágios por
-item (`situation_check` já engloba a descrição + "What's the situation?" obrigatório,
-sem o antigo `situation_intro` separado), conteúdo dos 12 prompts da Parte 2
-reseedado com a nova frase fixa, e o script `scripts/seed-phase2-prompts.mjs` foi
-reescrito de delete-and-reinsert para upsert (achado real: o delete-and-reinsert já
-não funcionava mais, ver detalhes na seção Fase 5). Também foi feita uma auditoria
-completa de RLS/GRANT nas 8 tabelas + storage — tudo certo, sem pendência. **O teste
-manual ponta a ponta das Partes 2-4 com esse novo fluxo da Parte 2 ainda está por
-fazer.**
+**Atualização (2026-08-06)**: rodada de teste manual ponta a ponta das Partes 2-4, com
+`PART_SIZES` temporariamente reduzido (2/2/2/1) pra acelerar os ciclos de teste e
+revertido pros valores oficiais (4/10/4/1) ao final desta sessão — ver
+`src/services/simulations/phase2/queries.ts` e `state-machine.ts`. Achados reais
+corrigidos nessa rodada (detalhes completos na seção "Fase 5" abaixo):
+- Feedback da Parte 2 (`situation_check` vs `suggestion`) não diferenciava o que cada
+  estágio deveria avaliar — corrigido em `src/lib/ai/anthropic.ts`.
+- Botão "Continuar" do feedback falado liberava antes do áudio da IA terminar (ou até
+  começar) de tocar, cortando e emendando com a próxima pergunta — agora fica bloqueado
+  até o áudio realmente terminar.
+- Parte 4 nunca renderizava a imagem (`<img>` simplesmente não existia no componente,
+  apesar do `image_url` já estar no banco) — corrigido; imagem fica visível durante todo
+  o item (observação, descrição e história).
+- Bucket de Storage `phase2-images` criado (público, mesmo padrão do
+  `phase2-recordings`) + 2 imagens de teste (ainda placeholder do picsum, não fotos
+  reais) marcadas `operational_profile = 'TWR'`, pra validar que o sorteio de imagem da
+  Parte 4 respeita o perfil operacional do candidato — script
+  `scripts/seed-phase2-images-twr-test.mjs`. **O mesmo mecanismo de filtro por perfil já
+  vale pra Parte 2 (código compartilhado em `queries.ts`), mas ainda não há conteúdo real
+  por perfil cadastrado lá** — só o placeholder `general` existente.
+- Áudio bloqueado pelo navegador (autoplay) quando a página da entrevista é aberta direto
+  por link, sem nenhuma interação prévia — antes falhava silenciosamente; agora aparece
+  um aviso com botão "🔊 Ativar áudio" pra destravar com um clique.
+- **Achado mais sério**: enviar uma resposta de áudio longa (a história da Parte 4, sem
+  limite de tempo no modo practice) derrubava a chamada com `Error: Maximum array
+  nesting exceeded`, um limite interno do protocolo Flight que as Server Actions usam
+  pra decodificar argumentos — **diferente e mais baixo** que o `bodySizeLimit`
+  configurável do Next.js (que não resolve isso). Corrigido migrando o envio de resposta
+  de Server Action para uma route handler comum (`src/app/api/phase2/submit-response/
+  route.ts`), que recebe o áudio como upload binário real (`multipart/form-data`) em vez
+  de string base64 — contorna o limite por completo, além de eliminar o overhead de
+  converter pra base64 no client. `submitResponse` foi removida de
+  `src/services/simulations/phase2/actions.ts` (só restou `assertOwnAttemptInProgress`,
+  agora exportada pra ser reaproveitada pela rota).
+- O feedback (curto por resposta e no relatório final) da resposta de história da Parte 4
+  usava o mesmo `prompt_text` do banco da etapa de descrição da imagem ("Describe what
+  you see in this image."), fazendo a IA cobrar descrição literal da imagem numa resposta
+  que devia ser uma história livre. Corrigido com estágios explícitos
+  (`image_description` / `story_telling`) em `generateResponseFeedback` e no contexto
+  passado pro relatório final.
+
+Utilitário novo pra testes futuros: `node scripts/dev-jump-phase2-part.mjs <email>
+<part1|part2|part3|part4>` pula uma tentativa em andamento (ou cria uma nova) direto pro
+início da parte pedida, sem precisar responder as partes anteriores de novo.
 
 A performance (cada resposta leva alguns segundos entre upload → transcrição → feedback
 → TTS do feedback) foi discutida com a Sabrina e **decisão fechada: não otimizar agora**
@@ -117,11 +156,13 @@ A performance (cada resposta leva alguns segundos entre upload → transcrição
 neste documento ("síncrono primeiro, otimizar só se a medição em produção mostrar
 necessidade") em vez de otimizar preventivamente.
 
-Próximos passos, em ordem sugerida: (1) terminar o teste manual ponta a ponta das
-Partes 2-4 e do relatório final; (2) depois disso, perguntar à Sabrina entre — fechar o
+Próximos passos, em ordem sugerida: (1) rodar um teste manual ponta a ponta completo, do
+zero, já com os tamanhos oficiais das partes (4/10/4/1), incluindo o relatório final
+gerado no fluxo real do app; (2) depois disso, perguntar à Sabrina entre — fechar o
 deploy na Vercel, implementar o modo `official` da Fase 2 (timers rígidos, limite de
-repetição por parte), substituir o conteúdo placeholder da Fase 2 por prompts reais, ou
-completar o conteúdo da Fase 1 com mais áudios reais.
+repetição por parte), substituir o conteúdo placeholder da Fase 2 por prompts/imagens
+reais (inclusive por perfil operacional, não só `general`), ou completar o conteúdo da
+Fase 1 com mais áudios reais.
 
 ## Roadmap (SPD seção 12 / SRS seção 5)
 
@@ -266,6 +307,15 @@ completar o conteúdo da Fase 1 com mais áudios reais.
       `JSON.parse` e caía no relatório de fallback. Corrigido removendo as cercas antes
       de parsear; `max_tokens` do relatório final também subiu de 1000 para 2000 (a
       explicação por critério é mais longa e estava sendo cortada no meio).
+      **Atualização (2026-08-06) — teste manual das Partes 2-4**: ver bloco
+      "Atualização (2026-08-06)" em "Próximo passo em aberto" no topo deste documento
+      pra a lista completa de achados corrigidos nessa rodada (feedback da Parte 2 por
+      estágio, botão "Continuar" cortando o áudio do feedback, imagem da Parte 4 nunca
+      renderizada, bucket `phase2-images` + conteúdo de teste por perfil TWR, bloqueio de
+      autoplay do navegador, migração do envio de resposta de Server Action pra route
+      handler por causa do limite "Maximum array nesting exceeded" do protocolo Flight, e
+      feedback da história da Parte 4 usando o prompt errado). Todos testados
+      manualmente por completo ponta a ponta (não só lint/build).
 - [ ] **Fase 6 — Relatórios**: histórico, evolução por critério ICAO.
 - [ ] **Fase 7 — Refino e lançamento**: responsividade, testes, observabilidade, deploy
       público.

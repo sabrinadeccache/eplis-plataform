@@ -50,5 +50,14 @@ confirmação de e-mail no cadastro.
   em vez de apagar.
 - `.env.local` nunca vai para o git. Segredos novos (chaves de IA, etc.) entram lá, não
   em nenhum arquivo versionado.
+- **Payload grande (ex.: áudio gravado no browser) nunca deve ir como argumento de
+  Server Action** — mesmo aumentando `experimental.serverActions.bodySizeLimit` no
+  `next.config.ts`, existe um limite separado e mais baixo no protocolo Flight que as
+  Server Actions usam pra decodificar argumentos ("Maximum array nesting exceeded"),
+  reproduzido de verdade ao enviar uma gravação mais longa da Fase 2 (Parte 4, história
+  sem limite de tempo no modo practice) como string base64. Upload de binário grande
+  precisa ir por uma route handler comum (`src/app/api/...`) recebendo
+  `multipart/form-data`, não por Server Action — ver
+  `src/app/api/phase2/submit-response/route.ts` e `docs/project-status.md`.
 
 @AGENTS.md

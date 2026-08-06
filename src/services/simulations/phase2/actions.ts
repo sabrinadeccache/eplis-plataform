@@ -2,10 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { transcribeAudio, generateSpeechAudio } from "@/lib/ai/openai";
-import { generateResponseFeedback, generateFinalReport, MODEL_VERSION } from "@/lib/ai/anthropic";
+import { generateSpeechAudio } from "@/lib/ai/openai";
+import { generateFinalReport, MODEL_VERSION } from "@/lib/ai/anthropic";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
-import type { Part, ResponseStage } from "@/types/database";
+import type { Part } from "@/types/database";
 
 export async function startAttempt() {
   const supabase = await createClient();
@@ -33,9 +33,13 @@ export async function startAttempt() {
   redirect(`/fase2/entrevista/${data.id}`);
 }
 
-type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+export type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
-async function assertOwnAttemptInProgress(
+// Exportado pra ser reaproveitado pela route handler de submitResponse
+// (src/app/api/phase2/submit-response/route.ts) — o envio do áudio precisou
+// sair de uma Server Action pra uma rota comum (ver comentário lá) mas a
+// checagem de posse/estado da tentativa continua sendo a mesma.
+export async function assertOwnAttemptInProgress(
   supabase: SupabaseServerClient,
   attemptId: string,
   userId: string,
@@ -63,75 +67,6 @@ export async function generateSpeech(text: string): Promise<{ audioBase64: strin
   return { audioBase64: buffer.toString("base64"), mimeType };
 }
 
-export async function submitResponse(
-  attemptId: string,
-  promptId: string,
-  stage: ResponseStage,
-  audioBase64: string,
-  mimeType: string,
-  repetitionCount = 0,
-): Promise<{ transcript: string; feedback: string }> {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Não autenticado.");
-
-  await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
-
-  const { data: prompt } = await supabase
-    .from("phase2_prompts")
-    .select("prompt_text")
-    .eq("id", promptId)
-    .single();
-  if (!prompt) throw new Error("Prompt inválido.");
-
-  const buffer = Buffer.from(audioBase64, "base64");
-  const ext = mimeType.includes("mp4") ? "mp4" : "webm";
-  const path = `${attemptId}/${promptId}-${stage}-${Date.now()}.${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("phase2-recordings")
-    .upload(path, buffer, { contentType: mimeType, upsert: true });
-  if (uploadError) throw new Error(`Falha ao enviar o áudio: ${uploadError.message}`);
-
-  const { data: publicUrlData } = supabase.storage.from("phase2-recordings").getPublicUrl(path);
-  const audioUrl = publicUrlData.publicUrl;
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("phase2_responses")
-    .insert({
-      simulation_attempt_id: attemptId,
-      prompt_id: promptId,
-      response_stage: stage,
-      audio_url: audioUrl,
-      processing_status: "transcribing",
-      repetition_count: repetitionCount,
-      started_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
-  if (insertError || !inserted) throw new Error("Não foi possível registrar a resposta.");
-
-  const transcript = await transcribeAudio(buffer, `audio.${ext}`);
-  await supabase
-    .from("phase2_responses")
-    .update({ transcript, processing_status: "analyzing" })
-    .eq("id", inserted.id);
-
-  const feedback = await generateResponseFeedback(prompt.prompt_text, transcript);
-  await supabase
-    .from("phase2_responses")
-    .update({
-      ai_feedback: feedback,
-      ai_provider: "anthropic",
-      model_version: MODEL_VERSION,
-      processing_status: "done",
-      finished_at: new Date().toISOString(),
-    })
-    .eq("id", inserted.id);
-
-  return { transcript, feedback };
-}
-
 export async function advanceState(attemptId: string): Promise<{ finished: boolean }> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -146,12 +81,13 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
   if (next === null) {
     const { data: responses } = await supabase
       .from("phase2_responses")
-      .select("transcript, phase2_prompts(part, prompt_text)")
+      .select("transcript, response_stage, phase2_prompts(part, prompt_text)")
       .eq("simulation_attempt_id", attemptId)
       .not("transcript", "is", null);
 
     type ResponseWithPrompt = {
       transcript: string | null;
+      response_stage: string;
       phase2_prompts: { part: Part; prompt_text: string } | null;
     };
 
@@ -159,7 +95,20 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
       .filter((r): r is ResponseWithPrompt & { transcript: string; phase2_prompts: { part: Part; prompt_text: string } } =>
         r.transcript !== null && r.phase2_prompts !== null,
       )
-      .map((r) => ({ part: r.phase2_prompts.part, promptText: r.phase2_prompts.prompt_text, transcript: r.transcript }));
+      .map((r) => ({
+        part: r.phase2_prompts.part,
+        // Na Parte 4, o prompt_text salvo é sempre o texto de descrição da
+        // imagem, reaproveitado pros dois estágios do item (descrição e
+        // história) — pra história, isso confundia o relatório final, que
+        // passou a cobrar detalhes visuais concretos numa resposta que era
+        // pra ser uma narrativa livre. Mesmo achado já corrigido no feedback
+        // curto por resposta (ver generateResponseFeedback).
+        promptText:
+          r.response_stage === "story_telling"
+            ? "Tell a short story related to the image you were shown."
+            : r.phase2_prompts.prompt_text,
+        transcript: r.transcript,
+      }));
 
     const report = await generateFinalReport(transcripts);
 

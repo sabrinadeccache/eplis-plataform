@@ -23,23 +23,81 @@ feedback (2-3 sentences, in English, constructive tone) about the answer, focuse
 practical points for improvement. Do not give a numeric score here — that only happens in the
 final report.
 
-Part 2 rule: when the prompt is an operational situation ending in "What's the situation?", the
-candidate is allowed to describe the situation by repeating or closely paraphrasing the AI's own
-wording — this is explicitly permitted in the real EPLIS exam and must NEVER be treated as a flaw
-or flagged as unoriginal.
-
 This text will be narrated aloud by a speech synthesizer, not read on screen — respond in plain
 spoken-style prose, with no markdown, no headings, no asterisks or any formatting, as if you were
 speaking directly to the candidate.`;
 
-export async function generateResponseFeedback(promptText: string, transcript: string): Promise<string> {
+const SITUATION_CHECK_RULE = `This answer is the "What's the situation?" step of a Part 2 item —
+the candidate's only task here is to describe the operational situation the AI just presented, not
+to propose a solution or suggestion (that comes in the next step). Give feedback ONLY about how
+well they described the situation: accuracy, completeness, clarity. The candidate is allowed to
+describe it by repeating or closely paraphrasing the AI's own wording word-for-word — this is
+explicitly permitted in the real EPLIS exam and must NEVER be treated as a flaw, penalized, or
+flagged as unoriginal. However, if the candidate described the situation using their own words
+instead of just repeating the AI, note that positively — paraphrasing in their own words is a
+stronger demonstration of comprehension and can raise their score. Do not comment on any
+suggestion or solution even if the candidate volunteered one — evaluate only the description.`;
+
+const SUGGESTION_RULE = `This answer is the "make a suggestion" step of a Part 2 item — the AI
+already described an operational situation (given below as context) in the previous step, and the
+candidate must now propose an appropriate course of action for it. Give feedback about the quality
+of the suggestion itself: is it relevant and appropriate to the situation described, operationally
+sound, clearly expressed? Do not evaluate or comment on the situation description step.`;
+
+const IMAGE_DESCRIPTION_RULE = `This answer is the "describe the image" step of a Part 4 item — the
+candidate's task is to objectively describe what they see (setting, people, colors, actions).
+Give feedback about the accuracy, completeness and clarity of that description. Do not comment on
+the story step, which comes later and is a separate, unrelated answer.`;
+
+const STORY_TELLING_RULE = `This answer is the "tell a short story related to the image" step of a
+Part 4 item — a separate, later answer from the image description step. The candidate's task here
+is to freely narrate a short story inspired by or related to the image, NOT to describe the image
+literally again. Do NOT evaluate whether the story accurately or literally describes what is in the
+image, and do NOT suggest the candidate should have described concrete visual details (setting,
+colors, what the person is doing, etc.) instead of telling a story — creative interpretation and
+invented details are expected and must never be penalized or flagged as off-task. Give feedback
+only about the story as spoken English: sentence structure, grammar, simplicity/clarity, and
+fluency — the same kind of feedback given for any other answer in the interview.`;
+
+const STAGE_RULES: Record<string, string> = {
+  situation_check: SITUATION_CHECK_RULE,
+  suggestion: SUGGESTION_RULE,
+  image_description: IMAGE_DESCRIPTION_RULE,
+  story_telling: STORY_TELLING_RULE,
+};
+
+const STAGE_PROMPT_LABELS: Record<string, string> = {
+  suggestion: "Situação descrita pela IA (contexto)",
+  story_telling: "Contexto (tarefa é contar uma história, não descrever a imagem)",
+};
+
+export type FeedbackStage = "situation_check" | "suggestion" | "image_description" | "story_telling";
+
+export async function generateResponseFeedback(
+  promptText: string,
+  transcript: string,
+  stage?: FeedbackStage,
+): Promise<string> {
+  const stageRule = stage ? STAGE_RULES[stage] : undefined;
+  const system = stageRule ? `${SHORT_FEEDBACK_SYSTEM}\n\n${stageRule}` : SHORT_FEEDBACK_SYSTEM;
+  const promptLabel = (stage && STAGE_PROMPT_LABELS[stage]) || "Pergunta";
+  // Na Parte 4, o "prompt_text" salvo no banco é sempre o texto de descrição
+  // da imagem ("Describe what you see in this image.") — reaproveitado tanto
+  // pro estágio de descrição quanto pro de história, já que os dois
+  // respondem ao mesmo item. Pro estágio de história, mandar esse texto como
+  // se fosse "a pergunta" confundia o modelo (achado real: o feedback cobrava
+  // detalhes visuais concretos numa resposta que era pra ser uma história
+  // livre) — substituímos por uma frase neutra que só contextualiza a tarefa.
+  const effectivePromptText =
+    stage === "story_telling" ? "Tell a short story related to the image you were shown." : promptText;
+
   const msg = await client.messages.create({
     model: MODEL_VERSION,
     max_tokens: 300,
     thinking: { type: "disabled" },
-    system: SHORT_FEEDBACK_SYSTEM,
+    system,
     messages: [
-      { role: "user", content: `Pergunta: ${promptText}\n\nResposta transcrita: ${transcript}` },
+      { role: "user", content: `${promptLabel}: ${effectivePromptText}\n\nResposta transcrita: ${transcript}` },
     ],
   });
   return extractText(msg.content);
@@ -71,9 +129,21 @@ NUNCA é uma média dos seis critérios — é sempre igual ao MENOR valor entre
 fraco determina o resultado geral), pois um único critério fraco pode comprometer a segurança em
 comunicações reais de tráfego aéreo.
 
-Regra da Parte 2 (situações operacionais que terminam em "What's the situation?"): o candidato
-pode descrever a situação repetindo ou parafraseando de perto o que a IA acabou de dizer — isso é
-permitido no exame real e NUNCA deve ser tratado como falha ou penalizado em nenhum dos critérios.
+Regra da Parte 2 (situações operacionais que terminam em "What's the situation?", cada item tem
+duas respostas distintas do candidato): na resposta de descrição da situação, o candidato pode
+repetir ou parafrasear de perto o que a IA acabou de dizer — isso é permitido no exame real e NUNCA
+deve ser tratado como falha ou penalizado em nenhum dos critérios; descrever com palavras próprias
+em vez de repetir é um sinal positivo de compreensão e pode favorecer a nota. Já na resposta de
+sugestão (segunda resposta do mesmo item), avalie a qualidade e adequação operacional da sugestão
+dada para aquela situação — não avalie a sugestão pela originalidade da descrição da situação, que
+é uma resposta separada.
+
+Regra da Parte 4 (também duas respostas distintas por item): na resposta de descrição da imagem,
+avalie a precisão e clareza da descrição. Já na resposta de história (segunda resposta, identificada
+como "Tell a short story related to the image you were shown."), o candidato deve contar uma
+história livre inspirada na imagem, NÃO descrevê-la de novo — nunca penalize essa resposta por não
+descrever literalmente o que está na imagem ou por conter elementos inventados/fictícios; avalie
+como qualquer outra resposta falada, pela estrutura das frases, gramática e clareza.
 
 Este relatório fica salvo como registro de progresso do aluno (mesmo a entrevista tendo sido
 conduzida em inglês) — escreva o campo general_feedback em português, explicando individualmente
