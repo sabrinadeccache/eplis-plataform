@@ -25,18 +25,41 @@ final report.
 
 This text will be narrated aloud by a speech synthesizer, not read on screen — respond in plain
 spoken-style prose, with no markdown, no headings, no asterisks or any formatting, as if you were
-speaking directly to the candidate.`;
+speaking directly to the candidate.
+
+If the transcript is empty, or clearly not a real attempt at answering in English (e.g. random
+noise, silence, a few disconnected sounds/words, or a fragment that looks like it was cut off
+mid-sentence) rather than genuine spoken English, this is almost certainly a technical problem —
+a microphone issue or a recording that got cut off — NOT a sign of weak English proficiency. In
+that case, do not evaluate it as a language answer and do not ask the candidate to try answering
+again right now. Instead, briefly say you were not able to understand the answer and that it looks
+like a technical issue rather than a language one. Phrase what follows as a suggestion, NOT a
+question — e.g. "I'd suggest checking your microphone and equipment before the next questions",
+never "Can you check your microphone?" or anything phrased for the candidate to answer.`;
 
 const SITUATION_CHECK_RULE = `This answer is the "What's the situation?" step of a Part 2 item —
 the candidate's only task here is to describe the operational situation the AI just presented, not
 to propose a solution or suggestion (that comes in the next step). Give feedback ONLY about how
 well they described the situation: accuracy, completeness, clarity. The candidate is allowed to
 describe it by repeating or closely paraphrasing the AI's own wording word-for-word — this is
-explicitly permitted in the real EPLIS exam and must NEVER be treated as a flaw, penalized, or
-flagged as unoriginal. However, if the candidate described the situation using their own words
-instead of just repeating the AI, note that positively — paraphrasing in their own words is a
-stronger demonstration of comprehension and can raise their score. Do not comment on any
-suggestion or solution even if the candidate volunteered one — evaluate only the description.`;
+explicitly permitted in the real EPLIS exam and is a fully correct, complete answer on its own.
+
+If the candidate repeated or closely paraphrased the AI's wording, do NOT mention this at all as
+something to improve — do not say things like "try using your own words next time", "it would be
+better to paraphrase", "avoid just repeating what I said", or any variation of that, even as a
+minor or gentle suggestion. That framing is forbidden here: repeating is not a weaker answer, it
+is simply a correct one, and must read as such in your feedback — comment only on other aspects
+(accuracy, completeness, clarity) if relevant, or simply confirm the situation was described
+correctly.
+
+Only bring up the candidate's own words vs. repetition at all in the positive case: if they
+genuinely described the situation using their own words instead of repeating the AI, you may note
+that positively as a strong demonstration of comprehension. Never frame the reverse (repeating) as
+a contrast to that positive case or as something less good — the two are equally valid, correct
+answers, not a "better" and "worse" version of the same thing.
+
+Do not comment on any suggestion or solution even if the candidate volunteered one — evaluate only
+the description.`;
 
 const SUGGESTION_RULE = `This answer is the "make a suggestion" step of a Part 2 item — the AI
 already described an operational situation (given below as context) in the previous step, and the
@@ -131,12 +154,17 @@ comunicações reais de tráfego aéreo.
 
 Regra da Parte 2 (situações operacionais que terminam em "What's the situation?", cada item tem
 duas respostas distintas do candidato): na resposta de descrição da situação, o candidato pode
-repetir ou parafrasear de perto o que a IA acabou de dizer — isso é permitido no exame real e NUNCA
-deve ser tratado como falha ou penalizado em nenhum dos critérios; descrever com palavras próprias
-em vez de repetir é um sinal positivo de compreensão e pode favorecer a nota. Já na resposta de
-sugestão (segunda resposta do mesmo item), avalie a qualidade e adequação operacional da sugestão
-dada para aquela situação — não avalie a sugestão pela originalidade da descrição da situação, que
-é uma resposta separada.
+repetir ou parafrasear de perto o que a IA acabou de dizer — isso é permitido no exame real, é uma
+resposta correta e completa por si só, e NUNCA deve ser tratado como falha, comentado como algo a
+melhorar, nem penalizado em nenhum dos critérios. Não sugira, nem de forma sutil, que o candidato
+"deveria ter usado suas próprias palavras" quando ele repetiu — repetir e parafrasear são igualmente
+corretos, não uma versão "pior" e "melhor" da mesma resposta. Só mencione a diferença no sentido
+positivo: se o candidato genuinamente descreveu a situação com suas próprias palavras em vez de
+repetir, isso pode ser destacado como sinal positivo de compreensão e favorecer a nota — mas isso
+nunca deve virar uma crítica implícita a quem simplesmente repetiu. Já na resposta de sugestão
+(segunda resposta do mesmo item), avalie a qualidade e adequação operacional da sugestão dada para
+aquela situação — não avalie a sugestão pela originalidade da descrição da situação, que é uma
+resposta separada.
 
 Regra da Parte 4 (também duas respostas distintas por item): na resposta de descrição da imagem,
 avalie a precisão e clareza da descrição. Já na resposta de história (segunda resposta, identificada
@@ -144,6 +172,12 @@ como "Tell a short story related to the image you were shown."), o candidato dev
 história livre inspirada na imagem, NÃO descrevê-la de novo — nunca penalize essa resposta por não
 descrever literalmente o que está na imagem ou por conter elementos inventados/fictícios; avalie
 como qualquer outra resposta falada, pela estrutura das frases, gramática e clareza.
+
+Se alguma transcrição estiver vazia, ou for claramente ruído/fragmento cortado em vez de uma
+tentativa real de resposta em inglês, trate isso como um provável problema técnico (microfone) e
+NÃO use essa resposta específica para rebaixar nenhum dos 6 critérios — avalie os critérios com
+base nas demais respostas e, se mencionar o caso no general_feedback, deixe claro que foi por
+motivo técnico, não de proficiência.
 
 Este relatório fica salvo como registro de progresso do aluno (mesmo a entrevista tendo sido
 conduzida em inglês) — escreva o campo general_feedback em português, explicando individualmente

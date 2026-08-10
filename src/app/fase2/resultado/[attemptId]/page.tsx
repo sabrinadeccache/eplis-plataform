@@ -53,7 +53,7 @@ export default async function Fase2ResultadoPage({
 
   const { data: responses } = await supabase
     .from("phase2_responses")
-    .select("response_stage, ai_feedback, phase2_prompts(part, prompt_text)")
+    .select("response_stage, transcript, ai_feedback, phase2_prompts(part, prompt_text)")
     .eq("simulation_attempt_id", attemptId)
     .order("created_at", { ascending: true });
 
@@ -123,8 +123,17 @@ export default async function Fase2ResultadoPage({
               <p className="mt-1 font-medium text-zinc-900 dark:text-zinc-50">
                 {prompt?.prompt_text}
               </p>
+              {r.transcript ? (
+                <p className="mt-2 text-zinc-700 dark:text-zinc-300">
+                  <span className="text-xs font-medium text-zinc-400">Sua resposta: </span>
+                  {r.transcript as string}
+                </p>
+              ) : null}
               {r.ai_feedback ? (
-                <p className="mt-1 text-zinc-600 dark:text-zinc-400">{r.ai_feedback as string}</p>
+                <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+                  <span className="text-xs font-medium text-zinc-400">Feedback: </span>
+                  {r.ai_feedback as string}
+                </p>
               ) : null}
             </div>
           );

@@ -21,7 +21,13 @@ Responsável: Sabrina Deccache.
 - **Credenciais**: em `.env.local` (gitignored, não sobe pro GitHub). Inclui
   `SUPABASE_DB_URL` com a senha do Postgres, usado para aplicar migrations diretamente
   via `pg` (não temos Supabase CLI nem o MCP autorizado nesta máquina — ver seção
-  "Ferramentas indisponíveis" abaixo).
+  "Ferramentas indisponíveis" abaixo). **Achado (2026-08-10)**: `SUPABASE_DB_URL` usava o
+  host de conexão direta (`db.<projeto>.supabase.co`), que passou a ser IPv6-only no
+  Supabase — em redes sem IPv6 funcional isso falha com `getaddrinfo ENOTFOUND`,
+  reproduzido de verdade na máquina da Sabrina. Trocado pro host do **Session pooler**
+  (`aws-0-sa-east-1.pooler.supabase.com:5432`, usuário `postgres.<projeto>` em vez de só
+  `postgres` — string obtida em Database Settings → Connect → aba "Session pooler" no
+  painel do Supabase), que é IPv4-compatível.
 - `OPENAI_API_KEY` **preenchida** — usada na Fase 4 (áudios de teste via TTS, depois
   substituídos por gravações reais) e agora também na Fase 5 (transcrição via Whisper e
   TTS da voz da IA na entrevista simulada). `ANTHROPIC_API_KEY` **preenchida e testada**
@@ -95,15 +101,88 @@ picsum — só pra validar o sorteio por perfil, não são fotos reais de torre)
 Consulte `docs/database-schema.md` para o modelo completo e as decisões de design
 (perfil operacional, timers da Fase 2, state machine).
 
-## Próximo passo em aberto
+## Atualização (2026-08-10) — perfil operacional real na Fase 2 (Partes 2 e 4)
 
-Fase 5 (modo `practice` da entrevista simulada — ver seção "Fase 5" no roadmap abaixo)
-implementada e **testada manualmente pela Sabrina em `localhost:3000` com microfone
-real, cobrindo agora as 4 partes** (Parte 1 validada em rodada anterior; Partes 2, 3 e 4
-validadas em 2026-08-06 — ver "Atualização (2026-08-06)" logo abaixo e a seção "Fase 5"
-para o detalhe de cada achado). O relatório final ponta a ponta (gerado no fluxo real do
-app, não isolado via script) **ainda não foi validado manualmente com o tamanho oficial
-das partes** — ver próximos passos.
+Teste manual ponta a ponta completo (Partes 1-4 + relatório final) validado pela Sabrina. Achados
+corrigidos nesta rodada:
+- Feedback (curto por resposta e relatório final) tratava transcrição vazia/ruído/corte de
+  microfone como resposta fraca em inglês, pedindo pra "tentar de novo" — corrigido em
+  `src/lib/ai/anthropic.ts`: agora a IA reconhece que é provável problema técnico (não de
+  proficiência), não avalia a resposta como língua, e **sugere** (nunca pergunta) checar
+  microfone/equipamento antes das próximas perguntas; o relatório final não rebaixa nenhum dos 6
+  critérios por causa de uma resposta assim.
+- Tela de resultado (`/fase2/resultado/[id]`) não mostrava a transcrição da resposta do aluno, só
+  pergunta + feedback — corrigido incluindo `transcript` no select e exibindo "Sua resposta" antes
+  do feedback de cada item.
+- `SUPABASE_DB_URL` usava o host de conexão direta do Postgres (`db.<projeto>.supabase.co`), que é
+  IPv6-only no Supabase — falhava com `ENOTFOUND` em rede sem IPv6. Trocado pro **Session pooler**
+  (`aws-0-sa-east-1.pooler.supabase.com:5432`, usuário `postgres.<projeto>`).
+
+**Decisão de escopo fechada nesta rodada**: o produto passa a cobrir só 4 áreas operacionais reais
+— TWR, APP, ACC, COpM (COpM = Controlador de Operações Militares, cobre o papel de defesa
+aérea/identificação de aeronaves não identificadas no SISCEAB). Enum `operational_profile`
+restrito de 8 pra 5 valores (`AFIS`, `FIS` e `ab_initio` removidos — não fazem parte do escopo de
+conteúdo desta rodada; `general` mantido, marca conteúdo sem restrição de perfil usado nas Partes
+1/3 e como fallback). Migration `20260810000000_narrow_operational_profile.sql`. Cadastro
+(`/cadastro`) atualizado pra oferecer só "Ainda não sei" (nulo), TWR, APP, ACC, COpM.
+
+**Conteúdo real por perfil**:
+- **Parte 2**: 40 situações operacionais reais (10 por perfil), pesquisadas pra refletir o dia a
+  dia de cada área — TWR (torre: runway incursion, bird strike, wind shear, go-around etc.), APP
+  (aproximação: TCAS RA, conflito de tráfego no terminal, vetoração, missed approach), ACC (área:
+  emergência médica em voo, falha de motor em rota, descompressão, desvio por clima), COpM
+  (operações militares/defesa aérea: aeronave não identificada, intrusão em área restrita,
+  scramble de interceptador, cenário de sequestro/renegade). Script
+  `scripts/seed-phase2-part2-profiles.mjs` — faz DELETE de verdade das 12 linhas antigas
+  `general` (seguro porque roda depois da limpeza de `phase2_responses`) e insere as 40 novas,
+  `order_index` 1-10 dentro de cada perfil.
+- **Parte 4**: 1 imagem real por perfil (bucket `phase2-images`, arquivos `TWR-01.png`,
+  `APP-01.jpg`, `ACC-01.webp`, `COpM-01.jpg`, fornecidos pela Sabrina), registradas via
+  `scripts/seed-phase2-part4-profile-images.mjs`. Como `PART_SIZES.part4` é 1 e cada perfil agora
+  tem exatamente 1 imagem própria (os placeholders picsum `general` e os 2 de teste `TWR` foram
+  desativados, não apagados), o sorteio da Parte 4 fica determinístico por perfil — cada candidato
+  sempre vê a imagem real da sua área. Candidato sem perfil definido ("Ainda não sei") não tem
+  conteúdo de Parte 2/4 — cai na mensagem já existente "conteúdo insuficiente pro perfil", mesmo
+  comportamento gracioso que já existia pra pool vazio.
+
+**Limpeza de dados de teste**: `scripts/dev-clean-test-data.mjs` (novo, reutilizável) apagou todas
+as `simulation_attempts`/`phase1_answers`/`phase2_responses`/`simulation_feedbacks` de teste da
+Sabrina antes da migration do enum (pré-requisito — não dava pra estreitar o enum com linhas
+usando os valores removidos). Banco de tentativas está zerado; conteúdo (`phase1_questions`,
+`phase1_audios`, `phase2_prompts`) e usuários preservados.
+
+**Achado corrigido (mesma rodada, feedback da Parte 2)**: mesmo já proibindo penalizar
+repetição/paráfrase na resposta de `situation_check` (achado da rodada de 2026-08-06 abaixo), o
+modelo ainda deixava escapar sugestões tipo "seria melhor usar suas próprias palavras" quando o
+candidato repetia a descrição da IA — o que soa como crítica mesmo sem afetar a nota. Reforçado em
+`src/lib/ai/anthropic.ts` (feedback curto e relatório final): agora é proibido até insinuar isso;
+repetir e parafrasear são tratados como igualmente corretos, só o parafrasear ganha destaque
+*positivo* quando acontece, nunca como contraste negativo pra quem repetiu.
+
+**Teste manual ponta a ponta nos 4 perfis operacionais reais (TWR, APP, ACC, COpM)**: validado
+pela Sabrina — transição Parte 1 → Parte 2 (pool de 10 situações por perfil correto) e transição
+Parte 3 → Parte 4 (imagem real por perfil sorteada corretamente) confirmadas nos 4 perfis. Novo
+utilitário de dev pra isso: `node scripts/dev-set-profile.mjs <email> <TWR|APP|ACC|COpM>` troca o
+perfil operacional de um usuário já cadastrado sem precisar de conta nova por área — combinado com
+`dev-jump-phase2-part.mjs <email> <part> <itemIndex>` (esse último ganhou o parâmetro opcional
+`itemIndex` nesta rodada, pra pular direto pro último item de uma parte e testar só a transição).
+
+## Fase 2 (entrevista simulada, modo `practice`) — fluxo considerado fechado (2026-08-10)
+
+Ponta a ponta validado manualmente pela Sabrina: as 4 partes, tamanho oficial (4/10/4/1), relatório
+final gerado no fluxo real do app (não isolado via script), conteúdo real por perfil operacional
+(Parte 2 e Parte 4) nos 4 perfis, feedback técnico de microfone, e exibição de
+pergunta+resposta+feedback por item na tela de resultado. Ver "Atualização (2026-08-10)" acima e
+"Atualização (2026-08-06)" abaixo para o histórico completo de achados corrigidos até chegar aqui.
+
+Próximos passos possíveis (perguntar à Sabrina qual priorizar): (1) fechar o deploy na Vercel;
+(2) implementar o modo `official` da Fase 2 (timer de 20s pra começar a responder, limite rígido de
+repetição por parte — hoje só existe o modo `practice`); (3) completar o conteúdo da Fase 1 (só 10
+dos até 30 áudios possíveis) ou ampliar o conteúdo real da Fase 2 (só 1 imagem por perfil na Parte
+4 — o exame real pode ter mais variedade); (4) Fase 6 (histórico/relatórios de evolução) ou Fase 7
+(responsividade, testes, observabilidade).
+
+## Histórico (Fase 5 antes de fechar — 2026-08-06 e anteriores)
 
 **Atualização (2026-08-06)**: rodada de teste manual ponta a ponta das Partes 2-4, com
 `PART_SIZES` temporariamente reduzido (2/2/2/1) pra acelerar os ciclos de teste e
@@ -171,8 +250,10 @@ Fase 1 com mais áudios reais.
 - [ ] **Fase 1 — pendente**: ambiente de deploy (Vercel — precisa da conta da Sabrina
       conectada ao GitHub; não configurado ainda).
 - [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; conteúdo real da Fase 1 já
-      cadastrado (10 áudios reais, ver Fase 4 abaixo); falta ainda cadastrar
-      seeds/prompts reais da Fase 2 (entrevista simulada).
+      cadastrado (10 áudios reais, ver Fase 4 abaixo); conteúdo real das Partes 2 e 4 da
+      entrevista simulada já cadastrado por perfil operacional (ver Fase 5 abaixo) —
+      falta ainda ampliar variedade (só 1 imagem por perfil na Parte 4) e cadastrar
+      conteúdo real pras Partes 1 e 3 (hoje `general`, placeholder).
 - [x] **Fase 3 — Fluxo do usuário**: cadastro (`/cadastro`) e login (`/login`) via
       Server Actions + Supabase Auth, proteção de rotas no `src/proxy.ts` (redireciona
       não-autenticado para `/login` e autenticado para fora das páginas públicas),
@@ -208,9 +289,10 @@ Fase 1 com mais áudios reais.
       de "síncrono primeiro" já usado no resto do projeto), gravação da resposta via
       `MediaRecorder` no browser, transcrição via OpenAI Whisper, feedback curto por
       resposta e relatório final (6 critérios ICAO + regra do menor valor, nunca média)
-      via Anthropic Claude (`claude-sonnet-5`). Testado via `npm run lint` + `npm run
-      build` + smoke test de rotas — **falta o teste manual ponta a ponta com
-      microfone real pela Sabrina**.
+      via Anthropic Claude (`claude-sonnet-5`). **Fluxo completo (4 partes, tamanho
+      oficial, relatório final) testado manualmente ponta a ponta pela Sabrina com
+      microfone real, inclusive nos 4 perfis operacionais reais — ver "Fase 2 — fluxo
+      considerado fechado (2026-08-10)" no topo deste documento.**
       **Achado corrigido nesta rodada**: `simulation_feedbacks` tinha só policy/GRANT de
       `select`, sem `insert` — mesma classe de bug do GRANT ausente já documentada
       acima; corrigido em `20260729000000_phase2_feedback_insert.sql`.
@@ -230,10 +312,11 @@ Fase 1 com mais áudios reais.
       de avaliação (`src/lib/ai/anthropic.ts`) que repetir/parafrasear a descrição da
       IA nessa resposta é permitido no exame real e não deve ser penalizado. Ver
       `docs/state-machine.md`.
-      **Conteúdo**: `phase2_prompts` está com conteúdo **placeholder** (perfil
-      `general`), script `scripts/seed-phase2-prompts.mjs`. Imagens da Parte 4 apontam
-      pra `picsum.photos` (placeholder). Falta substituir por conteúdo real quando
-      disponível.
+      **Conteúdo**: Partes 1 e 3 seguem com conteúdo placeholder (perfil `general`,
+      script `scripts/seed-phase2-prompts.mjs`) — não fazem parte do escopo de
+      segmentação por perfil operacional. Partes 2 e 4 têm conteúdo real por perfil
+      desde 2026-08-10 (ver seção correspondente no topo deste documento) — deixaram de
+      ser placeholder.
       **Achado corrigido (script de seed deixou de ser idempotente na prática)**:
       `scripts/seed-phase2-prompts.mjs` era "apaga tudo com `operational_profile =
       'general'` e reinsere" — funcionava enquanto o banco só tinha dados de seed, mas

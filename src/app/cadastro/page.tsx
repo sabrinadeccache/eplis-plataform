@@ -9,12 +9,9 @@ const initialState: AuthFormState = { error: null };
 
 const OPERATIONAL_PROFILES = [
   { value: "", label: "Ainda não sei" },
-  { value: "ab_initio", label: "Ab initio" },
   { value: "TWR", label: "TWR" },
   { value: "APP", label: "APP" },
   { value: "ACC", label: "ACC" },
-  { value: "AFIS", label: "AFIS" },
-  { value: "FIS", label: "FIS" },
   { value: "COpM", label: "COpM" },
 ];
 

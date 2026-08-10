@@ -27,9 +27,12 @@ confirmação de e-mail no cadastro.
 
 - Não reabrir decisões já registradas em `docs/project-status.md` sem motivo novo —
   várias vieram de especificações oficiais do EPLIS, não são arbitrárias.
-- Migrations ficam em `supabase/migrations/`, aplicadas via conexão Postgres direta
-  (`SUPABASE_DB_URL` em `.env.local`) enquanto não há Supabase CLI/MCP autorizado nesta
-  máquina.
+- Migrations ficam em `supabase/migrations/`, aplicadas via `scripts/apply-migration.mjs`
+  usando `SUPABASE_DB_URL` (`.env.local`) enquanto não há Supabase CLI/MCP autorizado
+  nesta máquina. **`SUPABASE_DB_URL` aponta pro Session pooler** (host
+  `aws-0-<região>.pooler.supabase.com`, usuário `postgres.<projeto>`), não pro host de
+  conexão direta (`db.<projeto>.supabase.co`) — esse último é IPv6-only no Supabase e
+  falha com `ENOTFOUND` em rede sem IPv6 (achado real, ver `docs/project-status.md`).
 - **Toda migration que cria uma tabela nova precisa de `GRANT` explícito pro role
   `authenticated`** (`grant select/insert/update on public.<tabela> to authenticated;`),
   além das RLS policies — RLS só é avaliado depois que o GRANT de tabela já passou.

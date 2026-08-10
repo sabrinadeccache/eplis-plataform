@@ -26,7 +26,7 @@ users
 | role | enum | `admin`, `pilot`, `air_traffic_controller` |
 | status | enum | `active`, `inactive`, `blocked` |
 | target_exam | text | ex: `EPLIS`, `ICAO_PILOT` — permite o mesmo usuário treinar para provas diferentes |
-| operational_profile | enum, nullable | **[NOVO]** `TWR`, `APP`, `ACC`, `AFIS`, `FIS`, `COpM`, `ab_initio` — confirmado pelo Manual do Examinando (item 1.2.2) como o critério real de versionamento da Fase 2. Nullable porque `admin` não precisa. |
+| operational_profile | enum, nullable | `TWR`, `APP`, `ACC`, `COpM` — confirmado pelo Manual do Examinando (item 1.2.2) como o critério real de versionamento da Fase 2. Nullable porque `admin` não precisa e o candidato pode se cadastrar sem saber ainda ("Ainda não sei"). **[2026-08-10]** Enum restrito de 8 pra 5 valores — `AFIS`, `FIS` e `ab_initio` saíram por não fazerem parte do escopo real de conteúdo desta rodada; ver migration `20260810000000_narrow_operational_profile.sql`. |
 | created_at | timestamp | |
 
 Senha **não** é armazenada aqui — delegada ao Supabase Auth.
@@ -103,7 +103,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 |---|---|---|
 | id | uuid | |
 | part | enum | `part1`, `part2`, `part3`, `part4` |
-| operational_profile | enum, nullable | **[NOVO]** mesmo enum de `users.operational_profile`, mais `ab_initio` e `general` (item sem restrição de perfil, usado em qualquer versão). Confirma o RF-49 original mas agora com o campo que faltava no SPD (Tabela 5) |
+| operational_profile | enum, nullable | mesmo enum de `users.operational_profile`, mais `general` (item sem restrição de perfil, usado nas Partes 1/3 e como fallback nas Partes 2/4). Confirma o RF-49 original mas agora com o campo que faltava no SPD (Tabela 5). **[2026-08-10]** Conteúdo real da Parte 2 (40 situações, 10 por perfil: TWR/APP/ACC/COpM — `scripts/seed-phase2-part2-profiles.mjs`) e da Parte 4 (1 imagem real por perfil — `scripts/seed-phase2-part4-profile-images.mjs`) substituiu o placeholder `general` único que existia antes. |
 | prompt_text | text | |
 | image_url | text, nullable | só Parte 4 |
 | expected_duration_seconds | int | |
@@ -169,7 +169,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 
 ```
 role: admin | pilot | air_traffic_controller
-operational_profile: TWR | APP | ACC | AFIS | FIS | COpM | ab_initio | general
+operational_profile: TWR | APP | ACC | COpM | general
 phase: phase1 | phase2
 mode: practice | official
 attempt_status: in_progress | completed | abandoned

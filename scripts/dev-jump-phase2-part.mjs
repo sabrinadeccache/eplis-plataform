@@ -4,7 +4,11 @@
 // pedaço do fluxo (ex.: Parte 4) depois de já ter validado o resto.
 // Reaproveita a tentativa in_progress mais recente do usuário; cria uma nova
 // via INSERT se não houver nenhuma. Uso:
-// `node scripts/dev-jump-phase2-part.mjs <email> <part1|part2|part3|part4>`.
+// `node scripts/dev-jump-phase2-part.mjs <email> <part1|part2|part3|part4> [itemIndex]`.
+// `itemIndex` (opcional, default 0) é útil pra testar a TRANSIÇÃO entre
+// partes sem responder a parte toda de novo — ex.: pra retestar part3 ->
+// part4, pule pro último item da part3 (índice 3, já que PART_SIZES.part3
+// é 4) e responda só esse item.
 import { readFileSync } from "node:fs";
 import { Client } from "pg";
 
@@ -26,12 +30,28 @@ const PART_INTRO_STATE = {
   part4: "PART_4_INTRO",
 };
 
+// Estado usado quando itemIndex > 0 — mesmos labels de src/services/simulations/phase2/state-machine.ts.
+const PART_ITEM_STATE = {
+  part1: "PART_1_QUESTION",
+  part2: "PART_2_SCENARIO",
+  part3: "PART_3_QUESTION",
+  part4: "PART_4_ITEM",
+};
+
 async function main() {
-  const [, , email, part] = process.argv;
+  const [, , email, part, itemIndexArg] = process.argv;
   if (!email || !PART_INTRO_STATE[part]) {
-    console.error("Uso: node scripts/dev-jump-phase2-part.mjs <email> <part1|part2|part3|part4>");
+    console.error(
+      "Uso: node scripts/dev-jump-phase2-part.mjs <email> <part1|part2|part3|part4> [itemIndex]",
+    );
     process.exit(1);
   }
+  const itemIndex = itemIndexArg !== undefined ? Number(itemIndexArg) : 0;
+  if (!Number.isInteger(itemIndex) || itemIndex < 0) {
+    console.error("itemIndex precisa ser um inteiro >= 0.");
+    process.exit(1);
+  }
+  const itemState = itemIndex === 0 ? PART_INTRO_STATE[part] : PART_ITEM_STATE[part];
 
   const env = loadEnv();
   const client = new Client({ connectionString: env.SUPABASE_DB_URL });
@@ -55,9 +75,9 @@ async function main() {
     const { rows: inserted } = await client.query(
       `insert into public.simulation_attempts
          (user_id, phase, mode, status, current_part, current_item_index, current_state)
-       values ($1, 'phase2', 'practice', 'in_progress', $2, 0, $3)
+       values ($1, 'phase2', 'practice', 'in_progress', $2, $3, $4)
        returning id`,
-      [userId, part, PART_INTRO_STATE[part]],
+      [userId, part, itemIndex, itemState],
     );
     attemptId = inserted[0].id;
     console.log(`Nenhuma tentativa em andamento — criada uma nova: ${attemptId}`);
@@ -65,12 +85,12 @@ async function main() {
 
   await client.query(
     `update public.simulation_attempts
-       set current_part = $1, current_item_index = 0, current_state = $2
-     where id = $3`,
-    [part, PART_INTRO_STATE[part], attemptId],
+       set current_part = $1, current_item_index = $2, current_state = $3
+     where id = $4`,
+    [part, itemIndex, itemState, attemptId],
   );
 
-  console.log(`Tentativa ${attemptId} pulada pra ${part}.`);
+  console.log(`Tentativa ${attemptId} pulada pra ${part}, item ${itemIndex}.`);
   console.log(`Abra: http://localhost:3000/fase2/entrevista/${attemptId}`);
 
   await client.end();

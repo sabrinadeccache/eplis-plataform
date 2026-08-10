@@ -9,16 +9,7 @@ export type AuthFormState = {
   info?: string | null;
 };
 
-const OPERATIONAL_PROFILES: OperationalProfile[] = [
-  "TWR",
-  "APP",
-  "ACC",
-  "AFIS",
-  "FIS",
-  "COpM",
-  "ab_initio",
-  "general",
-];
+const OPERATIONAL_PROFILES: OperationalProfile[] = ["TWR", "APP", "ACC", "COpM", "general"];
 
 export async function signUp(
   _prevState: AuthFormState,

@@ -5,15 +5,7 @@
 
 export type Role = "admin" | "pilot" | "air_traffic_controller";
 export type UserStatus = "active" | "inactive" | "blocked";
-export type OperationalProfile =
-  | "TWR"
-  | "APP"
-  | "ACC"
-  | "AFIS"
-  | "FIS"
-  | "COpM"
-  | "ab_initio"
-  | "general";
+export type OperationalProfile = "TWR" | "APP" | "ACC" | "COpM" | "general";
 
 export type Phase = "phase1" | "phase2";
 export type SimulationMode = "practice" | "official";
