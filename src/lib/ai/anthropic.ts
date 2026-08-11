@@ -188,6 +188,26 @@ exatamente onde está seu progresso e o que precisa melhorar.
 Responda APENAS com um JSON estrito, sem texto antes ou depois, no formato:
 {"pronunciation":"weak|moderate|good","structure":"weak|moderate|good","vocabulary":"weak|moderate|good","fluency":"weak|moderate|good","comprehension":"weak|moderate|good","interaction":"weak|moderate|good","overall":"<igual ao menor dos seis>","general_feedback":"<texto em português explicando cada um dos 6 critérios individualmente>"}`;
 
+// Só se aplica ao modo `official`, que não dá nenhum feedback durante a entrevista
+// (diferente do `practice`, que já mostra um feedback curto após cada resposta) —
+// o relatório final é a única devolutiva que o candidato recebe, então precisa
+// compensar isso olhando pra entrevista como um todo, não só os 6 critérios.
+const OFFICIAL_MODE_ADDENDUM = `
+
+Este candidato fez a entrevista no modo OFFICIAL, que não dá nenhum feedback durante
+a prova — o relatório abaixo é a ÚNICA devolutiva que ele recebe sobre toda a
+entrevista. Além de explicar os 6 critérios individualmente (instrução acima, que
+continua valendo), o general_feedback também deve, na mesma resposta em português:
+- Destacar as melhores respostas dadas ao longo das 4 partes, com pelo menos um
+  exemplo concreto (trecho ou paráfrase da resposta) do que funcionou bem.
+- Apontar os erros ou padrões de erro mais recorrentes ao longo das partes
+  (gramática, vocabulário, estrutura, fluência etc.) — não precisa comentar item
+  por item, mas sim os padrões que mais se repetiram.
+- Mencionar qualquer outro ponto que você julgue relevante para o progresso do
+  aluno rumo ao exame real.
+Não é necessário organizar esse conteúdo por parte (1/2/3/4) nem cobrir cada item
+individualmente — o objetivo é uma visão geral útil, não uma lista exaustiva.`;
+
 const FALLBACK_REPORT: FinalReport = {
   pronunciation: "moderate",
   structure: "moderate",
@@ -202,16 +222,19 @@ const FALLBACK_REPORT: FinalReport = {
 
 export async function generateFinalReport(
   transcripts: { part: string; promptText: string; transcript: string }[],
+  mode: "practice" | "official",
 ): Promise<FinalReport> {
   const body = transcripts
     .map((t, i) => `[${i + 1}] (${t.part}) Pergunta: ${t.promptText}\nResposta: ${t.transcript}`)
     .join("\n\n");
 
+  const system = mode === "official" ? `${FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}` : FINAL_REPORT_SYSTEM;
+
   const msg = await client.messages.create({
     model: MODEL_VERSION,
     max_tokens: 2000,
     thinking: { type: "disabled" },
-    system: FINAL_REPORT_SYSTEM,
+    system,
     messages: [{ role: "user", content: body }],
   });
 

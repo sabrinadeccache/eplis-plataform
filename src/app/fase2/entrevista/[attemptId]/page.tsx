@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import { InterviewRunner } from "@/components/fase2/interview-runner";
 import { getSequenceForAttempt, sequenceHasEnoughItems } from "@/services/simulations/phase2/queries";
-import type { Part } from "@/types/database";
+import type { Part, SimulationMode } from "@/types/database";
 
 export default async function Fase2EntrevistaPage({
   params,
@@ -18,7 +18,7 @@ export default async function Fase2EntrevistaPage({
   const supabase = await createClient();
   const { data: attempt } = await supabase
     .from("simulation_attempts")
-    .select("id, user_id, phase, status, current_part, current_item_index")
+    .select("id, user_id, phase, status, mode, current_part, current_item_index")
     .eq("id", attemptId)
     .single();
 
@@ -43,6 +43,7 @@ export default async function Fase2EntrevistaPage({
     <AppShell user={user}>
       <InterviewRunner
         attemptId={attemptId}
+        mode={attempt.mode as SimulationMode}
         sequence={sequence}
         initialPart={(attempt.current_part ?? "part1") as Part}
         initialItemIndex={attempt.current_item_index ?? 0}

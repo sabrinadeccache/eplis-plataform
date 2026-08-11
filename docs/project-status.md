@@ -15,6 +15,19 @@ Responsável: Sabrina Deccache.
 
 ## Infraestrutura já provisionada
 
+- **Vercel**: projeto `orion-flight-lab/eplis-trainer` (deploy em produção:
+  https://eplis-trainer.vercel.app), GitHub repo conectado (`sabrinadeccache/eplis-plataform`,
+  branch `main`) — push em `main` dispara deploy automático. Variáveis de ambiente de produção
+  configuradas via `vercel env add`: `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`,
+  `ANTHROPIC_API_KEY` (as 5 usadas em `src/`, conferido por grep antes de configurar —
+  `SUPABASE_DB_URL` fica de fora porque só é usada pelos scripts locais, nunca em runtime do
+  app). Deploy testado: `curl -I` na raiz retorna 307 pra `/login`, confirmando que
+  `src/proxy.ts` está ativo em produção. Login na Vercel CLI (`npx vercel`) foi via device
+  flow (`vercel whoami` deflagrou automaticamente, sem precisar abrir navegador manualmente).
+  **Nota**: o projeto caiu no team `orion-flight-lab` porque é o único team/scope existente
+  na conta da Sabrina na Vercel (criado antes por outro projeto) — não tem relação de conteúdo
+  com o EPLIS Trainer, é só o namespace de organização.
 - **GitHub**: https://github.com/sabrinadeccache/eplis-plataform (branch `main`)
 - **Supabase**: projeto `nkjnvmuatkibrvfsojmp` (`https://nkjnvmuatkibrvfsojmp.supabase.co`)
   — Data API ligado, auto-expose de tabelas novas desligado, RLS automático ligado.
@@ -167,6 +180,60 @@ perfil operacional de um usuário já cadastrado sem precisar de conta nova por 
 `dev-jump-phase2-part.mjs <email> <part> <itemIndex>` (esse último ganhou o parâmetro opcional
 `itemIndex` nesta rodada, pra pular direto pro último item de uma parte e testar só a transição).
 
+## Modo `official` da Fase 2 — implementado e fechado (2026-08-11)
+
+Implementado o modo `official`, que já era especificado em `docs/state-machine.md` e
+`docs/database-schema.md` mas nunca tinha código antes desta rodada: `startAttempt` agora recebe
+`mode` (tela `/fase2` oferece os dois botões, practice e official) e `InterviewRunner`
+(`src/components/fase2/interview-runner.tsx`) se comporta diferente conforme o modo. Testado ponta
+a ponta pela Sabrina, com 2 rodadas de ajuste fino pra ficar fiel ao exame real (histórico de
+achados abaixo). Comportamento final do `official`:
+- **Zero feedback durante a entrevista**: `src/app/api/phase2/submit-response/route.ts` pula a
+  chamada de `generateResponseFeedback` inteiramente quando `attempt.mode === "official"` (evita
+  custo/latência de uma chamada de IA que nunca seria mostrada); `ai_feedback` fica `null` nessas
+  respostas, e a tela de resultado já lida bem com isso (só não renderiza a linha "Feedback:").
+- **Sem botão "Falar"**: a gravação começa sozinha 5s depois da IA terminar de falar a pergunta —
+  cronômetro visível (`ResponseStartTimer`, mesmo padrão do `SilentTimer` já existente),
+  `onExpire` chama `startRecording` direto. Só existe no `official`; `practice` mantém o botão
+  "Falar" manual, sem esse timer.
+- **Cronômetro pausa durante "Repetir pergunta"**: `ResponseStartTimer` só renderiza enquanto
+  `!speaking` (mesmo estado global que já controla o indicador "IA está falando 🔊", atualizado
+  pelos eventos `playing`/`ended`/`pause` do `<audio>` compartilhado) — desmonta (parando o
+  `setTimeout` interno) enquanto a pergunta repetida toca, e remonta com 5s cheios quando termina.
+  Sem isso, o cronômetro rodava em paralelo à repetição e podia disparar a gravação no meio dela.
+- **Limite de repetição**: botão "Repetir pergunta" desabilita após 1 uso em `official` (sem
+  limite no `practice`, como já era).
+- **Sem botão "Recomeçar"**: uma vez que a gravação começou no `official`, só dá pra
+  pausar/continuar ou concluir e enviar — sem reiniciar a resposta do zero (sem segunda chance,
+  fiel ao exame real). `practice` mantém o botão.
+- **Relatório final mais rico**: a pedido da Sabrina, o `official` precisa compensar a ausência de
+  feedback contínuo — `generateFinalReport` (`src/lib/ai/anthropic.ts`) aceita `mode` e, só quando
+  `official`, anexa um bloco de instrução extra (`OFFICIAL_MODE_ADDENDUM`) pedindo que o
+  `general_feedback` também destaque as melhores respostas dadas (com exemplo concreto) e os
+  erros/padrões mais recorrentes ao longo das 4 partes, sem precisar ser item a item. O relatório
+  do `practice` não muda em nada — reaproveita a mesma infraestrutura que já existia (`advanceState`
+  já coletava os transcripts das 4 partes numa única chamada final, não precisou de tabela nem
+  agregação nova).
+
+`docs/state-machine.md` e `docs/database-schema.md` atualizados pra refletir o comportamento final
+(gravação automática após 5s, não um timeout de 20s que pulava o item — versão descartada ainda na
+mesma rodada de testes, antes de fechar).
+
+**Utilitário de dev atualizado**: `scripts/dev-jump-phase2-part.mjs` ganhou um 4º argumento
+opcional `mode` (`practice`/`official`) — sem ele, o script reaproveita a tentativa `in_progress`
+mais recente **de qualquer modo**, o que já causou confusão real (pulou pra uma tentativa
+`practice` esquecida de um teste anterior ao tentar testar `official`). Com o modo explícito, o
+script só reaproveita (ou cria) uma tentativa daquele modo específico, e sempre imprime o modo da
+tentativa usada. Uso: `node scripts/dev-jump-phase2-part.mjs <email> <part> [itemIndex] [mode]`.
+
+**Decisões de escopo fechadas com a Sabrina, fora desta rodada**:
+- Limite de repetição simplificado: só um cap de 1x no botão "Repetir pergunta" já existente, sem
+  distinguir "esclarecimento de vocabulário" de "repetição da pergunta" (essa distinção da tabela
+  em `docs/state-machine.md` nunca existiu no app, nem no `practice` — só existe o botão de
+  repetir).
+- Sem corte automático de duração de resposta (60s pra descrição, 90s pra história, etc.) — a
+  gravação em ambos os modos só termina quando o candidato clica "Concluir e enviar" ou pausa.
+
 ## Fase 2 (entrevista simulada, modo `practice`) — fluxo considerado fechado (2026-08-10)
 
 Ponta a ponta validado manualmente pela Sabrina: as 4 partes, tamanho oficial (4/10/4/1), relatório
@@ -175,12 +242,14 @@ final gerado no fluxo real do app (não isolado via script), conteúdo real por 
 pergunta+resposta+feedback por item na tela de resultado. Ver "Atualização (2026-08-10)" acima e
 "Atualização (2026-08-06)" abaixo para o histórico completo de achados corrigidos até chegar aqui.
 
-Próximos passos possíveis (perguntar à Sabrina qual priorizar): (1) fechar o deploy na Vercel;
-(2) implementar o modo `official` da Fase 2 (timer de 20s pra começar a responder, limite rígido de
-repetição por parte — hoje só existe o modo `practice`); (3) completar o conteúdo da Fase 1 (só 10
-dos até 30 áudios possíveis) ou ampliar o conteúdo real da Fase 2 (só 1 imagem por perfil na Parte
-4 — o exame real pode ter mais variedade); (4) Fase 6 (histórico/relatórios de evolução) ou Fase 7
-(responsividade, testes, observabilidade).
+Deploy na Vercel fechado em 2026-08-10 — ver "Infraestrutura já provisionada" acima. Modo
+`official` da Fase 2 implementado e fechado em 2026-08-11 — ver "Modo `official` da Fase 2 —
+implementado e fechado" acima. Próximos passos possíveis (perguntar à Sabrina qual priorizar):
+(1) completar o conteúdo da Fase 1 (só 10 dos até 30 áudios possíveis) ou ampliar o conteúdo real
+da Fase 2 (só 1 imagem por perfil na Parte 4 — o exame real pode ter mais variedade); (2) Fase 6
+(histórico/relatórios de evolução) ou Fase 7 (responsividade, testes, observabilidade); (3) corte
+automático de duração de resposta e distinção completa repetição/esclarecimento no modo `official`
+(escopo deixado de fora, ver "Modo `official` da Fase 2 — implementado e fechado" acima).
 
 ## Histórico (Fase 5 antes de fechar — 2026-08-06 e anteriores)
 
@@ -247,8 +316,8 @@ Fase 1 com mais áudios reais.
 
 - [x] **Fase 1 — Fundação técnica**: repositório, Next.js + TypeScript, Supabase
       configurado (Auth pronto no banco via trigger, RLS ativo), estrutura de pastas.
-- [ ] **Fase 1 — pendente**: ambiente de deploy (Vercel — precisa da conta da Sabrina
-      conectada ao GitHub; não configurado ainda).
+      Deploy na Vercel fechado em 2026-08-10 (https://eplis-trainer.vercel.app, deploy
+      automático a cada push em `main`) — ver "Infraestrutura já provisionada" acima.
 - [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; conteúdo real da Fase 1 já
       cadastrado (10 áudios reais, ver Fase 4 abaixo); conteúdo real das Partes 2 e 4 da
       entrevista simulada já cadastrado por perfil operacional (ver Fase 5 abaixo) —
@@ -297,8 +366,9 @@ Fase 1 com mais áudios reais.
       `select`, sem `insert` — mesma classe de bug do GRANT ausente já documentada
       acima; corrigido em `20260729000000_phase2_feedback_insert.sql`.
       **Escopo desta rodada**: só modo `practice` (sem timer de 20s pra começar a
-      falar, sem limite rígido de repetição por parte) — modo `official` fica para uma
-      rodada futura. Sub-estágios dentro de um item (ex.: `situation_check` →
+      falar, sem limite rígido de repetição por parte) — modo `official` implementado
+      só em 2026-08-11, ver "Modo `official` da Fase 2 — implementado e fechado" no topo
+      deste documento. Sub-estágios dentro de um item (ex.: `situation_check` →
       `suggestion` na Parte 2) vivem só no estado local do client component, não são
       persistidos — um reload no meio de um item reinicia os sub-estágios daquele item,
       mas não perde a posição de item (`current_part`/`current_item_index`, esses sim
@@ -414,8 +484,10 @@ Fase 1 com mais áudios reais.
 - Pipeline de IA da Fase 2: tentar **síncrono primeiro** (resposta única costuma
   processar em segundos); só introduzir fila real se a medição empírica mostrar
   necessidade. `processing_status` no schema é para a UI, não implica fila desde já.
-- Timeout de 20s pra começar a responder no modo `official` (Manual do Examinando,
-  item 1.2.4) — separado do timer de duração da resposta.
+- Modo `official`: sem botão manual pra começar a responder — a gravação inicia sozinha 5s
+  depois da pergunta, fiel ao exame real (decisão da Sabrina, 2026-08-11, substituiu a ideia
+  inicial de timeout de 20s com botão "Falar" manual) — separado do timer de duração da
+  resposta (não implementado). Ver `docs/state-machine.md`.
 - Regra de repetição/esclarecimento difere por parte da entrevista — Parte 2 só aceita
   repetição, não esclarecimento de vocabulário (ver `docs/state-machine.md`).
 - Nota final por critério ICAO = sempre o **menor** valor entre os 6 critérios, nunca

@@ -5,9 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { generateSpeechAudio } from "@/lib/ai/openai";
 import { generateFinalReport, MODEL_VERSION } from "@/lib/ai/anthropic";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
-import type { Part } from "@/types/database";
+import type { Part, SimulationMode } from "@/types/database";
 
-export async function startAttempt() {
+export async function startAttempt(mode: SimulationMode) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
@@ -17,7 +17,7 @@ export async function startAttempt() {
     .insert({
       user_id: auth.user.id,
       phase: "phase2",
-      mode: "practice",
+      mode,
       status: "in_progress",
       current_part: "part1",
       current_item_index: 0,
@@ -46,7 +46,7 @@ export async function assertOwnAttemptInProgress(
 ) {
   const { data: attempt } = await supabase
     .from("simulation_attempts")
-    .select("id, user_id, phase, status, current_part, current_item_index")
+    .select("id, user_id, phase, status, mode, current_part, current_item_index")
     .eq("id", attemptId)
     .single();
 
@@ -110,7 +110,7 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
         transcript: r.transcript,
       }));
 
-    const report = await generateFinalReport(transcripts);
+    const report = await generateFinalReport(transcripts, attempt.mode as SimulationMode);
 
     await supabase.from("simulation_feedbacks").insert({
       simulation_attempt_id: attemptId,

@@ -143,7 +143,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 - **Parte 2: só repetição da frase é aceita — esclarecimento de vocabulário NÃO é permitido nessa parte**, porque o item avalia justamente se o candidato entendeu o vocabulário/estrutura sem ajuda.
 - Uso excessivo dessas estratégias não é esperado para candidatos em nível 5/6 — é sinal para a IA considerar na avaliação de "Interações", não motivo de bloqueio técnico.
 
-**Timeout de início de resposta [NOVO — não existia no SRS anterior]:** no modo `official`, o candidato tem no máximo 20s para começar a falar após a pergunta ser apresentada; se não iniciar, o sistema avança para o próximo item automaticamente. Isso é um timer diferente do timer de duração da resposta e precisa ser controlado separadamente na state machine (ver `docs/state-machine.md`).
+**Timeout de início de resposta [ALTERADO 2026-08-11]:** no modo `official`, não existe botão manual para começar a falar — 5s depois da pergunta ser apresentada, a gravação começa sozinha (fidelidade ao exame real, decisão da Sabrina). Isso é um timer diferente do timer de duração da resposta (ainda não implementado) e é controlado separadamente na state machine (ver `docs/state-machine.md`).
 
 ---
 

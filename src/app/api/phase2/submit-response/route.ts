@@ -38,8 +38,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
+  let attempt;
   try {
-    await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
+    attempt = await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
   } catch {
     return NextResponse.json({ error: "Tentativa inválida ou já finalizada." }, { status: 403 });
   }
@@ -90,6 +91,20 @@ export async function POST(request: Request) {
     .from("phase2_responses")
     .update({ transcript, processing_status: "analyzing" })
     .eq("id", inserted.id);
+
+  // Modo `official` não dá nenhum feedback durante a entrevista (só o relatório
+  // final) — pular a chamada de IA aqui evita custo/latência de algo que nunca
+  // seria mostrado ao candidato. `ai_feedback` fica null, como já documentado em
+  // docs/database-schema.md ("preenchido em tempo real no practice, só ao final
+  // no official").
+  if (attempt.mode === "official") {
+    await supabase
+      .from("phase2_responses")
+      .update({ processing_status: "done", finished_at: new Date().toISOString() })
+      .eq("id", inserted.id);
+
+    return NextResponse.json({ transcript, feedback: null });
+  }
 
   const FEEDBACK_STAGES: FeedbackStage[] = ["situation_check", "suggestion", "image_description", "story_telling"];
   const feedback = await generateResponseFeedback(

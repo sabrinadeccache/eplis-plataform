@@ -14,8 +14,8 @@ atual, o que já foi feito, o que falta, e as decisões de design já fechadas.
 ## Stack
 
 Next.js (App Router) + TypeScript, Tailwind, Supabase (Postgres + Auth + Storage),
-OpenAI (transcrição), Anthropic Claude (engine de entrevista/correção), Vercel (deploy,
-ainda não configurado).
+OpenAI (transcrição), Anthropic Claude (engine de entrevista/correção), Vercel (deploy em
+produção: https://eplis-trainer.vercel.app, deploy automático a cada push em `main`).
 
 ## Rodando localmente
 
@@ -53,6 +53,13 @@ confirmação de e-mail no cadastro.
   em vez de apagar.
 - `.env.local` nunca vai para o git. Segredos novos (chaves de IA, etc.) entram lá, não
   em nenhum arquivo versionado.
+- **Deploy é automático via GitHub**: push em `main` já dispara build+deploy na Vercel
+  (projeto `orion-flight-lab/eplis-trainer`) — não precisa rodar `vercel deploy`
+  manualmente depois de um push normal. Só use `npx vercel deploy --prod` se precisar
+  forçar um redeploy sem novo commit. Variáveis de ambiente de produção são gerenciadas
+  com `npx vercel env add <NOME> production` (não edite pelo dashboard sem atualizar
+  também `docs/project-status.md`) — ver lista completa das 5 vars usadas em runtime em
+  `docs/project-status.md` → "Infraestrutura já provisionada".
 - **Payload grande (ex.: áudio gravado no browser) nunca deve ir como argumento de
   Server Action** — mesmo aumentando `experimental.serverActions.bodySizeLimit` no
   `next.config.ts`, existe um limite separado e mais baixo no protocolo Flight que as

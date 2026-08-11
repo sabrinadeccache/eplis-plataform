@@ -51,17 +51,19 @@ IA fala → timer automático (15s / 30s) → avança
 IA fala → aluno clica Speak → Restart → Stop → Next
 ```
 
-**response stage — official [ALTERADO]:**
+**response stage — official [ALTERADO 2026-08-11]:**
 ```
-IA fala → timer de início de resposta (máx. 20s, senão avança automaticamente)
-        → ao detectar fala, inicia gravação → timer de duração automático → avança
+IA fala → pausa de 5s (sem botão "Falar") → gravação inicia automaticamente
+        → candidato conclui manualmente (Pausar/Continuar, Concluir e enviar — sem "Recomeçar")
 ```
 
-O timer de início de resposta é **novo** em relação ao documento original — não estava
-especificado antes. Ele é distinto do timer de duração: o candidato tem até 20s para
-*começar* a falar, e só então começa a contar o tempo de gravação da resposta em si
-(60s descrição, 90s história, etc.). Ambos os timers precisam de handlers separados no
-frontend.
+Redesenhado a pedido da Sabrina pra ser mais fiel ao exame real: não existe botão "Falar" no
+modo `official` — depois que a IA termina de falar, um cronômetro visível de 5s conta
+regressivamente e a gravação começa sozinha ao chegar a zero, sem exigir clique do candidato.
+Sem segunda chance: o botão "Recomeçar" (que reinicia a gravação do zero) só existe no modo
+`practice`; no `official`, uma vez iniciada a gravação, só dá pra pausar/continuar ou concluir e
+enviar. Timer de duração automática da resposta (cortar e enviar sozinho após 60s/90s) **ainda
+não implementado** — decisão de escopo, ver `docs/project-status.md`.
 
 ## Regra de repetição/esclarecimento por parte [ALTERADO]
 

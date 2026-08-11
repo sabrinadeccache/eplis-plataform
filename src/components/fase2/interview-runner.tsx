@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { generateSpeech, advanceState } from "@/services/simulations/phase2/actions";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
 import type { Phase2Sequence, Phase2Prompt } from "@/services/simulations/phase2/queries";
-import type { Part, ResponseStage } from "@/types/database";
+import type { Part, ResponseStage, SimulationMode } from "@/types/database";
 
 // Tudo que a IA fala é em inglês (inclusive introduções/instruções) — o
 // aluno já deve treinar o ouvido em inglês antes do exame de verdade.
@@ -94,6 +94,31 @@ function SilentTimer({ seconds, onExpire }: { seconds: number; onExpire: () => v
   return <p className="text-sm text-zinc-500 dark:text-zinc-400">{remaining}s restantes…</p>;
 }
 
+// Timer de início de resposta (modo official): pra ser fiel ao exame real (a
+// pedido da Sabrina — sem botão "Falar" manual), a gravação começa sozinha depois
+// de 5s de pausa, sem exigir clique do candidato. Distinto do timer de duração da
+// resposta (não implementado nesta rodada — decisão de escopo, ver
+// docs/project-status.md). Mesmo padrão do SilentTimer: remonta via `key`,
+// decrementa em setTimeout, delega o disparo a um callback opaco.
+function ResponseStartTimer({ seconds, onExpire }: { seconds: number; onExpire: () => void }) {
+  const [remaining, setRemaining] = useState(seconds);
+
+  useEffect(() => {
+    if (remaining <= 0) {
+      onExpire();
+      return;
+    }
+    const id = setTimeout(() => setRemaining((r) => r - 1), 1000);
+    return () => clearTimeout(id);
+  }, [remaining, onExpire]);
+
+  return (
+    <p className="text-sm text-amber-600 dark:text-amber-400">
+      A gravação começa automaticamente em {remaining}s…
+    </p>
+  );
+}
+
 type RecorderState = "waiting_ai" | "ready" | "recording" | "paused" | "submitting" | "feedback";
 
 function stepKey(part: Part, itemIndex: number, stepIndex: number): string {
@@ -110,11 +135,13 @@ function isAutoplayBlocked(err: unknown): boolean {
 
 export function InterviewRunner({
   attemptId,
+  mode,
   sequence,
   initialPart,
   initialItemIndex,
 }: {
   attemptId: string;
+  mode: SimulationMode;
   sequence: Phase2Sequence;
   initialPart: Part;
   initialItemIndex: number;
@@ -346,7 +373,15 @@ export function InterviewRunner({
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error ?? "Não foi possível enviar a resposta.");
         }
-        const result = (await res.json()) as { transcript: string; feedback: string };
+        const result = (await res.json()) as { transcript: string; feedback: string | null };
+
+        // Modo official não dá nenhum feedback durante a entrevista (só o
+        // relatório final) — pula direto pro próximo estágio/item, sem card nem
+        // áudio de feedback.
+        if (mode === "official") {
+          goToNextStep();
+          return;
+        }
 
         setFeedback(result.feedback);
         setRecorderState("feedback");
@@ -440,7 +475,35 @@ export function InterviewRunner({
               <p className="text-sm text-zinc-500 dark:text-zinc-400">Aguarde a IA terminar de falar…</p>
             )}
 
-            {recorderState === "ready" && (
+            {recorderState === "ready" && mode === "official" && (
+              // Fiel ao exame real: sem botão "Falar" manual — a gravação começa
+              // sozinha depois da pausa de 5s.
+              <div className="space-y-2">
+                {/* Some enquanto o áudio da pergunta toca (inclusive ao repetir) — o
+                    componente desmonta (limpando o setTimeout interno) e remonta com
+                    5s cheios de novo assim que a fala termina, via o `speaking`
+                    global já usado pro indicador "IA está falando". */}
+                {!speaking && (
+                  <ResponseStartTimer
+                    key={stepKey(part, itemIndex, stepIndex)}
+                    seconds={5}
+                    onExpire={startRecording}
+                  />
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={replayAudio}
+                    disabled={repetitionCount >= 1}
+                    className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
+                  >
+                    Repetir pergunta
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {recorderState === "ready" && mode === "practice" && (
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -478,13 +541,17 @@ export function InterviewRunner({
                     Continuar falando
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={restartRecording}
-                  className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
-                >
-                  Recomeçar
-                </button>
+                {mode === "practice" && (
+                  // Official é fiel ao exame real: sem segunda chance, então sem
+                  // "Recomeçar" — só practice mantém esse botão.
+                  <button
+                    type="button"
+                    onClick={restartRecording}
+                    className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
+                  >
+                    Recomeçar
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={finishAndSubmit}
