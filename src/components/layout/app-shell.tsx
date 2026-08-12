@@ -6,7 +6,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/fase1", label: "Fase 1" },
   { href: "/fase2", label: "Fase 2" },
-  { href: "/historico", label: "Histórico" },
+  { href: "/desempenho", label: "Desempenho" },
 ];
 
 export function AppShell({ user, children }: { user: UserRow; children: React.ReactNode }) {

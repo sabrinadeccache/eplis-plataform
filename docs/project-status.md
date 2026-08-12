@@ -180,6 +180,63 @@ perfil operacional de um usuário já cadastrado sem precisar de conta nova por 
 `dev-jump-phase2-part.mjs <email> <part> <itemIndex>` (esse último ganhou o parâmetro opcional
 `itemIndex` nesta rodada, pra pular direto pro último item de uma parte e testar só a transição).
 
+## Fase 6 — Desempenho (histórico/relatórios de evolução) — implementada e fechada (2026-08-12)
+
+Renomeado "Histórico" para **Desempenho** em toda a navegação (`AppShell`) e nas rotas —
+`src/app/historico/page.tsx` (placeholder) removido, substituído por:
+- `/desempenho` — landing com dois cards, Fase 1 e Fase 2.
+- `/desempenho/fase1` — lista de simulados concluídos da Fase 1 (`Simulado <data> — <score>
+  acertos`, badge APROVADO/REPROVADO) + gráfico de barras do percentual de acertos por
+  simulado em ordem cronológica, com linha tracejada marcando o corte de aprovação. Clicar
+  num simulado leva pro relatório existente (`/fase1/resultado/[id]`, reaproveitado sem
+  rota nova).
+- `/desempenho/fase2` — lista de simulados concluídos da Fase 2 (`Simulado <data> — NÍVEL
+  <nível>`) + gráfico de linha do nível geral (Fraco/Moderado/Bom) por simulado em ordem
+  cronológica. Clicar num simulado leva pro relatório existente
+  (`/fase2/resultado/[id]`).
+
+**Critério de aprovação da Fase 1 fechado com a Sabrina (2026-08-12): 70% de acertos**
+entre as questões respondidas no simulado (não um número fixo — o pool ativo hoje só tem
+10 questões das até 30 possíveis, então o total por tentativa varia). Centralizado em
+`src/lib/phase1/scoring.ts` (`PASSING_RATIO`, `isApproved`) — reaproveitado tanto pela
+tela de Desempenho quanto pelo relatório de resultado da Fase 1
+(`/fase1/resultado/[id]`, que agora também mostra número de acertos/erros e o badge
+APROVADO/REPROVADO, além das perguntas com resposta certa vs. resposta do usuário que já
+existiam).
+
+**Achado corrigido (hydration mismatch)**: a primeira versão dos dois gráficos usava
+`toLocaleDateString("pt-BR")` pra formatar as datas nos eixos/labels — como o resultado
+depende do fuso horário do runtime (servidor roda em UTC, navegador no fuso local), datas
+perto da meia-noite podiam "virar" um dia diferente entre servidor e cliente, quebrando a
+hidratação do React. Corrigido com um formatador determinístico baseado em campos UTC
+(`src/lib/format-date.ts`), que dá o mesmo resultado nos dois lados independente do fuso.
+
+**Segundo achado corrigido (hydration mismatch, causa real diferente)**: mesmo depois da
+correção acima, o erro persistia — a causa de verdade era o uso de `<title>` como tooltip
+nativo dentro dos elementos `<rect>`/`<circle>` do SVG. O React 19 trata qualquer tag
+`<title>` como metadado de documento e tenta fazer hoisting automático pro `<head>`,
+mesmo quando é um `<title>` de SVG usado como tooltip acessível — isso divergia a árvore
+renderizada entre servidor e cliente. Corrigido removendo os `<title>` de dentro do SVG e
+implementando tooltip via estado local do React (`useState` + `onMouseEnter`/`onFocus`),
+renderizado como `<div>` HTML posicionado por porcentagem sobre o SVG — os dois
+componentes de gráfico (`src/components/desempenho/fase1-progress-chart.tsx` e
+`fase2-progress-chart.tsx`) viraram Client Components por causa disso. Lição: evitar
+`<title>` como filho direto de elementos SVG em React 19 mesmo fora do contexto de
+`<head>` — preferir tooltip controlado por estado desde o início.
+
+Testado visualmente pela Sabrina com dados fictícios gerados por dois scripts de dev novos
+— `scripts/dev-seed-fase1-demo.mjs` e `scripts/dev-seed-fase2-demo.mjs` (uso: `node
+scripts/dev-seed-fase1-demo.mjs <email>` / `dev-seed-fase2-demo.mjs <email>`, criam 5
+tentativas concluídas cada, com datas e resultados variados) — depois removidos do banco
+com `scripts/dev-clean-test-data.mjs` antes de fechar a rodada, deixando o banco de
+tentativas zerado (conteúdo e usuários preservados).
+
+**Escopo desta rodada**: só o que foi pedido — lista + gráfico + link pro relatório já
+existente de cada fase. Não inclui evolução por critério ICAO individual da Fase 2 ao
+longo do tempo (hoje o gráfico mostra só o nível geral por simulado, não os 6 critérios
+separados) nem exportação/impressão de relatório — não fizeram parte do pedido, avaliar
+se vale a pena numa rodada futura.
+
 ## Modo `official` da Fase 2 — implementado e fechado (2026-08-11)
 
 Implementado o modo `official`, que já era especificado em `docs/state-machine.md` e
@@ -244,12 +301,15 @@ pergunta+resposta+feedback por item na tela de resultado. Ver "Atualização (20
 
 Deploy na Vercel fechado em 2026-08-10 — ver "Infraestrutura já provisionada" acima. Modo
 `official` da Fase 2 implementado e fechado em 2026-08-11 — ver "Modo `official` da Fase 2 —
-implementado e fechado" acima. Próximos passos possíveis (perguntar à Sabrina qual priorizar):
-(1) completar o conteúdo da Fase 1 (só 10 dos até 30 áudios possíveis) ou ampliar o conteúdo real
-da Fase 2 (só 1 imagem por perfil na Parte 4 — o exame real pode ter mais variedade); (2) Fase 6
-(histórico/relatórios de evolução) ou Fase 7 (responsividade, testes, observabilidade); (3) corte
-automático de duração de resposta e distinção completa repetição/esclarecimento no modo `official`
-(escopo deixado de fora, ver "Modo `official` da Fase 2 — implementado e fechado" acima).
+implementado e fechado" acima. Fase 6 (Desempenho) implementada e fechada em 2026-08-12 — ver
+"Fase 6 — Desempenho (histórico/relatórios de evolução) — implementada e fechada" acima. Próximos
+passos possíveis (perguntar à Sabrina qual priorizar): (1) completar o conteúdo da Fase 1 (só 10
+dos até 30 áudios possíveis) ou ampliar o conteúdo real da Fase 2 (só 1 imagem por perfil na Parte
+4 — o exame real pode ter mais variedade); (2) Fase 7 (responsividade, testes, observabilidade);
+(3) corte automático de duração de resposta e distinção completa repetição/esclarecimento no modo
+`official` (escopo deixado de fora, ver "Modo `official` da Fase 2 — implementado e fechado"
+acima); (4) evolução por critério ICAO individual da Fase 2 ao longo do tempo (escopo deixado de
+fora da Fase 6, ver acima).
 
 ## Histórico (Fase 5 antes de fechar — 2026-08-06 e anteriores)
 
@@ -469,7 +529,12 @@ Fase 1 com mais áudios reais.
       handler por causa do limite "Maximum array nesting exceeded" do protocolo Flight, e
       feedback da história da Parte 4 usando o prompt errado). Todos testados
       manualmente por completo ponta a ponta (não só lint/build).
-- [ ] **Fase 6 — Relatórios**: histórico, evolução por critério ICAO.
+- [x] **Fase 6 — Desempenho**: telas `/desempenho`, `/desempenho/fase1` e
+      `/desempenho/fase2` (lista de simulados + gráfico de evolução por fase, link pro
+      relatório de cada simulado) — ver "Fase 6 — Desempenho (histórico/relatórios de
+      evolução) — implementada e fechada (2026-08-12)" acima. Falta: evolução por critério
+      ICAO individual da Fase 2 ao longo do tempo (hoje só nível geral) — avaliar se entra
+      numa rodada futura.
 - [ ] **Fase 7 — Refino e lançamento**: responsividade, testes, observabilidade, deploy
       público.
 

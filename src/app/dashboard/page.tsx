@@ -42,12 +42,12 @@ export default async function DashboardPage() {
           </p>
         </a>
         <a
-          href="/historico"
+          href="/desempenho"
           className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
         >
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Histórico</h2>
+          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Desempenho</h2>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Tentativas e evolução
+            Simulados e evolução
           </p>
         </a>
       </div>

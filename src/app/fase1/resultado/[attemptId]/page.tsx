@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
+import { isApproved } from "@/lib/phase1/scoring";
 
 export default async function Fase1ResultadoPage({
   params,
@@ -32,14 +33,30 @@ export default async function Fase1ResultadoPage({
 
   const total = answers?.length ?? 0;
   const score = attempt.score ?? 0;
+  const errors = total - score;
+  const approved = isApproved(score, total);
 
   return (
     <AppShell user={user}>
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         Resultado — Fase 1
       </h1>
-      <p className="mt-1 text-lg text-zinc-700 dark:text-zinc-300">
-        {score} de {total} questões corretas
+      <div className="mt-1 flex flex-wrap items-center gap-3">
+        <p className="text-lg text-zinc-700 dark:text-zinc-300">
+          {score} acertos, {errors} erros — de {total} questões
+        </p>
+        <span
+          className={`rounded-md border px-3 py-1 text-sm font-semibold ${
+            approved
+              ? "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400"
+              : "border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
+          }`}
+        >
+          {approved ? "APROVADO" : "REPROVADO"}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-zinc-400">
+        Aprovação exige pelo menos 70% de acertos.
       </p>
 
       <div className="mt-6 space-y-3">
