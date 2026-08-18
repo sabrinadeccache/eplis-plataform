@@ -69,6 +69,50 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-18) — conteúdo real ampliado (Fase 1 e Parte 2/4 da Fase 2)
+
+Sessão focada em ampliar o conteúdo real (não mexeu em código do app, só em dados —
+`npx tsc --noEmit` e `npm run lint` conferidos limpos no fim). Três scripts novos em
+`scripts/`, todos **aditivos** (nunca apagam o que já existe) e idempotentes via UPSERT,
+seguindo a convenção do `CLAUDE.md`:
+
+- **`add-phase1-audios-batch2.mjs`**: Fase 1 foi de 10 para **43 áudios / 60 perguntas**.
+  Os 33 áudios novos vieram de cortes de vídeos reais de comunicação ATC do YouTube — a
+  Sabrina passou os links, um pipeline local (`yt-dlp` + `ffmpeg-static`, instalados via
+  `pip3 install --user` / `npm install --no-save`, nenhum dos dois está no
+  `package.json`) baixou o áudio e cortou em trechos de 10-45s (spec oficial de duração
+  do `phase1_audios`), e o Whisper (`OPENAI_API_KEY`) gerou transcrição com timestamps
+  pra achar os pontos de corte certos. A Sabrina revisou manualmente todos os cortes,
+  corrigiu as transcrições (arquivos em `Material Didático/Phase 1 - Audios/
+  transcrições/`, fora do repo) e descartou 7 trechos de baixa qualidade. Áudios mais
+  longos/ricos ganharam 2 perguntas em vez de 1 (17 dos 33 têm 2). Pergunta/opções em
+  português, sem gírias em inglês entre parênteses/aspas explicativas (achado da
+  revisão: várias perguntas — inclusive 5 dos 10 áudios originais — tinham glosses tipo
+  "(hold short)" que foram removidos; mantido só quando é citação literal do que foi
+  dito no rádio, ex. `"stop"`).
+  **Achado de implementação**: o casamento UPSERT de `phase1_questions` inicialmente
+  usava o texto do `prompt` como chave natural — quebrou assim que o texto de uma
+  pergunta foi editado entre rodadas (virou um insert novo em vez de update, duplicando
+  a pergunta). Corrigido pra `delete` + reinsert escopado por `audio_id` (seguro porque
+  `phase1_answers` está zerado — sem nenhuma resposta real de usuário referenciando
+  essas perguntas ainda; confirmado antes de mudar a estratégia).
+- **`add-phase2-part4-images-batch2.mjs`**: Parte 4 foi de 1 imagem fixa por perfil pra
+  um pool real — 21 (TWR), 22 (APP), 22 (ACC), 21 (COpM), a partir de fotos fornecidas
+  pela Sabrina em `Material Didático/Phase 2 - Images/<PERFIL>/`. Confirmado que o
+  sorteio já filtra só pelo próprio perfil (`profileFilter = [profile, 'general']` em
+  `src/services/simulations/phase2/queries.ts`, e não sobrou nenhuma imagem `general`
+  ativa) — não precisou mudar código, só os dados já resolviam.
+- **`add-phase2-part2-situations-batch2.mjs`** e **`batch3.mjs`**: Parte 2 foi de 10
+  para **30 situações por perfil** (120 no total), em duas levas de 10 pra garantir
+  variedade temática entre si (evitar repetição/decoreba). Índice `order_index` 11-20 e
+  21-30 dentro de cada perfil, sem mexer nas 10 originais.
+
+Dois arquivos de revisão foram gerados (fora do repo, em `Material Didático/`) pra
+Sabrina conferir antes de aprovar — `Fase 1 - Perguntas (revisao).md` (áudio +
+transcrição + pergunta(s) de cada um dos 43 itens) e `Fase 2 - Situacoes Parte 2
+(revisao).md` (as 120 situações, indexadas por perfil). **Ambos já foram revisados e
+aprovados pela Sabrina** nesta sessão — conteúdo é considerado fechado.
+
 ## Banco de dados — já aplicado
 
 Migration `supabase/migrations/20260727000000_init_schema.sql` aplicada e verificada:
@@ -378,11 +422,11 @@ Fase 1 com mais áudios reais.
       configurado (Auth pronto no banco via trigger, RLS ativo), estrutura de pastas.
       Deploy na Vercel fechado em 2026-08-10 (https://eplis-trainer.vercel.app, deploy
       automático a cada push em `main`) — ver "Infraestrutura já provisionada" acima.
-- [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; conteúdo real da Fase 1 já
-      cadastrado (10 áudios reais, ver Fase 4 abaixo); conteúdo real das Partes 2 e 4 da
-      entrevista simulada já cadastrado por perfil operacional (ver Fase 5 abaixo) —
-      falta ainda ampliar variedade (só 1 imagem por perfil na Parte 4) e cadastrar
-      conteúdo real pras Partes 1 e 3 (hoje `general`, placeholder).
+- [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; conteúdo real da Fase 1 ampliado
+      pra 43 áudios / 60 perguntas (ver "Atualização (2026-08-18)" acima); Parte 2 da
+      Fase 2 com 30 situações por perfil (120 no total) e Parte 4 com pool real de
+      21-22 imagens por perfil (idem) — falta ainda cadastrar conteúdo real pras Partes
+      1 e 3 da entrevista simulada (hoje `general`, placeholder).
 - [x] **Fase 3 — Fluxo do usuário**: cadastro (`/cadastro`) e login (`/login`) via
       Server Actions + Supabase Auth, proteção de rotas no `src/proxy.ts` (redireciona
       não-autenticado para `/login` e autenticado para fora das páginas públicas),
