@@ -33,6 +33,26 @@ export async function startAttempt(mode: SimulationMode) {
   redirect(`/fase2/entrevista/${data.id}`);
 }
 
+// Usada pela tela `/fase2` no botão "Abandonar e começar novo", pra quem tem
+// uma tentativa `practice` pausada mas prefere recomeçar do zero em vez de
+// continuar — marca a antiga como `abandoned` (sem isso ficaria `in_progress`
+// pra sempre, nunca aparecendo em Desempenho, que só lista `completed`) e já
+// cria + redireciona pra uma nova, igual `startAttempt`.
+export async function abandonAndRestartAttempt(attemptId: string) {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) redirect("/login");
+
+  await supabase
+    .from("simulation_attempts")
+    .update({ status: "abandoned" })
+    .eq("id", attemptId)
+    .eq("user_id", auth.user.id)
+    .eq("status", "in_progress");
+
+  await startAttempt("practice");
+}
+
 export type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 // Exportado pra ser reaproveitado pela route handler de submitResponse

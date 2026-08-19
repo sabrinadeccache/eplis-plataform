@@ -351,6 +351,31 @@ export function InterviewRunner({
     });
   }
 
+  // Pausar o simulado inteiro (só no modo practice — o official é fiel ao
+  // exame real e não admite pausa). A posição (parte/item) só é persistida no
+  // banco quando `advanceState` roda (ao clicar "Continuar" na tela de
+  // feedback do último estágio de um item) — se o candidato pausa bem ali,
+  // antes de clicar "Continuar", a resposta já tinha sido gravada mas a
+  // posição ficava presa no mesmo item ao retomar (achado real, reportado
+  // pela Sabrina). Corrigido chamando `advanceState` aqui também nesse caso
+  // específico, antes de sair. Sub-estágios intermediários dentro de um item
+  // (ex.: Parte 2 antes da 2ª etapa) continuam não persistidos — mesmo
+  // comportamento de um reload no meio do item, já documentado.
+  async function pauseAttempt() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stream.getTracks().forEach((t) => t.stop());
+    }
+    if (recorderState === "feedback" && stepIndex + 1 >= steps.length) {
+      const result = await advanceState(attemptId);
+      if (result.finished) {
+        router.push(`/fase2/resultado/${attemptId}`);
+        return;
+      }
+    }
+    router.push("/fase2");
+  }
+
   function finishAndSubmit() {
     setRecorderState("submitting");
     stopRecorderAndGetBlob().then((blob) => {
@@ -440,9 +465,20 @@ export function InterviewRunner({
         </div>
       )}
 
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
-        Parte {part.replace("part", "")} — item {itemIndex + 1}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Parte {part.replace("part", "")} — item {itemIndex + 1}
+        </p>
+        {mode === "practice" && (
+          <button
+            type="button"
+            onClick={pauseAttempt}
+            className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+          >
+            Pausar simulado
+          </button>
+        )}
+      </div>
 
       <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
         {part === "part4" && currentPrompt.imageUrl && (

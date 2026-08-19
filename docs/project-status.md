@@ -295,12 +295,57 @@ Testado via HTTP real contra o Supabase: criação de usuário `pilot`/`fixed_wi
 `service_role`) confirmando que as RLS policies do bucket `avatars` funcionam — dado de
 teste limpo ao final (usuário e objeto de storage removidos).
 
-**Pendências que dependem do painel do Supabase, não de código**: pra
-`resetPasswordForEmail` funcionar em produção, o domínio precisa estar na allowlist de
-"Redirect URLs" do Supabase Auth (`Authentication → URL Configuration`) —
-`https://eplis-trainer.vercel.app/redefinir-senha` (produção) e
-`http://localhost:3000/redefinir-senha` (dev). Não testado ainda porque exigiria receber
-um e-mail real; validar no teste manual da Sabrina.
+**Recuperação de senha validada em produção (2026-08-19)**: Redirect URL
+(`https://eplis-trainer.vercel.app/redefinir-senha`) confirmada na allowlist do Supabase
+Auth; fluxo `/esqueci-senha` → e-mail real recebido → `/redefinir-senha` testado
+ponta a ponta pela Sabrina e funcionou. Sem pendência.
+
+## Atualização (2026-08-19) — pausar/retomar simulado (Fase 2, modo practice)
+
+A pedido da Sabrina, depois de validar ponta a ponta o conteúdo ampliado da Fase 2
+(Partes 1-4, testado com um botão temporário de "pular pergunta" removido ao final desta
+sessão): o modo `practice` ganhou botão **"Pausar simulado"** dentro da entrevista
+(`InterviewRunner`, visível só quando `mode === "practice"` — o `official` não pausa, fiel
+ao exame real). Não precisou de coluna nova: a posição (`current_part`/
+`current_item_index`) já era persistida a cada `advanceState`, então pausar é só liberar o
+microfone (se uma gravação estiver em andamento) e navegar de volta pra `/fase2` — o
+sub-estágio dentro do item atual se perde, mesmo comportamento já documentado de um reload
+no meio de um item.
+
+A tela `/fase2` agora detecta uma tentativa `practice` `in_progress` do usuário e mostra
+"Practice — pausado" (com a posição onde parou) em vez do formulário de iniciar, com dois
+botões: **"Continuar simulado"** (link direto pra `/fase2/entrevista/[id]`) e **"Abandonar
+e começar novo"** (nova Server Action `abandonAndRestartAttempt` em
+`src/services/simulations/phase2/actions.ts` — marca a tentativa antiga como `abandoned`,
+valor que já existia no enum `attempt_status` mas nunca tinha sido usado no código até
+agora, e cria uma nova). `SubmitButton` (`src/components/auth/submit-button.tsx`) ganhou
+`className` opcional pra permitir o estilo âmbar desse botão sem quebrar os outros usos
+(login, cadastro, perfil, Fase 1) que continuam com o estilo padrão.
+
+`npx tsc --noEmit` e `npm run lint` limpos.
+
+**Dois achados corrigidos ainda na mesma sessão, testados ponta a ponta pela Sabrina**:
+- A tela `/fase2` fazia `.order("created_at", ...)` pra achar a tentativa `practice`
+  pausada, mas a coluna real de `simulation_attempts` é `started_at` (não
+  `created_at`) — a query falhava silenciosamente (Supabase retorna `data: null` em erro
+  de coluna inexistente nesse client), então o card "Practice — pausado" nunca aparecia,
+  mesmo com a tentativa pausada existindo no banco. Corrigido trocando pra `started_at`.
+- Pausar exatamente na tela de feedback do **último estágio de um item** (resposta já
+  enviada e gravada, aguardando clique em "Continuar") perdia esse avanço: a posição
+  (`current_part`/`current_item_index`) só é persistida quando `advanceState` roda, e isso
+  só acontecia ao clicar "Continuar" — pausar ali saía sem chamar `advanceState`, então ao
+  retomar a tentativa voltava pro mesmo item já respondido. Corrigido em `pauseAttempt`
+  (`InterviewRunner`): quando `recorderState === "feedback"` e é o último estágio do item
+  (`stepIndex + 1 >= steps.length`), chama `advanceState` antes de navegar pra `/fase2`.
+
+**Limpeza completa pra teste do zero (2026-08-19)**: a pedido da Sabrina, todos os
+usuários (Auth + `public.users`, cascade em `simulation_attempts`/`phase1_answers`/
+`phase2_responses`/`simulation_feedbacks` via FK `on delete cascade`) e os objetos de
+Storage por usuário/tentativa (`avatars`, `phase2-recordings`) foram apagados —
+**conteúdo preservado** (60 perguntas/43 áudios da Fase 1, 458 prompts da Fase 2 nas 4
+partes). Novo utilitário reutilizável: `scripts/dev-wipe-all-users.mjs` (usa
+`supabase.auth.admin.deleteUser` por usuário, que cascade-limpa o resto via FK, mais
+`storage.remove()` nos dois buckets por usuário/tentativa).
 
 ## Banco de dados — já aplicado
 
