@@ -29,7 +29,20 @@ export function AppShell({ user, children }: { user: UserRow; children: React.Re
             ))}
           </nav>
           <form action={signOut} className="flex items-center gap-3">
-            <span className="text-sm text-zinc-500 dark:text-zinc-400">{user.name}</span>
+            <Link
+              href="/perfil"
+              className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-50"
+            >
+              {user.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.avatar_url}
+                  alt=""
+                  className="h-6 w-6 rounded-full object-cover"
+                />
+              ) : null}
+              {user.name}
+            </Link>
             <button
               type="submit"
               className="text-sm text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"

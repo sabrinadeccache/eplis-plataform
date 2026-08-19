@@ -5,7 +5,14 @@
 
 export type Role = "admin" | "pilot" | "air_traffic_controller";
 export type UserStatus = "active" | "inactive" | "blocked";
-export type OperationalProfile = "TWR" | "APP" | "ACC" | "COpM" | "general";
+export type OperationalProfile =
+  | "TWR"
+  | "APP"
+  | "ACC"
+  | "COpM"
+  | "fixed_wing"
+  | "rotary_wing"
+  | "general";
 
 export type Phase = "phase1" | "phase2";
 export type SimulationMode = "practice" | "official";
@@ -32,6 +39,7 @@ export type UserRow = {
   status: UserStatus;
   target_exam: string | null;
   operational_profile: OperationalProfile | null;
+  avatar_url: string | null;
   created_at: string;
 };
 

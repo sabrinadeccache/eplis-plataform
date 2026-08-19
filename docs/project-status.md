@@ -20,9 +20,16 @@ Responsável: Sabrina Deccache.
   branch `main`) — push em `main` dispara deploy automático. Variáveis de ambiente de produção
   configuradas via `vercel env add`: `NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`,
-  `ANTHROPIC_API_KEY` (as 5 usadas em `src/`, conferido por grep antes de configurar —
-  `SUPABASE_DB_URL` fica de fora porque só é usada pelos scripts locais, nunca em runtime do
-  app). Deploy testado: `curl -I` na raiz retorna 307 pra `/login`, confirmando que
+  `ANTHROPIC_API_KEY`, `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` (as 7 usadas em `src/`, conferido
+  por grep antes de configurar — `SUPABASE_DB_URL` fica de fora porque só é usada pelos scripts
+  locais, nunca em runtime do app; `SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN` também
+  ficam de fora, são opcionais e só afetam upload de source map no build). **[2026-08-19]**
+  `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` adicionadas — projeto Sentry `eplis-trainer` criado na
+  mesma organização/conta do `orion-flight-lab` (região EU já herdada da organização), mesmo DSN
+  nas duas vars porque o EPLIS é um monólito único (diferente do orion, que tem API e web como
+  projetos Sentry separados). Testado com um evento de smoke test real (`Sentry.captureException`
+  + `flush`) antes de configurar em produção. Deploy testado: `curl -I` na raiz retorna 307 pra
+  `/login`, confirmando que
   `src/proxy.ts` está ativo em produção. Login na Vercel CLI (`npx vercel`) foi via device
   flow (`vercel whoami` deflagrou automaticamente, sem precisar abrir navegador manualmente).
   **Nota**: o projeto caiu no team `orion-flight-lab` porque é o único team/scope existente
@@ -112,6 +119,142 @@ Sabrina conferir antes de aprovar — `Fase 1 - Perguntas (revisao).md` (áudio 
 transcrição + pergunta(s) de cada um dos 43 itens) e `Fase 2 - Situacoes Parte 2
 (revisao).md` (as 120 situações, indexadas por perfil). **Ambos já foram revisados e
 aprovados pela Sabrina** nesta sessão — conteúdo é considerado fechado.
+
+## Atualização (2026-08-19) — conteúdo real da Fase 2, Partes 1 e 3
+
+Partes 1 e 3 da entrevista simulada deixaram de usar o placeholder de 6 perguntas cada
+(`scripts/seed-phase2-prompts.mjs`) e passaram a ter pool real, ambas continuando com
+`operational_profile = 'general'` (não segmentadas por perfil, como já era o caso e como
+pedido pela Sabrina — só as Partes 2 e 4 são por perfil):
+
+- **Parte 1** (4 perguntas abertas sobre dia a dia profissional e carreira do
+  examinando): pool ampliado para **120 perguntas**, cobrindo papel atual, motivação de
+  carreira, rotina, comunicação/trabalho em equipe, desafios, orgulho profissional,
+  cultura de trabalho, tecnologia, equilíbrio vida-trabalho, planos futuros, experiências
+  marcantes e conselhos. Script `scripts/seed-phase2-part1-pool.mjs` (UPSERT por
+  `prompt_text`, desativa o que sair da lista, nunca apaga).
+- **Parte 3** (4 perguntas abertas sobre controle de tráfego aéreo/aviação em geral,
+  ordenadas por nível de dificuldade — as 2 primeiras concretas sobre o trabalho, as 2
+  últimas abstratas): pool ampliado para **120 perguntas (60 concretas + 60 abstratas)**.
+  Script `scripts/seed-phase2-part3-pool.mjs`.
+  **Achado real**: a regra de "2 concretas + 2 abstratas nessa ordem" já estava
+  documentada em `docs/database-schema.md` (tabela `phase2_prompts`) desde antes, mas
+  **nunca tinha sido implementada no código** — `getSequenceForAttempt` em
+  `src/services/simulations/phase2/queries.ts` fazia sorteio uniforme das 4 perguntas da
+  Parte 3, sem distinguir nível algum. Corrigido nesta rodada: a coluna `order_index`
+  (até então só usada pela Parte 2, como posição de sequência) foi reaproveitada pela
+  Parte 3 como **marcador de nível** (`1` = concreta, `2` = abstrata, não posição
+  literal) — o sorteio agora escolhe 2 do pool concreto e 2 do pool abstrato,
+  concatenando concretas antes de abstratas, mantendo o PRNG determinístico por
+  `attemptId` (consumo sequencial do rng preservado).
+
+`npx tsc --noEmit` e `npm run lint` conferidos limpos. Conteúdo ainda não testado
+manualmente ponta a ponta pela Sabrina nesta rodada (avaliar se vale rodar um teste
+rápido da Parte 1/3 antes de considerar fechado).
+
+## Atualização (2026-08-19) — observabilidade: integração com Sentry (Fase 7)
+
+Trazido do padrão já validado no outro projeto da Sabrina (`orion-flight-lab`, ver
+`CLAUDE.md` de lá — integração real e testada com Sentry + filtro de PII), adaptado pro
+EPLIS Trainer. Instalado `@sentry/nextjs` e criados:
+- `src/instrumentation.ts` (hook `register`/`onRequestError`, chamado automaticamente
+  pelo Next.js) e `src/instrumentation-client.ts` (inicialização no browser) — seguem a
+  mesma convenção de `src/proxy.ts` (arquivo de convenção do Next.js precisa ficar em
+  `src/` porque o app mora em `src/app/`).
+- `src/sentry.server.config.ts` e `src/sentry.edge.config.ts` — inicializam o SDK por
+  runtime (`tracesSampleRate` menor em produção).
+- `src/app/global-error.tsx` — captura qualquer erro não tratado que escapa da árvore de
+  componentes (`Sentry.captureException`) e mostra uma tela de erro genérica com botão
+  "Tentar novamente" em vez de tela branca.
+- `src/lib/observability/sentry-scrub.ts` — hook `beforeSend` que filtra recursivamente
+  campos sensíveis (`name`, `email`, `transcript` — a transcrição de voz da Fase 2 pode
+  conter dado pessoal dito pelo candidato — `password`, tokens) de `request.data`,
+  `query_string`, `headers`, `extra` e `breadcrumbs` antes do evento sair da aplicação.
+  `sendDefaultPii: false` explícito nos 4 pontos de `Sentry.init`.
+- `next.config.ts` — `withSentryConfig(...)`, com upload de source maps desligado
+  (`sourcemaps.disable`) enquanto `SENTRY_AUTH_TOKEN` não estiver configurado.
+
+**Desligado com segurança por padrão**: todo `Sentry.init` só roda se `SENTRY_DSN` /
+`NEXT_PUBLIC_SENTRY_DSN` estiver preenchido e não for o DSN de exemplo (`isPlaceholderDsn`)
+— sem essas vars (caso de hoje), o SDK simplesmente não inicializa, sem quebrar nada.
+Confirmado: `npx tsc --noEmit`, `npm run lint`, `npm run build` (produção) e `npm run dev`
+todos limpos com Sentry desligado.
+
+**Ativado em produção (2026-08-19)**: `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` preenchidas em
+`.env.local` e configuradas em produção via `npx vercel env add` — projeto Sentry
+`eplis-trainer` criado na mesma organização/conta do `orion-flight-lab` (projeto separado,
+região EU herdada da organização). Validado com um evento de smoke test real
+(`Sentry.captureException` + `flush`, confirmado antes de configurar em produção).
+`SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN` continuam sem configurar — opcionais, só
+habilitam upload de source map no build, e podem ser adicionadas depois se fizer sentido.
+
+## Atualização (2026-08-19) — telas de autenticação/perfil refeitas (spec da Sabrina)
+
+A pedido da Sabrina (spec em imagem: tela de login, cadastro com confirmação por e-mail,
+perfil do usuário), refeitas as três telas:
+
+- **Login** (`src/app/login/page.tsx` + novo `src/components/auth/login-form.tsx`): ganhou
+  link "Esqueceu a senha?" → `/esqueci-senha`. Página virou Server Component (lê
+  `searchParams` pra mostrar aviso "Senha redefinida" vindo de `/redefinir-senha`) com o
+  formulário extraído pro client component — evitou usar `useSearchParams` (exigiria
+  Suspense boundary) ou `useEffect`+`setState` só pra isso (lint `react-hooks/set-state-in-effect`
+  pegou a primeira tentativa).
+- **Cadastro** (`src/app/cadastro/page.tsx`): campos reorganizados — "Nome completo",
+  e-mail, "Profissão" (piloto/controlador), **"Perfil operacional atual" com opções
+  condicionais por profissão** (controlador: TWR/APP/ACC/COpM; piloto: asa fixa/asa
+  rotativa — `fixed_wing`/`rotary_wing`, dois valores **novos** no enum
+  `operational_profile`, ver abaixo), linha informativa de "Exame" derivada da profissão
+  (não é mais um campo escolhido — `EPLIS` pra controlador, `Santos Dumont English
+  Assessment` pra piloto), senha com medidor de força visual + confirmação de senha.
+  **Confirmação por e-mail já existia** (Supabase Auth, comportamento de sempre — não foi
+  necessário criar nada novo pra "usuário recebe e-mail confirmando o cadastro").
+- **Perfil** (`src/app/perfil/page.tsx` e componentes em `src/components/perfil/`): ganhou
+  upload de foto (`AvatarUpload`, bucket `avatars`), perfil operacional com as mesmas
+  opções condicionais por profissão do cadastro, e a troca de senha passou a **exigir a
+  senha atual** antes de aceitar a nova (reautentica via `signInWithPassword` antes de
+  chamar `updateUser` — o Supabase não exige isso por padrão com sessão válida, mas foi
+  pedido explicitamente).
+- **Novo**: `/esqueci-senha` (pede e-mail, sempre mostra a mesma mensagem genérica exista
+  ou não a conta — evita enumeração) e `/redefinir-senha` (nova senha + confirmação).
+  `/redefinir-senha` é **100% client-side** — chama `supabase.auth.updateUser` direto do
+  browser Supabase client (não Server Action): o link de recuperação só estabelece sessão
+  *no browser*, depois da página carregar; se a troca de senha fosse uma Server Action, a
+  segunda requisição (o próprio submit) já chegaria com cookie de sessão, e o
+  `src/proxy.ts` redirecionaria pra `/dashboard` antes de rodar a action (path público +
+  usuário já "autenticado" = redirect, ver `PUBLIC_PATHS` em
+  `src/lib/supabase/proxy.ts`) — achado real durante a implementação, não só teórico.
+  `/esqueci-senha` e `/redefinir-senha` adicionadas a `PUBLIC_PATHS`.
+
+**Schema**: migration `20260819000000_pilot_operational_profiles_and_avatar.sql` — enum
+`operational_profile` ganhou `fixed_wing`/`rotary_wing` (só `ADD VALUE`, não precisou
+recriar o tipo como em 2026-08-10 porque não removeu nada) e `users` ganhou coluna
+`avatar_url`. Bucket de Storage `avatars` criado (`scripts/create-avatars-bucket.mjs`,
+público, limite 5MB, só PNG/JPEG/WebP) com policies de INSERT/UPDATE/SELECT escopadas por
+`{userId}/` no path (migration `20260819010000_avatars_storage_policies.sql`, mesmo
+padrão de `phase2-recordings`, incluindo a policy de SELECT necessária por causa do
+`INSERT ... RETURNING` interno da API de Storage).
+
+**Importante — escopo real vs. capturado**: cadastro de piloto (`role = pilot`,
+`operational_profile = fixed_wing/rotary_wing`, `target_exam = "Santos Dumont English
+Assessment"`) já funciona e persiste corretamente, mas **não existe nenhum conteúdo ou
+simulado pra essa trilha** — Fase 1 e Fase 2 continuam 100% sobre o exame EPLIS
+(controlador). Um piloto que se cadastra hoje só tem os dados capturados; ao entrar no
+app, vê as mesmas telas de Fase 1/Fase 2 do EPLIS (não faz sentido pra ele). Construir a
+trilha própria do piloto é um projeto à parte, não coberto nesta rodada.
+
+**Validado**: `npx tsc --noEmit`, `npm run lint`, `npm run build` (produção) limpos.
+Testado via HTTP real contra o Supabase: criação de usuário `pilot`/`fixed_wing`/
+`Santos Dumont English Assessment` confirmada na tabela `users` via trigger
+`handle_new_user`; upload de avatar testado com usuário autenticado real (não
+`service_role`) confirmando que as RLS policies do bucket `avatars` funcionam — dado de
+teste limpo ao final (usuário e objeto de storage removidos).
+
+**Pendências que dependem do painel do Supabase, não de código**: pra
+`resetPasswordForEmail` funcionar em produção, o domínio precisa estar na allowlist de
+"Redirect URLs" do Supabase Auth (`Authentication → URL Configuration`) —
+`https://eplis-trainer.vercel.app/redefinir-senha` (produção) e
+`http://localhost:3000/redefinir-senha` (dev). Não testado ainda porque exigiria receber
+um e-mail real; validar no teste manual da Sabrina.
 
 ## Banco de dados — já aplicado
 
@@ -278,8 +421,13 @@ tentativas zerado (conteúdo e usuários preservados).
 **Escopo desta rodada**: só o que foi pedido — lista + gráfico + link pro relatório já
 existente de cada fase. Não inclui evolução por critério ICAO individual da Fase 2 ao
 longo do tempo (hoje o gráfico mostra só o nível geral por simulado, não os 6 critérios
-separados) nem exportação/impressão de relatório — não fizeram parte do pedido, avaliar
-se vale a pena numa rodada futura.
+separados) nem exportação/impressão de relatório — não fizeram parte do pedido.
+
+**Decisão fechada com a Sabrina (2026-08-19): não vai ter evolução por critério ICAO
+individual.** Mostrar só o nível geral (Fraco/Moderado/Bom) é proposital, não uma
+limitação a corrigir — evita que a tela pareça estar afirmando um nível OACI oficial
+específico (ex.: "nível 5") pro aluno, quando o objetivo é só mostrar que ele está
+evoluindo. Não reabrir sem motivo novo.
 
 ## Modo `official` da Fase 2 — implementado e fechado (2026-08-11)
 
@@ -346,14 +494,14 @@ pergunta+resposta+feedback por item na tela de resultado. Ver "Atualização (20
 Deploy na Vercel fechado em 2026-08-10 — ver "Infraestrutura já provisionada" acima. Modo
 `official` da Fase 2 implementado e fechado em 2026-08-11 — ver "Modo `official` da Fase 2 —
 implementado e fechado" acima. Fase 6 (Desempenho) implementada e fechada em 2026-08-12 — ver
-"Fase 6 — Desempenho (histórico/relatórios de evolução) — implementada e fechada" acima. Próximos
-passos possíveis (perguntar à Sabrina qual priorizar): (1) completar o conteúdo da Fase 1 (só 10
-dos até 30 áudios possíveis) ou ampliar o conteúdo real da Fase 2 (só 1 imagem por perfil na Parte
-4 — o exame real pode ter mais variedade); (2) Fase 7 (responsividade, testes, observabilidade);
-(3) corte automático de duração de resposta e distinção completa repetição/esclarecimento no modo
-`official` (escopo deixado de fora, ver "Modo `official` da Fase 2 — implementado e fechado"
-acima); (4) evolução por critério ICAO individual da Fase 2 ao longo do tempo (escopo deixado de
-fora da Fase 6, ver acima).
+"Fase 6 — Desempenho (histórico/relatórios de evolução) — implementada e fechada" acima. Conteúdo
+real de todas as 4 partes da Fase 2 e da Fase 1 fechado em 2026-08-19 — ver "Atualização
+(2026-08-19)" acima. Único item de roadmap restante: **Fase 7** (responsividade, testes,
+observabilidade, deploy público) — ver roadmap abaixo. Corte automático de duração de resposta e
+distinção completa repetição/esclarecimento no modo `official` seguem como escopo deixado de fora
+por decisão (ver "Modo `official` da Fase 2 — implementado e fechado" acima); evolução por
+critério ICAO individual da Fase 2 ao longo do tempo é decisão fechada de **não fazer** (ver
+"Atualização (2026-08-19)" acima).
 
 ## Histórico (Fase 5 antes de fechar — 2026-08-06 e anteriores)
 
@@ -422,11 +570,13 @@ Fase 1 com mais áudios reais.
       configurado (Auth pronto no banco via trigger, RLS ativo), estrutura de pastas.
       Deploy na Vercel fechado em 2026-08-10 (https://eplis-trainer.vercel.app, deploy
       automático a cada push em `main`) — ver "Infraestrutura já provisionada" acima.
-- [ ] **Fase 2 — Banco e modelos**: schema aplicado ✅; conteúdo real da Fase 1 ampliado
+- [x] **Fase 2 — Banco e modelos**: schema aplicado ✅; conteúdo real da Fase 1 ampliado
       pra 43 áudios / 60 perguntas (ver "Atualização (2026-08-18)" acima); Parte 2 da
-      Fase 2 com 30 situações por perfil (120 no total) e Parte 4 com pool real de
-      21-22 imagens por perfil (idem) — falta ainda cadastrar conteúdo real pras Partes
-      1 e 3 da entrevista simulada (hoje `general`, placeholder).
+      Fase 2 com 30 situações por perfil (120 no total), Parte 4 com pool real de
+      21-22 imagens por perfil (idem), Parte 1 com 120 perguntas gerais de
+      carreira/dia-a-dia e Parte 3 com 120 perguntas gerais (60 concretas + 60
+      abstratas) sobre aviação/ATC (ver "Atualização (2026-08-19)" acima) — todo o
+      conteúdo da Fase 2 deixou de ser placeholder.
 - [x] **Fase 3 — Fluxo do usuário**: cadastro (`/cadastro`) e login (`/login`) via
       Server Actions + Supabase Auth, proteção de rotas no `src/proxy.ts` (redireciona
       não-autenticado para `/login` e autenticado para fora das páginas públicas),
@@ -611,6 +761,10 @@ Fase 1 com mais áudios reais.
   **não otimizar preventivamente** (sem cache de TTS, sem paralelizar as chamadas de IA)
   até haver medição em produção mostrando necessidade — consistente com o princípio já
   registrado acima pro pipeline de IA.
+- Tela de Desempenho (Fase 6): **não mostrar evolução por critério ICAO individual**, só
+  o nível geral (Fraco/Moderado/Bom) por simulado — proposital, não limitação a
+  corrigir. Evita que a tela pareça afirmar um nível OACI oficial específico pro aluno;
+  o objetivo é só mostrar que ele está evoluindo (decisão da Sabrina, 2026-08-19).
 
 ## Documentos-fonte (só existiram como PDFs anexados no chat, não estão no repo)
 

@@ -18,6 +18,16 @@ export type Phase2Sequence = {
 
 const PART_SIZES: Record<Part, number> = { part1: 4, part2: 10, part3: 4, part4: 1 };
 
+// Parte 3: as 2 primeiras perguntas da entrevista precisam ser concretas
+// (situações do próprio trabalho do candidato) e as 2 últimas, abstratas
+// (opiniões/reflexões mais amplas) — spec oficial, ver docs/database-schema.md.
+// `order_index` é reaproveitado como marcador de nível (1 = concreta,
+// 2 = abstrata), não como posição literal — ver scripts/seed-phase2-part3-pool.mjs.
+const PART3_CONCRETE_TIER = 1;
+const PART3_ABSTRACT_TIER = 2;
+const PART3_CONCRETE_COUNT = 2;
+const PART3_ABSTRACT_COUNT = 2;
+
 // PRNG determinístico simples (mulberry32) — mesmo attemptId sempre produz a
 // mesma sequência sorteada, sem precisar persistir os prompt_ids em nenhum
 // lugar novo do schema.
@@ -98,7 +108,12 @@ export async function getSequenceForAttempt(
     .map(toPrompt);
 
   const pool3 = await poolFor("part3");
-  const part3 = seededShuffle(pool3, rng).slice(0, PART_SIZES.part3).map(toPrompt);
+  const concretePool3 = pool3.filter((row) => row.order_index === PART3_CONCRETE_TIER);
+  const abstractPool3 = pool3.filter((row) => row.order_index === PART3_ABSTRACT_TIER);
+  const part3 = [
+    ...seededShuffle(concretePool3, rng).slice(0, PART3_CONCRETE_COUNT),
+    ...seededShuffle(abstractPool3, rng).slice(0, PART3_ABSTRACT_COUNT),
+  ].map(toPrompt);
 
   const pool4 = await poolFor("part4");
   const part4 = seededShuffle(pool4, rng).slice(0, PART_SIZES.part4).map(toPrompt);

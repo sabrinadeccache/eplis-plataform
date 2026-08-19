@@ -8,6 +8,12 @@ const ROLE_LABELS: Record<string, string> = {
   air_traffic_controller: "Controlador de tráfego aéreo",
 };
 
+const PROFILE_LABELS: Record<string, string> = {
+  fixed_wing: "Asa fixa",
+  rotary_wing: "Asa rotativa",
+  general: "geral",
+};
+
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -19,7 +25,9 @@ export default async function DashboardPage() {
       </h1>
       <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
         {ROLE_LABELS[user.role] ?? user.role} · Perfil operacional:{" "}
-        {user.operational_profile ?? "não definido"}
+        {user.operational_profile
+          ? (PROFILE_LABELS[user.operational_profile] ?? user.operational_profile)
+          : "não definido"}
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">

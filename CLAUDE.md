@@ -14,8 +14,10 @@ atual, o que já foi feito, o que falta, e as decisões de design já fechadas.
 ## Stack
 
 Next.js (App Router) + TypeScript, Tailwind, Supabase (Postgres + Auth + Storage),
-OpenAI (transcrição), Anthropic Claude (engine de entrevista/correção), Vercel (deploy em
-produção: https://eplis-trainer.vercel.app, deploy automático a cada push em `main`).
+OpenAI (transcrição), Anthropic Claude (engine de entrevista/correção), Sentry
+(observabilidade — código real, desligado até `SENTRY_DSN` ser configurado, ver
+`docs/project-status.md`), Vercel (deploy em produção: https://eplis-trainer.vercel.app,
+deploy automático a cada push em `main`).
 
 ## Rodando localmente
 
@@ -58,7 +60,7 @@ confirmação de e-mail no cadastro.
   manualmente depois de um push normal. Só use `npx vercel deploy --prod` se precisar
   forçar um redeploy sem novo commit. Variáveis de ambiente de produção são gerenciadas
   com `npx vercel env add <NOME> production` (não edite pelo dashboard sem atualizar
-  também `docs/project-status.md`) — ver lista completa das 5 vars usadas em runtime em
+  também `docs/project-status.md`) — ver lista completa das 7 vars usadas em runtime em
   `docs/project-status.md` → "Infraestrutura já provisionada".
 - **Payload grande (ex.: áudio gravado no browser) nunca deve ir como argumento de
   Server Action** — mesmo aumentando `experimental.serverActions.bodySizeLimit` no

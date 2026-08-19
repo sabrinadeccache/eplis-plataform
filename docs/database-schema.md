@@ -25,8 +25,9 @@ users
 | email | text | único |
 | role | enum | `admin`, `pilot`, `air_traffic_controller` |
 | status | enum | `active`, `inactive`, `blocked` |
-| target_exam | text | ex: `EPLIS`, `ICAO_PILOT` — permite o mesmo usuário treinar para provas diferentes |
-| operational_profile | enum, nullable | `TWR`, `APP`, `ACC`, `COpM` — confirmado pelo Manual do Examinando (item 1.2.2) como o critério real de versionamento da Fase 2. Nullable porque `admin` não precisa e o candidato pode se cadastrar sem saber ainda ("Ainda não sei"). **[2026-08-10]** Enum restrito de 8 pra 5 valores — `AFIS`, `FIS` e `ab_initio` saíram por não fazerem parte do escopo real de conteúdo desta rodada; ver migration `20260810000000_narrow_operational_profile.sql`. |
+| target_exam | text | derivado do `role` no cadastro, não escolhido pelo usuário: `air_traffic_controller` → `EPLIS`; `pilot` → `Santos Dumont English Assessment` (ver `src/lib/auth/actions.ts`, `targetExamForRole`) |
+| operational_profile | enum, nullable | `TWR`, `APP`, `ACC`, `COpM` (controladores) — confirmado pelo Manual do Examinando (item 1.2.2) como o critério real de versionamento da Fase 2. **[2026-08-19]** `fixed_wing`, `rotary_wing` (pilotos) adicionados ao mesmo enum — migration `20260819000000_pilot_operational_profiles_and_avatar.sql`; **não há conteúdo de Fase 1/Fase 2 para esses dois valores ainda** (Fase 1/2 seguem 100% EPLIS/controlador — um piloto cadastrado hoje só teria os campos capturados, sem simulado próprio; a trilha "Santos Dumont English Assessment" pro piloto é produto futuro, fora do escopo desta rodada). Nullable porque `admin` não precisa e o candidato pode se cadastrar sem saber ainda ("Ainda não sei"). **[2026-08-10]** Enum restrito de 8 pra 5 valores nessa data — `AFIS`, `FIS` e `ab_initio` saíram por não fazerem parte do escopo real de conteúdo daquela rodada; ver migration `20260810000000_narrow_operational_profile.sql`. |
+| avatar_url | text, nullable | **[NOVO, 2026-08-19]** foto de perfil, bucket de Storage `avatars` (público, path `{userId}/avatar.<ext>`, upsert) — ver `src/app/api/profile/avatar/route.ts` |
 | created_at | timestamp | |
 
 Senha **não** é armazenada aqui — delegada ao Supabase Auth.
