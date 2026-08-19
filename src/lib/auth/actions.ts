@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { evaluatePasswordStrength } from "@/lib/auth/password";
@@ -191,6 +192,14 @@ export async function updateProfile(
   if (error) {
     return { error: "Não foi possível salvar as alterações. Tente novamente." };
   }
+
+  // Sem isso, a rota /perfil não é re-renderizada nem tem seu cache
+  // invalidado (uma action só ganha isso de graça se chamar updateTag/
+  // revalidatePath/refresh/redirect ou mexer em cookies — ver
+  // node_modules/next/dist/docs/01-app/02-guides/server-actions.md), então a
+  // tela mostrava o snapshot em cache de antes da edição ao navegar pra fora
+  // e voltar — parecendo que nome/profissão/perfil operacional "voltaram".
+  revalidatePath("/perfil");
 
   return { error: null, info: "Dados atualizados." };
 }

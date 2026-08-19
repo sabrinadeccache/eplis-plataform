@@ -76,6 +76,52 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-19) — bugs reportados pela Sabrina em teste real da Fase 1/perfil
+
+Teste manual real da Sabrina achou dois bugs, mais um pedido de UI:
+
+- **Race condition em `Phase1Runner`** (`src/components/fase1/phase1-runner.tsx`):
+  `advance()` podia ser disparada tanto pelo timer de resposta (`onExpire`, 60s) quanto
+  pelo clique do botão "Confirmar e avançar"/"Finalizar simulado" quase ao mesmo tempo —
+  nada travava execuções concorrentes durante o `startTransition`. No meio do simulado
+  isso fazia `setIndex(i => i + 1)` rodar duas vezes (pulava uma questão sem exibir); na
+  última questão fazia `finishAttempt` rodar duas vezes — a primeira salvava o resultado
+  (aparecia em Desempenho), a segunda via a tentativa já `completed` e lançava exceção,
+  virando o 500 ("Error in Server Components render") relatado ao finalizar. Corrigido
+  com uma trava (`advancingRef`) que ignora chamadas de `advance()` enquanto uma já está
+  em andamento.
+- **`updateProfile` sem `revalidatePath`** (`src/lib/auth/actions.ts`): o `update` no
+  Supabase funcionava, mas a tela `/perfil` não era re-renderizada nem tinha cache
+  invalidado (comportamento novo do Next 16 pra Server Actions — ver bullet no
+  `CLAUDE.md`), então nome/profissão/perfil operacional voltavam pro valor antigo (ou pro
+  default `pilot`/`null`, se o cache nunca tivesse sido invalidado desde o cadastro) ao
+  navegar pra fora de `/perfil` e voltar. Corrigido com `revalidatePath("/perfil")` no
+  fim da action.
+- **Página de resultado da Fase 1 quebrando com `null`** (
+  `src/app/fase1/resultado/[attemptId]/page.tsx`): efeito colateral do fix de conteúdo
+  abaixo — se uma pergunta referenciada por uma resposta real for desativada, a RLS de
+  `phase1_questions` (`is_active = true`) faz o join retornar `null` pra aquela linha em
+  vez de barrar a query. Sem tratar, a página quebrava lendo campo de objeto `null`.
+  Blindado: renderiza um aviso "Questão não disponível mais para exibição" no lugar.
+- **Correção de conteúdo v02a/v02c (Cair 217, Fase 1)**: a pergunta certa ("O que a torre
+  informa à Cair 217 antes do pouso?") estava linkada ao áudio errado (v02c, que tinha
+  conteúdo de menor qualidade). Relinkada pro áudio v02a; a pergunta antiga do v02a ("Por
+  que a Cair 217 solicitou retornar a Boston?") foi **desativada, não apagada** — havia
+  resposta real (tentativa `059e1435-...`, a mesma do relato do bug acima) referenciando
+  ela via FK sem `ON DELETE CASCADE`. Arquivo `v02c.mp3` removido do bucket
+  `phase1-audios`; a linha `phase1_audios` de v02c foi desativada (sem pergunta ativa e
+  sem arquivo, ficaria órfã se continuasse ativa).
+- **Player de áudio da Fase 1 redesenhado** (mesmo arquivo do primeiro item): botão
+  "Ouvir áudio agora" (dentro do card, canto do texto de tempo) virou um player circular
+  centralizado logo abaixo de "Questão X de Y", reaproveitado nas três fases (tocar na
+  leitura, indicador visual tocando, repetir na hora de responder).
+
+Os quatro pontos de código testados com `tsc --noEmit` + `eslint` limpos, e os dois de UI
+validados ponta a ponta num browser headless (Playwright via `npx`, já que não há
+`chromium-cli` nesta máquina) com um usuário descartável criado e depois apagado via API
+admin do Supabase — login real, edição de perfil + navegação pra fora e volta, início de
+simulado da Fase 1 com screenshot da tela.
+
 ## Atualização (2026-08-18) — conteúdo real ampliado (Fase 1 e Parte 2/4 da Fase 2)
 
 Sessão focada em ampliar o conteúdo real (não mexeu em código do app, só em dados —

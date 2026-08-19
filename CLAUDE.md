@@ -71,5 +71,24 @@ confirmação de e-mail no cadastro.
   precisa ir por uma route handler comum (`src/app/api/...`) recebendo
   `multipart/form-data`, não por Server Action — ver
   `src/app/api/phase2/submit-response/route.ts` e `docs/project-status.md`.
+- **Server Action que só faz `update`/`insert` e não chama `revalidatePath`/`updateTag`/
+  `refresh`/`redirect` (nem mexe em cookies) não re-renderiza a rota atual** — no Next.js
+  16 isso não acontece de graça mais (ver
+  `node_modules/next/dist/docs/01-app/02-guides/server-actions.md`, seção "A single
+  response carries data and UI"). O componente Server que passou os dados pra tela
+  continua com os dados de antes da mutação, e o cache de rota do cliente também não é
+  invalidado — dá a impressão de "a alteração não salvou" mesmo o `update` no Supabase
+  tendo funcionado (reproduzido de verdade em `updateProfile`, `src/lib/auth/actions.ts`:
+  nome/profissão/perfil operacional voltavam pro valor antigo em `/perfil` ao navegar pra
+  fora e voltar). Toda Server Action que atualiza dado exibido na própria tela precisa de
+  `revalidatePath(<rota>)` explícito no fim.
+- Só se lembre desta pegadinha depois de já ter mexido em `phase1_questions`/
+  `phase1_audios`: a RLS de `phase1_questions` só libera `select` de linhas com
+  `is_active = true` — se uma pergunta referenciada por uma `phase1_answers` real for
+  desativada depois da tentativa, qualquer join a partir de `phase1_answers` pra
+  `phase1_questions` (ex.: página de resultado da Fase 1) retorna `null` naquela linha em
+  vez de barrar a query inteira; sem tratar esse `null` no código que renderiza, quebra
+  ("Error in Server Components render"). `src/app/fase1/resultado/[attemptId]/page.tsx`
+  já trata isso.
 
 @AGENTS.md

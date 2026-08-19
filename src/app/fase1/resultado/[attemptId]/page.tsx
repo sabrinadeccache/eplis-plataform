@@ -67,7 +67,25 @@ export default async function Fase1ResultadoPage({
             option_b: string;
             option_c: string;
             correct_option: string;
-          };
+          } | null;
+
+          // A RLS de phase1_questions só libera leitura de perguntas com
+          // is_active = true — uma pergunta desativada depois da tentativa (ex.:
+          // trocada por outra no mesmo áudio) vira null aqui no join em vez de
+          // barrar a query inteira. Sem esse guard, a página quebra ao tentar
+          // ler campos de um objeto null (era exatamente o crash reportado após
+          // finalizar o simulado da Fase 1).
+          if (!question) {
+            return (
+              <div
+                key={i}
+                className="rounded-md border border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400"
+              >
+                Questão não disponível mais para exibição (foi removida do banco após esta tentativa).
+              </div>
+            );
+          }
+
           const optionLabel: Record<string, string> = {
             a: question.option_a,
             b: question.option_b,
