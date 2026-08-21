@@ -300,6 +300,27 @@ teste limpo ao final (usuário e objeto de storage removidos).
 Auth; fluxo `/esqueci-senha` → e-mail real recebido → `/redefinir-senha` testado
 ponta a ponta pela Sabrina e funcionou. Sem pendência.
 
+## Atualização (2026-08-21) — Fase 7: responsividade do cabeçalho (`AppShell`)
+
+Início da Fase 7 (responsividade/testes/deploy público). Testado em viewport mobile
+(390px, via Playwright) todo o fluxo autenticado — dashboard, perfil, Fase 1 (início e
+simulado em andamento), Fase 2 (início e entrevista), Desempenho (lista e resultado de
+cada fase). Único problema real encontrado: o cabeçalho do `AppShell` (nav + perfil +
+Sair) não tinha nenhum tratamento pra telas pequenas — os itens não quebravam de linha
+nem encolhiam, causando overflow horizontal (o botão "Sair" ficava cortado fora da tela).
+O restante do conteúdo (cards, formulários, gráficos de `/desempenho`, gravador de áudio
+da Fase 2) já se adaptava bem sem ajuste.
+
+**Corrigido**: navegação extraída para `src/components/layout/app-nav.tsx` (novo Client
+Component) com um botão hambúrguer abaixo do breakpoint `md` (768px) que abre um menu
+suspenso com os mesmos links, perfil e "Sair" empilhados verticalmente; acima de `md`
+mantém o layout horizontal original, sem nenhuma mudança visual em desktop.
+`src/components/layout/app-shell.tsx` ficou só delegando pro `AppNav`. Validado
+visualmente com Playwright (mobile fechado/aberto + desktop 1280px) — `scrollWidth` do
+documento igual à largura do viewport em mobile, confirmando ausência de overflow
+horizontal. `npx tsc --noEmit`, `npm run lint` e `npm run build` (produção) limpos antes
+do push.
+
 ## Atualização (2026-08-19) — pausar/retomar simulado (Fase 2, modo practice)
 
 A pedido da Sabrina, depois de validar ponta a ponta o conteúdo ampliado da Fase 2
@@ -821,7 +842,11 @@ Fase 1 com mais áudios reais.
       ICAO individual da Fase 2 ao longo do tempo (hoje só nível geral) — avaliar se entra
       numa rodada futura.
 - [ ] **Fase 7 — Refino e lançamento**: responsividade, testes, observabilidade, deploy
-      público.
+      público. Observabilidade (Sentry) já feita — ver "Atualização (2026-08-19) —
+      observabilidade" acima. Responsividade: cabeçalho (`AppShell`) corrigido em
+      2026-08-21 (menu mobile) — ver "Atualização (2026-08-21)" acima; resto do fluxo já
+      validado responsivo na mesma rodada, sem mudança necessária. Faltam: testes
+      automatizados e deploy público (hoje só a Sabrina tem acesso).
 
 ## Decisões de design já fechadas (não reabrir sem motivo novo)
 
