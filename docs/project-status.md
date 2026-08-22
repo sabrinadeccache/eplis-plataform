@@ -117,6 +117,19 @@ os dois já corrigidos:
 Resultado: Fase 1 e Fase 2 validadas ponta a ponta pelo celular, incluindo gravação de
 áudio real.
 
+**Auditoria do Sentry (mesmo dia)**: revisado o feed de issues (`orion-flight-lab.sentry.io`,
+projeto `eplis-plataform`) pra conferir se os erros capturados em testes anteriores já tinham
+sido corrigidos no código. Achado real ainda não corrigido: `goToNextItem` em
+`src/components/fase2/interview-runner.tsx` não tinha a mesma trava de concorrência que o
+`Phase1Runner` já tinha (`advancingRef`, do commit `2d77e41`) — o timer automático de 3s do
+step `"auto"` e o clique em "Continuar" podiam chamar `advanceState()` quase ao mesmo tempo no
+último step de um item, e a segunda chamada encontrava a tentativa já avançada/concluída pela
+primeira, lançando "Tentativa inválida ou já finalizada." como unhandled rejection (capturado
+pelo Sentry, `EPLIS-PLATAFORM-4`). Corrigido com a mesma trava (`advancingItemRef`). O
+`TypeError: Load failed` em `/fase1` (1 evento só) não teve causa encontrada no código — não há
+nenhum `fetch()` desprotegido na Fase 1; mais provável ter sido uma queda de wifi pontual
+durante o teste pelo celular do que um bug real.
+
 ## Atualização (2026-08-19) — bugs reportados pela Sabrina em teste real da Fase 1/perfil
 
 Teste manual real da Sabrina achou dois bugs, mais um pedido de UI:
