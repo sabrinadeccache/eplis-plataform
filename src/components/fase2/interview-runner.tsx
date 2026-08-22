@@ -160,6 +160,7 @@ export function InterviewRunner({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [awaitingFeedbackSpeech, setAwaitingFeedbackSpeech] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -304,7 +305,25 @@ export function InterviewRunner({
   }
 
   async function startRecording() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    setMicError(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      // getUserMedia só existe em contexto seguro (HTTPS, ou localhost) — em
+      // HTTP puro por IP de rede (ex.: testando pelo celular) o navegador nem
+      // expõe a API, sem pedir permissão nenhuma.
+      setMicError(
+        "Este navegador não permite acesso ao microfone nesta conexão (precisa ser HTTPS, exceto em localhost).",
+      );
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setMicError(
+        "Não foi possível acessar o microfone. Verifique se a permissão foi concedida ao navegador.",
+      );
+      return;
+    }
     const recorder = new MediaRecorder(stream);
     chunksRef.current = [];
     recorder.ondataavailable = (e) => {
@@ -448,6 +467,12 @@ export function InterviewRunner({
   return (
     <div className="space-y-6">
       <audio ref={audioRef} />
+
+      {micError && (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+          {micError}
+        </div>
+      )}
 
       {audioBlocked && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">

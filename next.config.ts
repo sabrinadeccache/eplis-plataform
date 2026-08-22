@@ -2,7 +2,13 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Sem isso, o Next dev bloqueia o WebSocket de HMR quando acessado por IP de
+  // rede (ex.: testando pelo celular no mesmo wifi), o que quebra a
+  // hidratação do React na página inteira — sintoma real: selects
+  // controlados (ex. profissão → perfil operacional em /cadastro) paravam de
+  // reagir a onChange, mas só quando acessados via 192.168.x.x, nunca via
+  // localhost ou em produção.
+  allowedDevOrigins: ["192.168.15.2"],
 };
 
 export default withSentryConfig(nextConfig, {

@@ -76,6 +76,47 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-22) — teste ponta a ponta pelo celular (Fase 1 e Fase 2)
+
+Sabrina testou o app pelo celular, no mesmo wifi do Mac, acessando `next dev` pelo IP da
+rede local (ex.: `http://192.168.15.2:3000`) em vez de `localhost`. Dois achados reais,
+os dois já corrigidos:
+
+- **Select controlado parava de reagir a `onChange` só quando acessado por IP de rede**
+  (reproduzido em `/cadastro`: trocar a profissão para "Controlador de tráfego aéreo" não
+  atualizava as opções de perfil operacional nem o nome do exame — mas funcionava normal
+  em `localhost` e em produção). Causa: o Next dev bloqueia por padrão o WebSocket de HMR
+  quando a origem não é `localhost` ("Blocked cross-origin request to Next.js dev resource
+  ... by \"<ip>\""), o que quebra a hidratação do React na página inteira — não é um bug
+  de UI isolado, qualquer interatividade client-side para de funcionar. Corrigido
+  adicionando `allowedDevOrigins` em `next.config.ts` com o IP da máquina de teste. **Esse
+  IP muda entre redes** (`ipconfig getifaddr en0` pra descobrir de novo) — se testar de
+  outro wifi, precisa atualizar essa lista antes.
+- **Gravação de áudio na Fase 2 falhava silenciosamente pelo celular** (Fase 1, que só
+  toca áudio, funcionou normal). Causa: `getUserMedia` só funciona em contexto seguro
+  (HTTPS), exceto em `localhost` — por IP de rede em HTTP puro o navegador nem expõe a
+  API, sem pedir permissão nenhuma, e `startRecording()` em
+  `src/components/fase2/interview-runner.tsx` não tinha `try/catch` nenhum ao redor do
+  `await getUserMedia(...)`, então a falha virava uma unhandled promise rejection e a tela
+  ficava travada sem nenhuma mensagem. Duas correções: (1) `startRecording` agora captura
+  o erro (`navigator.mediaDevices` ausente, ou rejeição da permissão) e mostra um banner
+  vermelho explicando o motivo, em vez de falhar em silêncio; (2) para testar de verdade
+  pelo celular, é preciso subir o dev server em HTTPS — gerado certificado autoassinado
+  local com `mkcert` (baixado automaticamente pelo `next dev --experimental-https` na
+  primeira tentativa, em `~/Library/Caches/mkcert/`) **sem** rodar `mkcert -install` (que
+  exige senha de admin interativa e falha em execução não interativa); em vez disso os
+  certs foram gerados direto (`mkcert -key-file ... -cert-file ... localhost 127.0.0.1
+  ::1 <ip-da-rede>`, salvos em `certificates/`, já no `.gitignore`) e o servidor subido com
+  `next dev -H 0.0.0.0 --experimental-https --experimental-https-key
+  ./certificates/localhost-key.pem --experimental-https-cert ./certificates/localhost.pem`.
+  Certificado não é confiável pro sistema (não rodou `-install`), então o navegador do
+  celular mostra aviso de conexão não seguro ao abrir — precisa aceitar manualmente
+  ("Avançado" → "Continuar mesmo assim") uma vez por sessão de teste; depois disso o
+  microfone funciona normal.
+
+Resultado: Fase 1 e Fase 2 validadas ponta a ponta pelo celular, incluindo gravação de
+áudio real.
+
 ## Atualização (2026-08-19) — bugs reportados pela Sabrina em teste real da Fase 1/perfil
 
 Teste manual real da Sabrina achou dois bugs, mais um pedido de UI:
