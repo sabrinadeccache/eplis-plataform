@@ -165,29 +165,43 @@ export function InterviewRunner({
   const audioRef = useRef<HTMLAudioElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const advancingItemRef = useRef(false);
 
   const currentPrompt = pickPrompt(sequence, part, itemIndex);
   const steps = buildSteps(part, itemIndex, currentPrompt);
   const currentStep = steps[stepIndex];
 
+  // Mesma trava usada no Phase1Runner (advancingRef): o timer automático de
+  // 3s do step "auto" e o clique manual em "Continuar" podem disparar
+  // goToNextItem quase ao mesmo tempo no último step de um item — sem essa
+  // trava, a segunda chamada de advanceState() encontra a tentativa já
+  // avançada/concluída pela primeira e lança "Tentativa inválida ou já
+  // finalizada." como unhandled rejection (reproduzido de verdade, capturado
+  // pelo Sentry como EPLIS-PLATAFORM-4).
   const goToNextItem = useCallback(() => {
+    if (advancingItemRef.current) return;
+    advancingItemRef.current = true;
     startTransition(async () => {
-      const result = await advanceState(attemptId);
-      if (result.finished) {
-        router.push(`/fase2/resultado/${attemptId}`);
-        return;
+      try {
+        const result = await advanceState(attemptId);
+        if (result.finished) {
+          router.push(`/fase2/resultado/${attemptId}`);
+          return;
+        }
+        const next = computeNextPosition(part, itemIndex);
+        if (!next) return;
+        setPart(next.part);
+        setItemIndex(next.itemIndex);
+        setStepIndex(0);
+        setRepetitionCount(0);
+        setRecorderState("waiting_ai");
+        setTtsEnded(false);
+        setFeedback(null);
+        setAwaitingFeedbackSpeech(false);
+        chunksRef.current = [];
+      } finally {
+        advancingItemRef.current = false;
       }
-      const next = computeNextPosition(part, itemIndex);
-      if (!next) return;
-      setPart(next.part);
-      setItemIndex(next.itemIndex);
-      setStepIndex(0);
-      setRepetitionCount(0);
-      setRecorderState("waiting_ai");
-      setTtsEnded(false);
-      setFeedback(null);
-      setAwaitingFeedbackSpeech(false);
-      chunksRef.current = [];
     });
   }, [attemptId, part, itemIndex, router, startTransition]);
 
