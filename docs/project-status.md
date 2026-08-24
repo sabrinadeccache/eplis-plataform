@@ -1006,10 +1006,18 @@ diário de tentativas).
 `7b9bdb3` (suíte de testes automatizados) e `959a174` (proteção de custo de IA) — via
 `git push` em `main`, disparando o deploy automático na Vercel (ver "Convenções" no
 `CLAUDE.md`). `tsc --noEmit`, `lint`, `npm run test` (16/16) e `npm run build` conferidos
-limpos imediatamente antes do push. **Não testado manualmente em produção depois do
-deploy** (checar `https://eplis-trainer.vercel.app` — fluxo de iniciar Fase 2 e ver o
-aviso de limite atingido — antes de decidir se o link já pode ser divulgado publicamente
-de verdade).
+limpos imediatamente antes do push. **Validado em produção (2026-08-24)**: 5 tentativas fictícias (`status = 'abandoned'`,
+`started_at = now()`) inseridas direto no banco pro usuário da Sabrina via novo script
+`scripts/dev-seed-fase2-limit-test.mjs` (sem gastar nenhuma chamada de IA — status
+`abandoned` conta pro `DAILY_ATTEMPT_LIMIT` mas não aparece como tentativa "pausada" na
+tela). Sabrina confirmou o aviso âmbar "Você atingiu o limite de 5 simulados..." em
+`https://eplis-trainer.vercel.app/fase2` no lugar dos botões de iniciar. Tentativas de
+teste apagadas em seguida com `scripts/dev-delete-attempts.mjs` (novo, contraparte de
+limpeza por id). Os dois scripts commitados (`99d3042`) — reaproveitáveis pra qualquer
+teste futuro parecido, sem precisar rodar 5 simulados de verdade.
+
+Com isso, a checagem técnica de "posso abrir o cadastro pro público?" está fechada — falta
+só a decisão de negócio de divulgar o link (não é mais uma pendência de código).
 
 ## Decisões de design já fechadas (não reabrir sem motivo novo)
 
