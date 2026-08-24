@@ -1174,7 +1174,12 @@ conteúdo inicial, validação com Playwright). Commit enviado a `main` nesta ro
    originais continuam verdes).
 
 `npx tsc --noEmit`, `npm run lint`, `npm run test` (30/30 — 14 novos da trilha do piloto) e
-`npm run build` conferidos limpos antes do push. **Atenção**: diferente de rodadas
+`npm run build` conferidos limpos antes do push. **Validado em produção após o push**
+(`b0f9030` + `eb4cd4a`, o segundo só corrigindo o hash aqui neste documento): `npx vercel
+ls` confirma o deploy mais recente `Ready`/`Production` (37s de build); `curl -I` na raiz e
+em `/sdea` de produção retornam 307 pra `/login`, confirmando que a nova rota está servindo
+de verdade (não 404/500) e que a proteção de rota continua ativa. **Atenção**: diferente de
+rodadas
 anteriores, as migrations desta sessão (`20260824000000`, `20260824010000`,
 `20260824020000`) e o conteúdo (`scripts/seed-pilot-prompts.mjs`,
 `scripts/upload-pilot-part2-part4-images.mjs`, buckets `pilot-recordings`/`pilot-images`)
