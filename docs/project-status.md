@@ -1000,8 +1000,16 @@ rate-limit por minuto (só diário) — não protege contra um script que dispar
 chamadas em poucos segundos dentro do teto diário; aceitável por ora porque cada
 `generateSpeech` já está amarrado a uma tentativa própria em andamento (não dá pra ter
 tentativas `in_progress` ilimitadas rodando ao mesmo tempo sem também estourar o limite
-diário de tentativas). Nada foi commitado/enviado para produção ainda nesta sessão —
-mudança pronta, aguardando decisão de commit/push.
+diário de tentativas).
+
+**Commitado e enviado para produção (2026-08-24)**: dois commits —
+`7b9bdb3` (suíte de testes automatizados) e `959a174` (proteção de custo de IA) — via
+`git push` em `main`, disparando o deploy automático na Vercel (ver "Convenções" no
+`CLAUDE.md`). `tsc --noEmit`, `lint`, `npm run test` (16/16) e `npm run build` conferidos
+limpos imediatamente antes do push. **Não testado manualmente em produção depois do
+deploy** (checar `https://eplis-trainer.vercel.app` — fluxo de iniciar Fase 2 e ver o
+aviso de limite atingido — antes de decidir se o link já pode ser divulgado publicamente
+de verdade).
 
 ## Decisões de design já fechadas (não reabrir sem motivo novo)
 
