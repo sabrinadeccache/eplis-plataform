@@ -1164,7 +1164,7 @@ SDEA implementada nesta rodada (ver "Atualização (2026-08-24) — Trilha do pi
 acima para o detalhamento técnico completo: schema, backend, IA, UI, role gating,
 conteúdo inicial, validação com Playwright). Commit enviado a `main` nesta rodada:
 
-1. `<preencher no push>` — trilha do piloto (SDEA) completa: migrations, backend
+1. `b0f9030` — trilha do piloto (SDEA) completa: migrations, backend
    (`src/services/simulations/pilot/`), IA (`src/lib/ai/pilot-track.ts`), UI
    (`src/components/sdea/`, `src/app/sdea/*`, `src/app/api/sdea/*`), role gating
    (dashboard/nav/rotas condicionais por `role`), conteúdo inicial (5 provas reais
