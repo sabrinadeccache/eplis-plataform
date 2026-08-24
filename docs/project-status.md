@@ -1019,6 +1019,28 @@ teste futuro parecido, sem precisar rodar 5 simulados de verdade.
 Com isso, a checagem técnica de "posso abrir o cadastro pro público?" está fechada — falta
 só a decisão de negócio de divulgar o link (não é mais uma pendência de código).
 
+**Ponto de retomada (2026-08-24, fim de sessão)** — 4 commits enviados a `main` nesta
+rodada, todos já em produção e revalidados (`tsc --noEmit`, `lint`, `npm run test` 16/16,
+`npm run build` limpos; `vercel ls` confirma o deploy mais recente `Ready`/`Production`;
+`curl -I` na raiz de produção retorna 307 pra `/login`, proteção de rota ativa):
+
+1. `7b9bdb3` — suíte de testes automatizados (Vitest + Testing Library), primeira
+   cobertura de testes do projeto.
+2. `959a174` — proteção de custo de IA na Fase 2 (limite diário de tentativas +
+   `generateSpeech` exigindo posse da tentativa).
+3. `99d3042` — scripts de dev (`dev-seed-fase2-limit-test.mjs`,
+   `dev-delete-attempts.mjs`) pra testar o limite diário sem gastar chamada de IA.
+4. `4614887` — registro da validação em produção do limite diário no project-status.
+
+Working tree limpa, nada pendente de commit. Fase 7 (refino e lançamento): responsividade
+✅, observabilidade (Sentry) ✅, testes automatizados ✅ (cobertura inicial — dá pra
+ampliar depois), proteção de custo ✅. Falta só a decisão de negócio de divulgar o link
+publicamente — não há mais nenhuma pendência técnica conhecida bloqueando isso. Ver a
+lista completa de próximos passos possíveis (fora da Fase 7) na seção "Roadmap" acima:
+mais áudios reais da Fase 1, evolução por critério ICAO individual na tela de Desempenho,
+e a trilha própria do piloto (Santos Dumont English Assessment) — hoje sem nenhum
+conteúdo, só os campos de cadastro capturados.
+
 ## Decisões de design já fechadas (não reabrir sem motivo novo)
 
 - Arquitetura: monólito modular Next.js (Route Handlers + Server Actions), sem backend
