@@ -14,7 +14,7 @@ export type OperationalProfile =
   | "rotary_wing"
   | "general";
 
-export type Phase = "phase1" | "phase2";
+export type Phase = "phase1" | "phase2" | "pilot_interview";
 export type SimulationMode = "practice" | "official";
 export type AttemptStatus = "in_progress" | "completed" | "abandoned";
 export type Part = "part1" | "part2" | "part3" | "part4";
@@ -26,6 +26,20 @@ export type ResponseStage =
   | "image_description"
   | "story_preparation"
   | "story_telling";
+export type PilotResponseStage =
+  | "main"
+  | "readback"
+  | "reaction"
+  | "confirmation"
+  | "report_back"
+  | "report"
+  | "question"
+  | "comparison"
+  | "picture_description"
+  | "narrative"
+  | "discussion_1"
+  | "discussion_2"
+  | "agree_disagree";
 export type ProcessingStatus = "queued" | "transcribing" | "analyzing" | "done" | "error";
 export type ProficiencyLevel = "weak" | "moderate" | "good";
 export type Difficulty = "easy" | "medium" | "hard";
@@ -120,6 +134,45 @@ export type Phase2ResponseRow = {
   created_at: string;
 };
 
+export type PilotPromptRow = {
+  id: string;
+  part: Part;
+  aircraft_type: OperationalProfile | null;
+  prompt_text: string;
+  atc_audio_text: string | null;
+  expected_readback: string | null;
+  complication_text: string | null;
+  complication_image_url: string | null;
+  expected_reaction: string | null;
+  atc_followup_audio_text: string | null;
+  expected_confirmation: string | null;
+  discussion_question: string | null;
+  discussion_question_2: string | null;
+  image_url: string | null;
+  agree_disagree_statement: string | null;
+  order_index: number | null;
+  expected_duration_seconds: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type PilotResponseRow = {
+  id: string;
+  simulation_attempt_id: string;
+  prompt_id: string;
+  response_stage: PilotResponseStage;
+  audio_url: string | null;
+  transcript: string | null;
+  ai_feedback: string | null;
+  ai_provider: string | null;
+  model_version: string | null;
+  processing_status: ProcessingStatus;
+  repetition_count: number;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+};
+
 export type SimulationFeedbackRow = {
   id: string;
   simulation_attempt_id: string;
@@ -178,6 +231,12 @@ type Phase2ResponseInsert = Partial<Omit<Phase2ResponseRow, "id" | "created_at">
 type SimulationFeedbackInsert = Partial<Omit<SimulationFeedbackRow, "id" | "created_at">> &
   Pick<SimulationFeedbackRow, "simulation_attempt_id" | "phase">;
 
+type PilotPromptInsert = Partial<Omit<PilotPromptRow, "id" | "created_at">> &
+  Pick<PilotPromptRow, "part" | "prompt_text" | "expected_duration_seconds">;
+
+type PilotResponseInsert = Partial<Omit<PilotResponseRow, "id" | "created_at">> &
+  Pick<PilotResponseRow, "simulation_attempt_id" | "prompt_id" | "response_stage">;
+
 export type Database = {
   public: {
     Tables: {
@@ -188,6 +247,8 @@ export type Database = {
       phase1_answers: TableDef<Phase1AnswerRow, Phase1AnswerInsert>;
       phase2_prompts: TableDef<Phase2PromptRow, Phase2PromptInsert>;
       phase2_responses: TableDef<Phase2ResponseRow, Phase2ResponseInsert>;
+      pilot_prompts: TableDef<PilotPromptRow, PilotPromptInsert>;
+      pilot_responses: TableDef<PilotResponseRow, PilotResponseInsert>;
       simulation_feedbacks: TableDef<SimulationFeedbackRow, SimulationFeedbackInsert>;
     };
     Views: Record<string, never>;

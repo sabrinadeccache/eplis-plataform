@@ -3,14 +3,23 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { generateSpeechAudio } from "@/lib/ai/openai";
-import { generateFinalReport, MODEL_VERSION } from "@/lib/ai/anthropic";
-import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
-import { DAILY_ATTEMPT_LIMIT, countAttemptsToday } from "@/services/simulations/phase2/limits";
+import { generatePilotFinalReport, MODEL_VERSION } from "@/lib/ai/pilot-track";
+import { computeNextPosition } from "@/services/simulations/pilot/state-machine";
+import { pilotResponseContext } from "@/services/simulations/pilot/context";
+import { PILOT_DAILY_ATTEMPT_LIMIT, countAttemptsToday } from "@/services/simulations/pilot/limits";
 import {
   assertOwnAttemptInProgress as assertOwnAttemptInProgressShared,
   type SupabaseServerClient,
 } from "@/lib/simulations/attempt-guards";
-import type { Part, SimulationMode } from "@/types/database";
+import type { Part, PilotResponseStage, SimulationMode } from "@/types/database";
+
+export async function assertOwnAttemptInProgress(
+  supabase: SupabaseServerClient,
+  attemptId: string,
+  userId: string,
+) {
+  return assertOwnAttemptInProgressShared(supabase, attemptId, userId, "pilot_interview");
+}
 
 export async function startAttempt(mode: SimulationMode) {
   const supabase = await createClient();
@@ -18,9 +27,9 @@ export async function startAttempt(mode: SimulationMode) {
   if (!auth.user) redirect("/login");
 
   const attemptsToday = await countAttemptsToday(supabase, auth.user.id);
-  if (attemptsToday >= DAILY_ATTEMPT_LIMIT) {
+  if (attemptsToday >= PILOT_DAILY_ATTEMPT_LIMIT) {
     throw new Error(
-      `Limite de ${DAILY_ATTEMPT_LIMIT} simulados da Fase 2 por dia atingido. Tente novamente amanhã.`,
+      `Limite de ${PILOT_DAILY_ATTEMPT_LIMIT} simulados do SDEA por dia atingido. Tente novamente amanhã.`,
     );
   }
 
@@ -28,28 +37,25 @@ export async function startAttempt(mode: SimulationMode) {
     .from("simulation_attempts")
     .insert({
       user_id: auth.user.id,
-      phase: "phase2",
+      phase: "pilot_interview",
       mode,
       status: "in_progress",
       current_part: "part1",
       current_item_index: 0,
-      current_state: "PART_1_INTRO",
+      current_state: "PILOT_PART_1_INTRO",
     })
     .select("id")
     .single();
 
   if (error || !data) {
-    throw new Error("Não foi possível iniciar a entrevista.");
+    throw new Error("Não foi possível iniciar o simulado.");
   }
 
-  redirect(`/fase2/entrevista/${data.id}`);
+  redirect(`/sdea/entrevista/${data.id}`);
 }
 
-// Usada pela tela `/fase2` no botão "Abandonar e começar novo", pra quem tem
-// uma tentativa `practice` pausada mas prefere recomeçar do zero em vez de
-// continuar — marca a antiga como `abandoned` (sem isso ficaria `in_progress`
-// pra sempre, nunca aparecendo em Desempenho, que só lista `completed`) e já
-// cria + redireciona pra uma nova, igual `startAttempt`.
+// Mesmo padrão de abandonAndRestartAttempt do controlador — usada pelo botão
+// "Abandonar e começar novo" quando existe uma tentativa `practice` pausada.
 export async function abandonAndRestartAttempt(attemptId: string) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -65,32 +71,10 @@ export async function abandonAndRestartAttempt(attemptId: string) {
   await startAttempt("practice");
 }
 
-// Exportado pra ser reaproveitado pela route handler de submitResponse
-// (src/app/api/phase2/submit-response/route.ts) — o envio do áudio precisou
-// sair de uma Server Action pra uma rota comum (ver comentário lá) mas a
-// checagem de posse/estado da tentativa continua sendo a mesma. A checagem em
-// si vive em src/lib/simulations/attempt-guards.ts (compartilhada com a
-// trilha do piloto), generalizada por `phase` — aqui só fixamos "phase2".
-export async function assertOwnAttemptInProgress(
-  supabase: SupabaseServerClient,
-  attemptId: string,
-  userId: string,
-) {
-  return assertOwnAttemptInProgressShared(supabase, attemptId, userId, "phase2");
-}
-
 // Maior texto real que passa por aqui é o feedback curto por resposta
-// (`generateResponseFeedback`, max_tokens 300 ≈ 1200 caracteres no pior
-// caso) — a folga cobre isso com margem sem deixar a rota aceitar texto
-// arbitrário de tamanho ilimitado.
+// (max_tokens 300 ≈ 1200 caracteres no pior caso) — mesma folga da Fase 2.
 const MAX_SPEECH_TEXT_LENGTH = 1500;
 
-// Exige o attemptId (antes a Server Action aceitava qualquer string,
-// autenticada ou não, sem vínculo com uma entrevista real) — sem isso um
-// usuário autenticado podia chamar generateSpeech direto com texto arbitrário
-// repetidamente e gerar custo de TTS sem nenhuma relação com o fluxo real da
-// entrevista. Reaproveita a mesma checagem de posse/estado de
-// assertOwnAttemptInProgress usada pelo resto da Fase 2.
 export async function generateSpeech(
   attemptId: string,
   text: string,
@@ -108,6 +92,21 @@ export async function generateSpeech(
   return { audioBase64: buffer.toString("base64"), mimeType };
 }
 
+type ResponseWithPrompt = {
+  transcript: string | null;
+  response_stage: PilotResponseStage;
+  pilot_prompts: {
+    part: Part;
+    prompt_text: string;
+    atc_audio_text: string | null;
+    complication_text: string | null;
+    atc_followup_audio_text: string | null;
+    discussion_question: string | null;
+    discussion_question_2: string | null;
+    agree_disagree_statement: string | null;
+  } | null;
+};
+
 export async function advanceState(attemptId: string): Promise<{ finished: boolean }> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -121,41 +120,30 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
 
   if (next === null) {
     const { data: responses } = await supabase
-      .from("phase2_responses")
-      .select("transcript, response_stage, phase2_prompts(part, prompt_text)")
+      .from("pilot_responses")
+      .select(
+        "transcript, response_stage, pilot_prompts(part, prompt_text, atc_audio_text, complication_text, " +
+          "atc_followup_audio_text, discussion_question, discussion_question_2, agree_disagree_statement)",
+      )
       .eq("simulation_attempt_id", attemptId)
       .not("transcript", "is", null);
 
-    type ResponseWithPrompt = {
-      transcript: string | null;
-      response_stage: string;
-      phase2_prompts: { part: Part; prompt_text: string } | null;
-    };
-
     const transcripts = ((responses as ResponseWithPrompt[] | null) ?? [])
-      .filter((r): r is ResponseWithPrompt & { transcript: string; phase2_prompts: { part: Part; prompt_text: string } } =>
-        r.transcript !== null && r.phase2_prompts !== null,
+      .filter(
+        (r): r is ResponseWithPrompt & { transcript: string; pilot_prompts: NonNullable<ResponseWithPrompt["pilot_prompts"]> } =>
+          r.transcript !== null && r.pilot_prompts !== null,
       )
       .map((r) => ({
-        part: r.phase2_prompts.part,
-        // Na Parte 4, o prompt_text salvo é sempre o texto de descrição da
-        // imagem, reaproveitado pros dois estágios do item (descrição e
-        // história) — pra história, isso confundia o relatório final, que
-        // passou a cobrar detalhes visuais concretos numa resposta que era
-        // pra ser uma narrativa livre. Mesmo achado já corrigido no feedback
-        // curto por resposta (ver generateResponseFeedback).
-        promptText:
-          r.response_stage === "story_telling"
-            ? "Tell a short story related to the image you were shown."
-            : r.phase2_prompts.prompt_text,
+        part: r.pilot_prompts.part,
+        promptText: pilotResponseContext(r.response_stage, r.pilot_prompts),
         transcript: r.transcript,
       }));
 
-    const report = await generateFinalReport(transcripts, attempt.mode as SimulationMode);
+    const report = await generatePilotFinalReport(transcripts, attempt.mode as SimulationMode);
 
     await supabase.from("simulation_feedbacks").insert({
       simulation_attempt_id: attemptId,
-      phase: "phase2",
+      phase: "pilot_interview",
       overall_score: report.overall,
       pronunciation_score: report.pronunciation,
       structure_score: report.structure,

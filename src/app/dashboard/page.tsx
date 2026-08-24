@@ -17,6 +17,7 @@ const PROFILE_LABELS: Record<string, string> = {
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const isPilot = user.role === "pilot";
 
   return (
     <AppShell user={user}>
@@ -31,24 +32,38 @@ export default async function DashboardPage() {
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        <a
-          href="/fase1"
-          className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
-        >
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Fase 1</h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Compreensão auditiva — 30 questões
-          </p>
-        </a>
-        <a
-          href="/fase2"
-          className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
-        >
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Fase 2</h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Entrevista simulada
-          </p>
-        </a>
+        {isPilot ? (
+          <a
+            href="/sdea"
+            className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
+          >
+            <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Simulado SDEA</h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Santos Dumont English Assessment simulado
+            </p>
+          </a>
+        ) : (
+          <>
+            <a
+              href="/fase1"
+              className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
+            >
+              <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Fase 1</h2>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                Compreensão auditiva — 30 questões
+              </p>
+            </a>
+            <a
+              href="/fase2"
+              className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
+            >
+              <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Fase 2</h2>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                Entrevista simulada
+              </p>
+            </a>
+          </>
+        )}
         <a
           href="/desempenho"
           className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"

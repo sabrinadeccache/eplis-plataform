@@ -76,6 +76,112 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-24) — Trilha do piloto (SDEA), implementada do zero
+
+Nova trilha completa pro exame de pilotos, paralela ao EPLIS do controlador: **Santos
+Dumont English Assessment (SDEA)**, exame da ANAC (Anexo 1 OACI + RBAC 61), mesma Escala
+OACI de 6 critérios já usada no EPLIS. Levantamento feito a partir de documentos oficiais
+da ANAC (Instruções ao candidato, Manual do candidato, Escala de níveis, lista de palavras
+difíceis) + **1 prova-modelo oficial completa** (`Modelo SDEA.pdf`, avião/`fixed_wing`) +
+**4 provas reais completas de helicóptero** (`Test 1-4 helicopter ICAO 2024`,
+`rotary_wing`), todas trazidas pela Sabrina. Padrão real da prova, confirmado nos 5
+documentos:
+- **Parte 1** — 3 perguntas abertas de carreira/aviação (pool compartilhado entre
+  perfis, agnóstico a tipo de aeronave).
+- **Parte 2** — 5 situações de role-play como piloto (call sign fixo `ANAC 123`), cada
+  uma com **4 sub-turnos**: readback de uma instrução do controlador, reação a um
+  imprevisto narrado (às vezes com foto), confirmação/negação de um detalhe, e um relato
+  em discurso indireto do que o controlador disse — mecanicamente bem mais rico que a
+  Parte 2 do controlador (situação + sugestão).
+- **Parte 3** — 3 situações inesperadas (diálogo piloto/controlador narrado, o candidato
+  só escuta): relato em discurso indireto + 1 pergunta técnica por item, com um turno
+  extra de comparação entre as 3 situações no final (não existe equivalente no
+  controlador).
+- **Parte 4** — 1 foto: descrição, hipótese de antes/depois, 2 perguntas de discussão, e
+  1 afirmação pra concordar/discordar.
+
+**Decisões fechadas com a Sabrina antes de implementar:** construir os dois perfis
+(`fixed_wing` e `rotary_wing`) desde já; Parte 2 como fluxo de state machine dedicado, não
+forçado na mecânica situation_check/suggestion do controlador; arquitetura completa
+primeiro, ampliação do pool de conteúdo pra "dezenas por parte" fica pra uma rodada
+separada depois (igual ao histórico do EPLIS); rota `/sdea`; dashboard/nav passam a ser
+condicionais por `role` (piloto vê só "Simulado SDEA" + Desempenho, controlador continua
+vendo Fase 1/Fase 2/Desempenho).
+
+**Schema novo** (`20260824000000_add_pilot_interview_phase.sql`,
+`20260824010000_pilot_track_schema.sql`, `20260824020000_pilot_recordings_storage_policies.sql`):
+- `phase` ganhou o valor `pilot_interview` — `simulation_attempts` e `simulation_feedbacks`
+  já eram genéricas por `phase` (nenhuma coluna específica de controlador), então são
+  **100% reaproveitadas sem alteração**, só um novo valor de `phase`.
+- Tabelas novas `pilot_prompts` (larga, mesma convenção de campos nullable-por-parte de
+  `phase2_prompts` — ver `docs/database-schema.md` seção 9 pro detalhamento completo de
+  cada coluna) e `pilot_responses` (espelha `phase2_responses`, com enum próprio
+  `pilot_response_stage` cobrindo os 13 estágios das 4 partes). GRANT pra `authenticated`
+  **e** `service_role` já saíram certos de primeira no mesmo arquivo da migration —
+  lição aprendida do histórico da Fase 2 (que precisou de 2 rodadas separadas).
+- Bucket `pilot-recordings` (gravações) e `pilot-images` (fotos da Parte 2/4), com as
+  mesmas policies de INSERT+SELECT escopadas por dono de tentativa (a policy de SELECT já
+  saiu junto — outra lição já aprendida, o `INSERT ... RETURNING` interno da API de
+  Storage exige as duas).
+
+**Reaproveitamento do código existente** (sem tocar no comportamento do controlador,
+testes da Fase 2 continuam 16/16 verdes): PRNG determinístico (`mulberry32`/
+`seededShuffle`/`hashStringToSeed`) extraído pra `src/lib/prng.ts`; checagem de posse de
+tentativa (`assertOwnAttemptInProgress`) e contagem de tentativas do dia
+(`countAttemptsToday`) extraídas e generalizadas por `phase` em
+`src/lib/simulations/attempt-guards.ts`; base do SDK Anthropic (`client`/`MODEL_VERSION`/
+`extractText`) extraída pra `src/lib/ai/anthropic-client.ts`. O motor de gravação/TTS/
+timers do `InterviewRunner` (áudio `<audio>` persistente, detecção de autoplay bloqueado,
+MediaRecorder, diferenças `practice`/`official`) foi **reaproveitado por releitura direta**
+num componente novo (`PilotInterviewRunner`), não generalizado — a Parte 2 do piloto tem
+sub-estágios genuinamente diferentes e o risco de mexer no componente já testado do
+controlador não valia a pena pra 2 consumidores.
+
+**Correção de IA** (`src/lib/ai/pilot-track.ts`, `generatePilotResponseFeedback` +
+`generatePilotFinalReport`): mesma regra inegociável de nota final = menor dos 6 critérios,
+nunca média. Achado importante dos documentos oficiais: a produção oral do SDEA **não é
+julgada pela precisão técnica/operacional** (fraseologia incluída) — mesmo o readback da
+Parte 2 é avaliado só como inglês falado (clareza, estrutura), nunca por fraseologia
+correta, diferente do que se poderia supor de um exame tão focado em rádio.
+
+**Conteúdo inicial** (`scripts/seed-pilot-prompts.mjs`, UPSERT/idempotente): as 5 provas
+reais carregadas geram 15 perguntas de Parte 1, 5+3+1 (Parte2+Parte3+Parte4) pra
+`fixed_wing` e 20+12 (Parte2+Parte3) pra `rotary_wing` — suficiente pra 1 tentativa
+completa por perfil sem repetição, não pro pool amplo (decisão já registrada acima).
+**Achado real durante a sessão**: as fotos da Parte 2/4 precisaram ser extraídas dos PDFs
+(`pdfimages`/`pdftoppm`/ImageMagick instalados via Homebrew nesta máquina, mesmo padrão de
+instalar ferramenta local sob demanda já usado antes com yt-dlp/mkcert) — uma das 3 fotos
+candidatas pra Parte 4 de helicóptero tinha marca d'água visível da 123RF (banco de imagens
+pago) e as outras 2 eram fotos profissionais sem licença clara. **Decisão: usar só as 2
+fotos que vieram do documento oficial da ANAC** (radar meteorológico e bird strike, Parte
+2; pneu estourado, Parte 4) — a Parte 4 de `rotary_wing` ficou **sem conteúdo** nesta
+rodada (mesmo tratamento gracioso já existente de "conteúdo insuficiente pro perfil"),
+até existirem fotos próprias/licenciadas de helicóptero.
+
+**Validado ponta a ponta com Playwright** (usuários de teste descartáveis criados via
+`scripts/dev-create-pilot-test-user.mjs`, novo utilitário reutilizável, apagados ao final):
+login como piloto `fixed_wing` → dashboard mostra só "Simulado SDEA" + Desempenho → nav
+sem Fase 1/Fase 2 → `/fase1` e `/fase2` redirecionam pro dashboard (guarda de rota por
+`role` confirmada) → `/sdea` mostra os 2 modos → iniciar `practice` → entrevista renderiza
+a Parte 1 com TTS real tocando e botão "Falar" habilitado → "Pausar simulado" funciona e
+volta pro card "Practice — pausado" → `/desempenho` mostra só o card SDEA. Piloto
+`rotary_wing` iniciando um simulado recebeu corretamente a mensagem de conteúdo
+insuficiente (Parte 4 vazia). Nenhum erro de console/página durante o teste.
+
+`npx tsc --noEmit`, `npm run lint`, `npm run test` (30/30 — 14 testes novos da trilha do
+piloto) e `npm run build` (produção, todas as rotas `/sdea/*` registradas) conferidos
+limpos antes de considerar a rodada pronta.
+
+**Ainda em aberto** (fora do escopo desta rodada, por decisão): ampliar o pool de conteúdo
+pra "dezenas por parte" nos dois perfis (script de geração + arquivo de revisão pra
+Sabrina aprovar, igual ao histórico do EPLIS); conseguir fotos de helicóptero
+próprias/licenciadas pra Parte 4 de `rotary_wing`; testes automatizados de
+`generateResponseFeedback`/`generateFinalReport` (mesma lacuna já registrada pro
+controlador); nenhum teste manual real com áudio/microfone ainda (Playwright headless não
+grava áudio de verdade — só validou o fluxo até o botão "Falar" ficar disponível).
+
+---
+
 ## Atualização (2026-08-22) — teste ponta a ponta pelo celular (Fase 1 e Fase 2)
 
 Sabrina testou o app pelo celular, no mesmo wifi do Mac, acessando `next dev` pelo IP da
@@ -906,6 +1012,13 @@ Fase 1 com mais áudios reais.
       2026-08-22 (ver "Atualização (2026-08-22) — proteção de custo" abaixo). Falta:
       decidir/anunciar o lançamento público em si (hoje só a Sabrina tem acesso, mas não
       há mais nenhuma trava técnica óbvia impedindo abrir o cadastro).
+- [x] **Trilha do piloto (SDEA)** — implementada em 2026-08-24, ver "Atualização
+      (2026-08-24) — Trilha do piloto (SDEA)" acima: schema, backend, IA, UI e role
+      gating completos e validados ponta a ponta; conteúdo inicial carregado (15
+      perguntas de Parte 1, 5 situações de Parte 2 + 3 de Parte 3 + 1 foto de Parte 4 pra
+      `fixed_wing`, 20 + 12 pra `rotary_wing` sem foto de Parte 4 ainda). Falta: ampliar o
+      pool pra "dezenas por parte" (decisão de escopo, rodada separada) e conseguir fotos
+      de helicóptero licenciadas pra Parte 4 de `rotary_wing`.
 
 ## Atualização (2026-08-22) — testes automatizados (início da cobertura da Fase 7)
 
@@ -1041,6 +1154,47 @@ mais áudios reais da Fase 1, evolução por critério ICAO individual na tela d
 e a trilha própria do piloto (Santos Dumont English Assessment) — hoje sem nenhum
 conteúdo, só os campos de cadastro capturados.
 
+**[Superado pela atualização abaixo — a trilha do piloto foi implementada ainda no mesmo
+dia, numa sessão seguinte.]**
+
+---
+
+**Ponto de retomada (2026-08-24, fim da sessão da trilha do piloto)** — trilha completa do
+SDEA implementada nesta rodada (ver "Atualização (2026-08-24) — Trilha do piloto (SDEA)"
+acima para o detalhamento técnico completo: schema, backend, IA, UI, role gating,
+conteúdo inicial, validação com Playwright). Commit enviado a `main` nesta rodada:
+
+1. `<preencher no push>` — trilha do piloto (SDEA) completa: migrations, backend
+   (`src/services/simulations/pilot/`), IA (`src/lib/ai/pilot-track.ts`), UI
+   (`src/components/sdea/`, `src/app/sdea/*`, `src/app/api/sdea/*`), role gating
+   (dashboard/nav/rotas condicionais por `role`), conteúdo inicial (5 provas reais
+   carregadas via `scripts/seed-pilot-prompts.mjs`), pequena refatoração de reuso
+   (`src/lib/prng.ts`, `src/lib/simulations/attempt-guards.ts`,
+   `src/lib/ai/anthropic-client.ts`, comportamento da Fase 2 preservado — 16/16 testes
+   originais continuam verdes).
+
+`npx tsc --noEmit`, `npm run lint`, `npm run test` (30/30 — 14 novos da trilha do piloto) e
+`npm run build` conferidos limpos antes do push. **Atenção**: diferente de rodadas
+anteriores, as migrations desta sessão (`20260824000000`, `20260824010000`,
+`20260824020000`) e o conteúdo (`scripts/seed-pilot-prompts.mjs`,
+`scripts/upload-pilot-part2-part4-images.mjs`, buckets `pilot-recordings`/`pilot-images`)
+**já foram aplicados diretamente no Supabase de produção durante a sessão** (não é um
+"falta aplicar" pendente) — só o código do repo estava faltando ser commitado/enviado, o
+que este push resolve. Deploy na Vercel dispara automático a partir daqui.
+
+Working tree limpa após o push. Pendências reais em aberto pra trilha do piloto (fora do
+escopo desta rodada, por decisão): ampliar o pool de conteúdo pra "dezenas por parte" nos
+dois perfis (script de geração + arquivo de revisão pra Sabrina aprovar, igual ao
+histórico do EPLIS); conseguir fotos de helicóptero próprias/licenciadas pra Parte 4 de
+`rotary_wing` (hoje sem conteúdo — pool insuficiente, tratamento gracioso já existente);
+testes automatizados de `generateResponseFeedback`/`generateFinalReport` (mesma lacuna já
+registrada pro controlador); nenhum teste manual real com áudio/microfone ainda feito
+pela Sabrina (só validado via Playwright headless até o ponto de gravação).
+
+Resto do projeto (Fase 7 do controlador — responsividade, observabilidade, testes,
+proteção de custo) continua no estado descrito no ponto de retomada anterior, sem
+mudanças nesta rodada.
+
 ## Decisões de design já fechadas (não reabrir sem motivo novo)
 
 - Arquitetura: monólito modular Next.js (Route Handlers + Server Actions), sem backend
@@ -1070,6 +1224,15 @@ conteúdo, só os campos de cadastro capturados.
   **não otimizar preventivamente** (sem cache de TTS, sem paralelizar as chamadas de IA)
   até haver medição em produção mostrando necessidade — consistente com o princípio já
   registrado acima pro pipeline de IA.
+- Trilha do piloto (SDEA, 2026-08-24): fluxo/state machine da Parte 2 é **dedicado**, não
+  forçado na mecânica situation_check/suggestion do controlador — role-play de 4
+  sub-turnos (readback/reação/confirmação/discurso indireto) é estruturalmente diferente.
+  Correção do SDEA **nunca avalia fraseologia** (nem no readback), só proficiência
+  linguística — confirmado nos documentos oficiais da ANAC. Conteúdo de Parte 2/3/4 é
+  segregado por `aircraft_type` (`fixed_wing`/`rotary_wing`), sem fallback pro outro tipo
+  (diferente do `general` da Parte 1); Parte 4 de `rotary_wing` roda intencionalmente sem
+  conteúdo até haver fotos licenciadas — não usar fotos com marca d'água/sem licença clara
+  nem como placeholder temporário (achado real desta sessão).
 - Tela de Desempenho (Fase 6): **não mostrar evolução por critério ICAO individual**, só
   o nível geral (Fraco/Moderado/Bom) por simulado — proposital, não limitação a
   corrigir. Evita que a tela pareça afirmar um nível OACI oficial específico pro aluno;

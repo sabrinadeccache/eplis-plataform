@@ -1,20 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { client, MODEL_VERSION, extractText } from "@/lib/ai/anthropic-client";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-
-export const MODEL_VERSION = "claude-sonnet-5";
-
-// Extrai o primeiro bloco de texto da resposta. Sonnet 5 usa "thinking"
-// adaptativo por padrão — quando o modelo decide pensar, `content[0]` pode ser
-// um bloco de raciocínio em vez do texto, então indexar direto em [0] deixava
-// o feedback vazio de forma intermitente (bug real observado: feedback sumia
-// em algumas respostas e aparecia em outras). Desabilitamos thinking nas duas
-// chamadas abaixo (não precisamos de raciocínio pra feedback curto/JSON), e
-// ainda assim buscamos o bloco de texto explicitamente como defesa extra.
-function extractText(content: Anthropic.ContentBlock[]): string {
-  const block = content.find((b) => b.type === "text");
-  return block?.type === "text" ? block.text : "";
-}
+export { MODEL_VERSION };
 
 const SHORT_FEEDBACK_SYSTEM = `You are an EPLIS examiner (Brazilian aeronautical English
 proficiency exam, ICAO scale), speaking directly to the candidate as the interviewer would.
@@ -192,7 +178,11 @@ Responda APENAS com um JSON estrito, sem texto antes ou depois, no formato:
 // (diferente do `practice`, que já mostra um feedback curto após cada resposta) —
 // o relatório final é a única devolutiva que o candidato recebe, então precisa
 // compensar isso olhando pra entrevista como um todo, não só os 6 critérios.
-const OFFICIAL_MODE_ADDENDUM = `
+// Exportado (não só usado internamente) pra ser reaproveitado pela trilha do
+// piloto/SDEA (src/lib/ai/pilot-track.ts) — o texto já é redigido de forma
+// track-agnóstica ("a entrevista", sem mencionar partes específicas do
+// controlador), então não precisa de uma cópia própria.
+export const OFFICIAL_MODE_ADDENDUM = `
 
 Este candidato fez a entrevista no modo OFFICIAL, que não dá nenhum feedback durante
 a prova — o relatório abaixo é a ÚNICA devolutiva que ele recebe sobre toda a

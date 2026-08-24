@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mulberry32, hashStringToSeed, seededShuffle } from "@/lib/prng";
 import type { OperationalProfile, Part } from "@/types/database";
 
 export type Phase2Prompt = {
@@ -27,37 +28,6 @@ const PART3_CONCRETE_TIER = 1;
 const PART3_ABSTRACT_TIER = 2;
 const PART3_CONCRETE_COUNT = 2;
 const PART3_ABSTRACT_COUNT = 2;
-
-// PRNG determinístico simples (mulberry32) — mesmo attemptId sempre produz a
-// mesma sequência sorteada, sem precisar persistir os prompt_ids em nenhum
-// lugar novo do schema.
-function mulberry32(seed: number) {
-  let a = seed;
-  return function rng() {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function hashStringToSeed(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i++) {
-    hash = (hash * 31 + value.charCodeAt(i)) | 0;
-  }
-  return hash;
-}
-
-function seededShuffle<T>(items: T[], rng: () => number): T[] {
-  const arr = items.slice();
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
 
 type PromptRow = {
   id: string;

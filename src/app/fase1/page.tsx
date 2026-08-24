@@ -7,6 +7,7 @@ import { startAttempt } from "@/services/simulations/phase1/actions";
 export default async function Fase1Page() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.role === "pilot") redirect("/dashboard");
 
   return (
     <AppShell user={user}>

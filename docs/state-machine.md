@@ -94,3 +94,68 @@ Sem alteração em relação ao documento original:
 
 **Regra de nota final:** o nível reportado é sempre o menor entre os 6 critérios —
 nunca uma média (segue a mesma lógica de segurança operacional do exame real).
+
+---
+
+# State Machine da trilha do piloto (SDEA) **[NOVO, 2026-08-24]**
+
+Fluxo próprio, dedicado (decisão fechada com a Sabrina — não forçado na state machine da
+Fase 2 acima), implementado em `src/services/simulations/pilot/state-machine.ts` +
+`src/components/sdea/pilot-interview-runner.tsx`. `PART_SIZES` são diferentes do
+controlador (3/5/3/1, não 4/10/4/1), levantados a partir de 5 provas reais do SDEA (1
+prova-modelo oficial de avião + 4 provas reais de helicóptero).
+
+```
+PILOT_PART_1_INTRO
+ ↓
+PILOT_PART_1_QUESTION x3
+ ↓
+PILOT_PART_2_INTRO
+ ↓
+PILOT_PART_2_SITUATION x5
+   ├─ readback        (transforma a instrução do controlador em readback)
+   ├─ reaction         (reage a um imprevisto narrado pelo examinador, às vezes com foto)
+   ├─ confirmation      (confirma/nega um detalhe que o controlador perguntou de volta)
+   └─ report_back        (discurso indireto: "tell me everything the controller said")
+ ↓
+PILOT_PART_3_INTRO
+ ↓
+PILOT_PART_3_SITUATION x3
+   ├─ (narração automática do diálogo piloto/controlador, TTS)
+   ├─ report            (discurso indireto do diálogo inteiro)
+   ├─ question           (pergunta técnica/de opinião sobre o tema)
+   └─ comparison           (só no 3º item: compara as 3 situações — severidade/solução/prevenção)
+ ↓
+PILOT_PART_4_INTRO
+ ↓
+picture_description → narrative → discussion_1 → discussion_2 → agree_disagree
+ ↓
+INTERVIEW_FINISHED
+```
+
+Só `current_part`/`current_item_index` são persistidos (mesmo padrão do controlador) — os
+sub-estágios dentro de um item vivem só no estado local do client component; um reload no
+meio de um item reinicia os sub-estágios, mas não perde a posição de item.
+
+**Diferenças reais em relação à Parte 2/3 do controlador**, confirmadas nos documentos
+oficiais do SDEA:
+- A Parte 2 é um **role-play bidirecional de fraseologia** (o candidato interpreta o
+  piloto de uma aeronave fixa, call sign `ANAC 123`), não uma "situação pra comentar" —
+  por isso 4 sub-turnos por item em vez de 2.
+- A Parte 3 termina com um turno de **comparação entre as 3 situações**, que não existe
+  na Parte 3 do controlador.
+- Sem tiering concreto/abstrato nem ordenação por dificuldade nas Partes 2/3 (diferente do
+  controlador) — os documentos reais do SDEA não pedem isso.
+
+**Correção — mesma regra do controlador, com uma ressalva própria do exame:** nota final
+sempre o menor dos 6 critérios OACI, nunca média. A ressalva: os documentos oficiais do
+SDEA são explícitos que a produção oral **não é julgada pela precisão técnica ou
+operacional** — isso inclui fraseologia de radiotelefonia. Mesmo na Parte 2 (readback
+inclusive), a IA avalia só proficiência linguística (estrutura, clareza, fluência,
+compreensão), nunca se a fraseologia usada foi tecnicamente correta — ver
+`src/lib/ai/pilot-track.ts`.
+
+`official` vs. `practice` seguem exatamente as mesmas regras já descritas acima pro
+controlador (auto-gravação em 5s / 1 repetição / sem "Recomeçar" / zero feedback ao vivo no
+`official`; botão "Falar" manual / repetição ilimitada / feedback falado por resposta /
+"Pausar simulado" no `practice`) — comportamento comprovado, só reaproveitado.

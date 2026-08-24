@@ -5,15 +5,25 @@ import Link from "next/link";
 import { signOut } from "@/lib/auth/actions";
 import type { UserRow } from "@/types/database";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/fase1", label: "Fase 1" },
-  { href: "/fase2", label: "Fase 2" },
-  { href: "/desempenho", label: "Desempenho" },
-];
+function navItemsFor(role: UserRow["role"]) {
+  if (role === "pilot") {
+    return [
+      { href: "/dashboard", label: "Dashboard" },
+      { href: "/sdea", label: "SDEA" },
+      { href: "/desempenho", label: "Desempenho" },
+    ];
+  }
+  return [
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/fase1", label: "Fase 1" },
+    { href: "/fase2", label: "Fase 2" },
+    { href: "/desempenho", label: "Desempenho" },
+  ];
+}
 
 export function AppNav({ user }: { user: UserRow }) {
   const [open, setOpen] = useState(false);
+  const NAV_ITEMS = navItemsFor(user.role);
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-4">

@@ -26,7 +26,7 @@ const CRITERIA: { key: keyof SimulationFeedbackRow; label: string }[] = [
   { key: "interaction_score", label: "Interações" },
 ];
 
-export default async function Fase2ResultadoPage({
+export default async function SdeaResultadoPage({
   params,
 }: {
   params: Promise<{ attemptId: string }>;
@@ -34,7 +34,7 @@ export default async function Fase2ResultadoPage({
   const { attemptId } = await params;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role === "pilot") redirect("/dashboard");
+  if (user.role !== "pilot") redirect("/dashboard");
 
   const supabase = await createClient();
   const { data: attempt } = await supabase
@@ -43,8 +43,8 @@ export default async function Fase2ResultadoPage({
     .eq("id", attemptId)
     .single();
 
-  if (!attempt || attempt.user_id !== user.id || attempt.phase !== "phase2") notFound();
-  if (attempt.status === "in_progress") redirect(`/fase2/entrevista/${attemptId}`);
+  if (!attempt || attempt.user_id !== user.id || attempt.phase !== "pilot_interview") notFound();
+  if (attempt.status === "in_progress") redirect(`/sdea/entrevista/${attemptId}`);
 
   const { data: feedback } = await supabase
     .from("simulation_feedbacks")
@@ -53,8 +53,8 @@ export default async function Fase2ResultadoPage({
     .single();
 
   const { data: responses } = await supabase
-    .from("phase2_responses")
-    .select("response_stage, transcript, ai_feedback, phase2_prompts(part, prompt_text)")
+    .from("pilot_responses")
+    .select("response_stage, transcript, ai_feedback, pilot_prompts(part, prompt_text)")
     .eq("simulation_attempt_id", attemptId)
     .order("created_at", { ascending: true });
 
@@ -63,7 +63,7 @@ export default async function Fase2ResultadoPage({
   return (
     <AppShell user={user}>
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        Resultado — Fase 2
+        Resultado — SDEA
       </h1>
 
       {!feedback ? (
@@ -115,7 +115,7 @@ export default async function Fase2ResultadoPage({
       </h2>
       <div className="mt-3 space-y-3">
         {(responses ?? []).map((r: Record<string, unknown>, i: number) => {
-          const prompt = r.phase2_prompts as { part: string; prompt_text: string } | null;
+          const prompt = r.pilot_prompts as { part: string; prompt_text: string } | null;
           return (
             <div key={i} className="rounded-md border border-zinc-200 p-4 text-sm dark:border-zinc-800">
               <p className="text-xs text-zinc-400">
@@ -142,10 +142,10 @@ export default async function Fase2ResultadoPage({
       </div>
 
       <Link
-        href="/fase2"
+        href="/sdea"
         className="mt-8 inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-50"
       >
-        Fazer nova entrevista
+        Fazer novo simulado
       </Link>
     </AppShell>
   );

@@ -13,6 +13,7 @@ import {
 export default async function DesempenhoFase1Page() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.role === "pilot") redirect("/dashboard");
 
   const supabase = await createClient();
 

@@ -3,10 +3,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
-import {
-  Fase2ProgressChart,
-  type Fase2ChartPoint,
-} from "@/components/desempenho/fase2-progress-chart";
+import { SdeaProgressChart, type SdeaChartPoint } from "@/components/desempenho/sdea-progress-chart";
 import type { ProficiencyLevel } from "@/types/database";
 import { formatDate } from "@/lib/format-date";
 
@@ -22,10 +19,10 @@ const LEVEL_CLASS: Record<ProficiencyLevel, string> = {
   good: "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400",
 };
 
-export default async function DesempenhoFase2Page() {
+export default async function DesempenhoSdeaPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role === "pilot") redirect("/dashboard");
+  if (user.role !== "pilot") redirect("/dashboard");
 
   const supabase = await createClient();
 
@@ -33,7 +30,7 @@ export default async function DesempenhoFase2Page() {
     .from("simulation_attempts")
     .select("id, started_at, finished_at")
     .eq("user_id", user.id)
-    .eq("phase", "phase2")
+    .eq("phase", "pilot_interview")
     .eq("status", "completed")
     .order("finished_at", { ascending: false });
 
@@ -60,7 +57,7 @@ export default async function DesempenhoFase2Page() {
     level: levelByAttempt.get(attempt.id) ?? null,
   }));
 
-  const chartPoints: Fase2ChartPoint[] = rows
+  const chartPoints: SdeaChartPoint[] = rows
     .filter((r): r is { id: string; date: string; level: ProficiencyLevel } => r.level !== null)
     .map((r) => ({ attemptId: r.id, date: r.date, level: r.level }));
 
@@ -68,7 +65,7 @@ export default async function DesempenhoFase2Page() {
     <AppShell user={user}>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Desempenho — Fase 2
+          Desempenho — SDEA
         </h1>
         <Link
           href="/desempenho"
@@ -80,17 +77,17 @@ export default async function DesempenhoFase2Page() {
 
       {rows.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-          Você ainda não concluiu nenhum simulado da Fase 2.
+          Você ainda não concluiu nenhum simulado do SDEA.
         </p>
       ) : (
         <>
-          <Fase2ProgressChart points={chartPoints} />
+          <SdeaProgressChart points={chartPoints} />
 
           <div className="mt-6 space-y-2">
             {rows.map((row) => (
               <Link
                 key={row.id}
-                href={`/fase2/resultado/${row.id}`}
+                href={`/sdea/resultado/${row.id}`}
                 className="flex items-center justify-between rounded-md border border-zinc-200 p-4 text-sm transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
               >
                 <span className="text-zinc-900 dark:text-zinc-50">Simulado {row.date}</span>

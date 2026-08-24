@@ -3,8 +3,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import { SubmitButton } from "@/components/auth/submit-button";
-import { startAttempt, abandonAndRestartAttempt } from "@/services/simulations/phase2/actions";
-import { countAttemptsToday, DAILY_ATTEMPT_LIMIT } from "@/services/simulations/phase2/limits";
+import { startAttempt, abandonAndRestartAttempt } from "@/services/simulations/pilot/actions";
+import { countAttemptsToday, PILOT_DAILY_ATTEMPT_LIMIT } from "@/services/simulations/pilot/limits";
 import type { Part } from "@/types/database";
 
 const PART_LABEL: Record<Part, string> = {
@@ -14,46 +14,57 @@ const PART_LABEL: Record<Part, string> = {
   part4: "Parte 4",
 };
 
-export default async function Fase2Page() {
+export default async function SdeaPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role === "pilot") redirect("/dashboard");
+  if (user.role !== "pilot") redirect("/dashboard");
+
+  if (!user.operational_profile || user.operational_profile === "general") {
+    return (
+      <AppShell user={user}>
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">SDEA</h1>
+        <p className="mt-2 max-w-lg text-sm text-zinc-500 dark:text-zinc-400">
+          Pra iniciar o simulado, primeiro defina seu perfil operacional (avião ou
+          helicóptero) no seu perfil.
+        </p>
+        <a
+          href="/perfil"
+          className="mt-4 inline-block rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          Completar perfil
+        </a>
+      </AppShell>
+    );
+  }
 
   const supabase = await createClient();
-  // Pausar só existe no modo practice (o official é fiel ao exame real, sem
-  // segunda chance) — ver `pauseAttempt` em InterviewRunner. Uma tentativa
-  // `practice` pausada fica `in_progress` aguardando aqui até ser retomada
-  // ou abandonada explicitamente.
   const { data: pausedAttempt } = await supabase
     .from("simulation_attempts")
     .select("id, current_part, current_item_index")
     .eq("user_id", user.id)
-    .eq("phase", "phase2")
+    .eq("phase", "pilot_interview")
     .eq("mode", "practice")
     .eq("status", "in_progress")
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  // Retomar uma tentativa pausada não conta como um novo simulado, então só
-  // checamos o limite diário quando não há nenhuma pausada — sem isso,
-  // alguém perto do limite não conseguiria nem voltar pra terminar a que já
-  // tinha começado.
   const attemptsToday = pausedAttempt ? 0 : await countAttemptsToday(supabase, user.id);
-  const limitReached = attemptsToday >= DAILY_ATTEMPT_LIMIT;
+  const limitReached = attemptsToday >= PILOT_DAILY_ATTEMPT_LIMIT;
 
   return (
     <AppShell user={user}>
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Fase 2</h1>
+      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">SDEA</h1>
       <p className="mt-2 max-w-lg text-sm text-zinc-500 dark:text-zinc-400">
-        Entrevista simulada: 4 partes — perguntas pessoais, situações operacionais, perguntas
-        abertas e uma imagem para descrever e narrar. Escolha o modo:
+        Santos Dumont English Assessment simulado: 4 partes — perguntas sobre aviação,
+        interação por rádio com o controle, situações inesperadas e uma foto para
+        descrever e discutir. Escolha o modo:
       </p>
 
       {limitReached && (
         <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          Você atingiu o limite de {DAILY_ATTEMPT_LIMIT} simulados da Fase 2 por dia. Volte amanhã
-          para iniciar um novo.
+          Você atingiu o limite de {PILOT_DAILY_ATTEMPT_LIMIT} simulados do SDEA por dia. Volte
+          amanhã para iniciar um novo.
         </div>
       )}
 
@@ -67,7 +78,7 @@ export default async function Fase2Page() {
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <a
-                href={`/fase2/entrevista/${pausedAttempt.id}`}
+                href={`/sdea/entrevista/${pausedAttempt.id}`}
                 className="rounded-md bg-amber-900 px-4 py-2 text-sm font-medium text-white dark:bg-amber-200 dark:text-amber-950"
               >
                 Continuar simulado
@@ -97,7 +108,7 @@ export default async function Fase2Page() {
           <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
             <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Official</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Sem feedback durante a entrevista — só o relatório completo ao final. A gravação
+              Sem feedback durante o simulado — só o relatório completo ao final. A gravação
               começa automaticamente 5s depois de cada pergunta (sem botão &quot;Falar&quot;), só 1
               repetição de pergunta por item, e sem opção de recomeçar a resposta. Fiel ao exame
               real.
