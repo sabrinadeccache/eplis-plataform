@@ -5,12 +5,20 @@ import { createClient } from "@/lib/supabase/server";
 import { generateSpeechAudio } from "@/lib/ai/openai";
 import { generateFinalReport, MODEL_VERSION } from "@/lib/ai/anthropic";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
+import { DAILY_ATTEMPT_LIMIT, countAttemptsToday } from "@/services/simulations/phase2/limits";
 import type { Part, SimulationMode } from "@/types/database";
 
 export async function startAttempt(mode: SimulationMode) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
+
+  const attemptsToday = await countAttemptsToday(supabase, auth.user.id);
+  if (attemptsToday >= DAILY_ATTEMPT_LIMIT) {
+    throw new Error(
+      `Limite de ${DAILY_ATTEMPT_LIMIT} simulados da Fase 2 por dia atingido. Tente novamente amanhã.`,
+    );
+  }
 
   const { data, error } = await supabase
     .from("simulation_attempts")
@@ -82,7 +90,31 @@ export async function assertOwnAttemptInProgress(
   return attempt;
 }
 
-export async function generateSpeech(text: string): Promise<{ audioBase64: string; mimeType: string }> {
+// Maior texto real que passa por aqui é o feedback curto por resposta
+// (`generateResponseFeedback`, max_tokens 300 ≈ 1200 caracteres no pior
+// caso) — a folga cobre isso com margem sem deixar a rota aceitar texto
+// arbitrário de tamanho ilimitado.
+const MAX_SPEECH_TEXT_LENGTH = 1500;
+
+// Exige o attemptId (antes a Server Action aceitava qualquer string,
+// autenticada ou não, sem vínculo com uma entrevista real) — sem isso um
+// usuário autenticado podia chamar generateSpeech direto com texto arbitrário
+// repetidamente e gerar custo de TTS sem nenhuma relação com o fluxo real da
+// entrevista. Reaproveita a mesma checagem de posse/estado de
+// assertOwnAttemptInProgress usada pelo resto da Fase 2.
+export async function generateSpeech(
+  attemptId: string,
+  text: string,
+): Promise<{ audioBase64: string; mimeType: string }> {
+  if (text.length > MAX_SPEECH_TEXT_LENGTH) {
+    throw new Error("Texto muito longo para narração.");
+  }
+
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error("Não autenticado.");
+  await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
+
   const { buffer, mimeType } = await generateSpeechAudio(text);
   return { audioBase64: buffer.toString("base64"), mimeType };
 }

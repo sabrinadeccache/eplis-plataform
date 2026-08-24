@@ -899,8 +899,109 @@ Fase 1 com mais áudios reais.
       público. Observabilidade (Sentry) já feita — ver "Atualização (2026-08-19) —
       observabilidade" acima. Responsividade: cabeçalho (`AppShell`) corrigido em
       2026-08-21 (menu mobile) — ver "Atualização (2026-08-21)" acima; resto do fluxo já
-      validado responsivo na mesma rodada, sem mudança necessária. Faltam: testes
-      automatizados e deploy público (hoje só a Sabrina tem acesso).
+      validado responsivo na mesma rodada, sem mudança necessária. Testes automatizados:
+      suíte inicial criada em 2026-08-22 (ver "Atualização (2026-08-22) — testes
+      automatizados" abaixo). Proteção de custo de IA antes do lançamento público: limite
+      diário de tentativas da Fase 2 e trava de posse no `generateSpeech` implementados em
+      2026-08-22 (ver "Atualização (2026-08-22) — proteção de custo" abaixo). Falta:
+      decidir/anunciar o lançamento público em si (hoje só a Sabrina tem acesso, mas não
+      há mais nenhuma trava técnica óbvia impedindo abrir o cadastro).
+
+## Atualização (2026-08-22) — testes automatizados (início da cobertura da Fase 7)
+
+Projeto não tinha nenhum framework de teste. Instalado **Vitest** (`vitest.config.mts`,
+ambiente `jsdom`) + Testing Library (`@testing-library/react`, `@testing-library/jest-dom`)
+como devDependencies, com `npm run test` (`vitest run`) novo no `package.json`. Escolhido
+Vitest em vez de Jest por já compartilhar a config do Vite/esbuild que o ecossistema Next
+usa, sem precisar de transform extra pra TS/JSX. `vitest.setup.ts` faz stub de
+`HTMLMediaElement.prototype.play/pause` (jsdom não implementa reprodução de mídia — sem o
+stub, qualquer `<audio>.play()` real dos runners de Fase 1/Fase 2 lança "not implemented"
+antes de chegar na lógica que importa).
+
+Cobertura inicial (11 testes, 4 arquivos) priorizou a classe de bug que já se repetiu
+duas vezes neste projeto — race condition de avanço por clique duplo/timer concorrente
+(`Phase1Runner.advance`, corrigido em 2026-08-19; `InterviewRunner.goToNextItem`,
+corrigido em 2026-08-22, ambos documentados acima) — e a lógica pura mais arriscada de
+regredir silenciosamente:
+
+- **`state-machine.test.ts`**: `computeNextPosition` (Fase 2) — avanço dentro da mesma
+  parte, transição pra intro da próxima parte, e retorno `null` ao terminar a Parte 4.
+- **`queries.test.ts`**: `getSequenceForAttempt` (Fase 2) — determinismo do PRNG seedado
+  por `attemptId` (mesmo attempt sempre sorteia a mesma sequência, attempts diferentes
+  sorteiam sequências diferentes), tamanhos corretos por parte, sem repetição de item, e
+  a regra de Parte 3 (2 primeiras concretas + 2 últimas abstratas, sempre nessa ordem) —
+  essa é a regra que ficou documentada no schema por meses sem estar implementada até
+  2026-08-19, o tipo de regressão silenciosa que um teste pego cedo evita. `createClient`
+  do Supabase mockado via `vi.mock` (sem bater no banco real).
+- **`phase1-runner.test.tsx`** e **`interview-runner.test.tsx`**: montam o componente de
+  verdade (Testing Library) e disparam dois cliques rápidos no botão de avanço na tela de
+  resposta/feedback — replica o cenário real que gerou os dois bugs de produção — e
+  verificam que a Server Action de avanço (`recordAnswer`/`finishAttempt`/`advanceState`,
+  todas mockadas) só é chamada uma vez. `interview-runner.test.tsx` também mocka
+  `MediaRecorder`, `navigator.mediaDevices.getUserMedia` e `fetch` (não existem/não fazem
+  sentido em jsdom) com um fake mínimo só do necessário pro fluxo Falar → Concluir e
+  enviar → Continuar.
+
+**Fora do escopo desta rodada** (avaliar depois): testes E2E de verdade (Playwright,
+hoje só usado ad-hoc em sessões de teste manual, não como suíte no repo), testes de
+grading da Fase 1 e do parsing do relatório final da Fase 2 (`src/lib/ai/anthropic.ts`),
+e testes das Server Actions em si (exigiriam mockar Supabase mais a fundo — a cobertura
+de hoje mocka no nível de módulo de ações/queries, não a Server Action inteira).
+
+`npx tsc --noEmit`, `npm run lint`, `npm run build` (produção) e `npm run test` (11/11)
+todos limpos.
+
+## Atualização (2026-08-22) — proteção de custo de IA antes do lançamento público
+
+Discutido com a Sabrina o que "deploy público" realmente implica: o cadastro
+(`/cadastro`) já é público hoje, só exige confirmação de e-mail — não há aprovação
+manual nem nenhum teto de uso. Cada tentativa completa da Fase 2 dispara várias chamadas
+pagas (Whisper por resposta, TTS por estágio narrado pela IA, Claude no relatório final)
+sem nenhum limite — hoje o único freio é o limite de gasto configurado na própria conta
+OpenAI/Anthropic. Decisão: em vez de fechar o cadastro atrás de convite (adiaria o
+lançamento público de verdade), adicionar um teto de custo simples antes de divulgar o
+link. Duas mudanças:
+
+- **Limite diário de tentativas da Fase 2** (`DAILY_ATTEMPT_LIMIT = 5`, novo módulo
+  `src/services/simulations/phase2/limits.ts`): `startAttempt` conta quantas tentativas
+  (qualquer status) o usuário já iniciou desde a meia-noite local e recusa uma nova acima
+  do limite. A tela `/fase2` já checa o mesmo limite no Server Component e some com os
+  botões de iniciar, mostrando um aviso âmbar em vez de deixar o clique estourar como
+  erro genérico — retomar uma tentativa `practice` pausada não conta pro limite (senão
+  alguém perto do teto não conseguiria nem voltar pra terminar a que já tinha começado).
+  Fase 1 ficou de fora de propósito — não faz nenhuma chamada de IA (grading é comparação
+  direta com `correct_option`), então não tem o mesmo risco de custo.
+  **Achado durante a implementação**: `DAILY_ATTEMPT_LIMIT` e `countAttemptsToday`
+  inicialmente foram colocados direto em `actions.ts`, que já é `"use server"` — quebrou
+  o build inteiro do módulo ("The module has no exports at all") porque um arquivo
+  `"use server"` só pode exportar funções async (constantes e funções que recebem
+  argumento não serializável, como o client do Supabase, não são permitidas). Corrigido
+  extraindo os dois pra `limits.ts` (módulo comum, sem a diretiva), importado tanto pela
+  Server Action quanto pelo Server Component da página.
+- **`generateSpeech` (TTS) passou a exigir `attemptId`**: antes aceitava qualquer string
+  de texto de um usuário autenticado, sem nenhum vínculo com uma entrevista real — dava
+  pra chamar a Server Action direto (fora do fluxo normal da UI) com texto arbitrário
+  repetidamente e gerar custo de TTS sem relação nenhuma com um simulado de verdade.
+  Agora reaproveita `assertOwnAttemptInProgress` (mesma checagem de posse/estado já usada
+  pelo resto da Fase 2) e rejeita texto acima de 1500 caracteres (folga generosa acima do
+  maior texto real que passa por ali — o feedback curto por resposta, limitado a
+  `max_tokens: 300` no Claude). Os dois pontos de chamada em `interview-runner.tsx`
+  atualizados para passar `attemptId`.
+
+Cobertura de teste ampliada: `actions.test.ts` (novo) cobre `generateSpeech` — sucesso,
+texto longo demais, sem sessão, tentativa de outro usuário, tentativa já concluída — com
+Supabase mockado no mesmo padrão de `queries.test.ts`. Suíte total foi de 11 para 16
+testes. `npx tsc --noEmit`, `npm run lint`, `npm run build` e `npm run test` (16/16)
+todos limpos.
+
+**Ainda em aberto**: os limites (5/dia, 1500 caracteres) são estimativas razoáveis, não
+calibradas com uso real — reavaliar depois de alguém de fora usar de verdade. Sem
+rate-limit por minuto (só diário) — não protege contra um script que dispara muitas
+chamadas em poucos segundos dentro do teto diário; aceitável por ora porque cada
+`generateSpeech` já está amarrado a uma tentativa própria em andamento (não dá pra ter
+tentativas `in_progress` ilimitadas rodando ao mesmo tempo sem também estourar o limite
+diário de tentativas). Nada foi commitado/enviado para produção ainda nesta sessão —
+mudança pronta, aguardando decisão de commit/push.
 
 ## Decisões de design já fechadas (não reabrir sem motivo novo)
 

@@ -276,7 +276,7 @@ export function InterviewRunner({
     audio.addEventListener("error", onFinished);
 
     let cancelled = false;
-    generateSpeech(step.text)
+    generateSpeech(attemptId, step.text)
       .then(({ audioBase64, mimeType }) => {
         if (cancelled) return;
         audio.src = `data:${mimeType};base64,${audioBase64}`;
@@ -296,7 +296,7 @@ export function InterviewRunner({
       audio.removeEventListener("ended", onFinished);
       audio.removeEventListener("error", onFinished);
     };
-  }, [part, itemIndex, stepIndex, sequence]);
+  }, [part, itemIndex, stepIndex, sequence, attemptId]);
 
   // Clique real do usuário — o navegador aceita isso como gesto válido pra
   // desbloquear autoplay no elemento de áudio daqui em diante, mesmo que o
@@ -452,7 +452,7 @@ export function InterviewRunner({
         if (result.feedback) {
           setAwaitingFeedbackSpeech(true);
           try {
-            const speech = await generateSpeech(result.feedback);
+            const speech = await generateSpeech(attemptId, result.feedback);
             const audio = audioRef.current;
             if (!audio) {
               setAwaitingFeedbackSpeech(false);

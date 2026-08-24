@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { startAttempt, abandonAndRestartAttempt } from "@/services/simulations/phase2/actions";
+import { countAttemptsToday, DAILY_ATTEMPT_LIMIT } from "@/services/simulations/phase2/limits";
 import type { Part } from "@/types/database";
 
 const PART_LABEL: Record<Part, string> = {
@@ -33,6 +34,13 @@ export default async function Fase2Page() {
     .limit(1)
     .maybeSingle();
 
+  // Retomar uma tentativa pausada não conta como um novo simulado, então só
+  // checamos o limite diário quando não há nenhuma pausada — sem isso,
+  // alguém perto do limite não conseguiria nem voltar pra terminar a que já
+  // tinha começado.
+  const attemptsToday = pausedAttempt ? 0 : await countAttemptsToday(supabase, user.id);
+  const limitReached = attemptsToday >= DAILY_ATTEMPT_LIMIT;
+
   return (
     <AppShell user={user}>
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Fase 2</h1>
@@ -40,6 +48,13 @@ export default async function Fase2Page() {
         Entrevista simulada: 4 partes — perguntas pessoais, situações operacionais, perguntas
         abertas e uma imagem para descrever e narrar. Escolha o modo:
       </p>
+
+      {limitReached && (
+        <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          Você atingiu o limite de {DAILY_ATTEMPT_LIMIT} simulados da Fase 2 por dia. Volte amanhã
+          para iniciar um novo.
+        </div>
+      )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {pausedAttempt ? (
@@ -63,7 +78,7 @@ export default async function Fase2Page() {
               </form>
             </div>
           </div>
-        ) : (
+        ) : !limitReached ? (
           <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
             <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Practice</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -75,20 +90,22 @@ export default async function Fase2Page() {
               <SubmitButton>Iniciar modo practice</SubmitButton>
             </form>
           </div>
-        )}
+        ) : null}
 
-        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Official</h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Sem feedback durante a entrevista — só o relatório completo ao final. A gravação
-            começa automaticamente 5s depois de cada pergunta (sem botão &quot;Falar&quot;), só 1
-            repetição de pergunta por item, e sem opção de recomeçar a resposta. Fiel ao exame
-            real.
-          </p>
-          <form action={startAttempt.bind(null, "official")} className="mt-4">
-            <SubmitButton>Iniciar modo official</SubmitButton>
-          </form>
-        </div>
+        {!limitReached && (
+          <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Official</h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Sem feedback durante a entrevista — só o relatório completo ao final. A gravação
+              começa automaticamente 5s depois de cada pergunta (sem botão &quot;Falar&quot;), só 1
+              repetição de pergunta por item, e sem opção de recomeçar a resposta. Fiel ao exame
+              real.
+            </p>
+            <form action={startAttempt.bind(null, "official")} className="mt-4">
+              <SubmitButton>Iniciar modo official</SubmitButton>
+            </form>
+          </div>
+        )}
       </div>
     </AppShell>
   );
