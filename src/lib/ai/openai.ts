@@ -13,10 +13,13 @@ export async function transcribeAudio(buffer: Buffer, filename: string): Promise
   return result.text;
 }
 
-export async function generateSpeechAudio(text: string): Promise<{ buffer: Buffer; mimeType: string }> {
+export async function generateSpeechAudio(
+  text: string,
+  voice: "alloy" | "echo" | "onyx" | "nova" | "shimmer" | "fable" = "alloy",
+): Promise<{ buffer: Buffer; mimeType: string }> {
   const response = await client.audio.speech.create({
     model: "tts-1",
-    voice: "alloy",
+    voice,
     input: text,
     response_format: "mp3",
   });

@@ -191,12 +191,15 @@ separadas):
 | aircraft_type | enum, nullable | mesmo enum `operational_profile` — `fixed_wing`, `rotary_wing`, ou `general` (só a Parte 1, perguntas de carreira agnósticas ao tipo de aeronave, usa `general`) |
 | prompt_text | text | Parte1: a pergunta. Parte2: frase de contexto do examinador antes do 1º áudio. Parte3: transcrição do diálogo piloto/controlador narrado. Parte4: enunciado da tarefa da foto |
 | atc_audio_text | text, nullable | Parte2: instrução do controlador (1º áudio) que o candidato transforma em readback |
+| atc_audio_url | text, nullable | **[2026-08-28]** Parte2: mp3 pré-gerado de `atc_audio_text` (TTS voz `onyx` + efeito de rádio VHF), bucket público `pilot-prompt-audio`. `null` → runner cai no TTS em runtime. Gerado por `scripts/generate-pilot-prompt-audio.mjs` |
 | expected_readback | text, nullable | Parte2: referência de readback esperado — só contexto pra IA, nunca mostrado ao candidato |
 | complication_text | text, nullable | Parte2: narração do examinador sobre o imprevisto que motiva a reação do candidato |
 | complication_image_url | text, nullable | Parte2: foto do imprevisto, quando a complicação é introduzida por imagem em vez de só texto (2 das 5 situações reais levantadas) |
 | expected_reaction | text, nullable | Parte2: referência da reação esperada — só pra IA |
 | atc_followup_audio_text | text, nullable | Parte2: resposta do controlador (2º áudio), geralmente pedindo confirmação/negação de um detalhe |
+| atc_followup_audio_url | text, nullable | **[2026-08-28]** Parte2: mp3 pré-gerado de `atc_followup_audio_text` (mesmo pipeline de `atc_audio_url`) |
 | expected_confirmation | text, nullable | Parte2: referência da confirmação esperada — só pra IA |
+| dialogue_audio_url | text, nullable | **[2026-08-28]** Parte3: mp3 pré-gerado de `prompt_text` (diálogo `Pilot:`/`ATC:` — voz `echo` p/ piloto, `onyx` p/ ATC, efeito de rádio, falas concatenadas). O runner toca **duas vezes** (fidelidade ao exame real). `null` → TTS em runtime |
 | discussion_question | text, nullable | Parte3: pergunta técnica/de opinião feita após o relato da situação. Parte4: 1ª pergunta de discussão sobre o tema da foto |
 | discussion_question_2 | text, nullable | Parte4: 2ª pergunta de discussão |
 | image_url | text, nullable | Parte4: foto principal do item |

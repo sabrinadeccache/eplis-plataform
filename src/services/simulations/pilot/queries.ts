@@ -9,12 +9,15 @@ export type PilotPrompt = {
   part: Part;
   promptText: string;
   atcAudioText: string | null;
+  atcAudioUrl: string | null;
   expectedReadback: string | null;
   complicationText: string | null;
   complicationImageUrl: string | null;
   expectedReaction: string | null;
   atcFollowupAudioText: string | null;
+  atcFollowupAudioUrl: string | null;
   expectedConfirmation: string | null;
+  dialogueAudioUrl: string | null;
   discussionQuestion: string | null;
   discussionQuestion2: string | null;
   imageUrl: string | null;
@@ -36,12 +39,15 @@ type PromptRow = {
   part: Part;
   prompt_text: string;
   atc_audio_text: string | null;
+  atc_audio_url: string | null;
   expected_readback: string | null;
   complication_text: string | null;
   complication_image_url: string | null;
   expected_reaction: string | null;
   atc_followup_audio_text: string | null;
+  atc_followup_audio_url: string | null;
   expected_confirmation: string | null;
+  dialogue_audio_url: string | null;
   discussion_question: string | null;
   discussion_question_2: string | null;
   image_url: string | null;
@@ -56,12 +62,15 @@ function toPrompt(row: PromptRow): PilotPrompt {
     part: row.part,
     promptText: row.prompt_text,
     atcAudioText: row.atc_audio_text,
+    atcAudioUrl: row.atc_audio_url,
     expectedReadback: row.expected_readback,
     complicationText: row.complication_text,
     complicationImageUrl: row.complication_image_url,
     expectedReaction: row.expected_reaction,
     atcFollowupAudioText: row.atc_followup_audio_text,
+    atcFollowupAudioUrl: row.atc_followup_audio_url,
     expectedConfirmation: row.expected_confirmation,
+    dialogueAudioUrl: row.dialogue_audio_url,
     discussionQuestion: row.discussion_question,
     discussionQuestion2: row.discussion_question_2,
     imageUrl: row.image_url,
@@ -71,9 +80,10 @@ function toPrompt(row: PromptRow): PilotPrompt {
 }
 
 const PROMPT_COLUMNS =
-  "id, part, prompt_text, atc_audio_text, expected_readback, complication_text, complication_image_url, " +
-  "expected_reaction, atc_followup_audio_text, expected_confirmation, discussion_question, " +
-  "discussion_question_2, image_url, agree_disagree_statement, expected_duration_seconds, order_index";
+  "id, part, prompt_text, atc_audio_text, atc_audio_url, expected_readback, complication_text, " +
+  "complication_image_url, expected_reaction, atc_followup_audio_text, atc_followup_audio_url, " +
+  "expected_confirmation, dialogue_audio_url, discussion_question, discussion_question_2, image_url, " +
+  "agree_disagree_statement, expected_duration_seconds, order_index";
 
 export async function getSequenceForAttempt(
   attemptId: string,

@@ -24,7 +24,16 @@ const PART_INTRO_TEXT: Record<Part, string> = {
 };
 
 type StepKind = "auto" | "response";
-type Step = { stage: PilotResponseStage | "intro"; kind: StepKind; durationSeconds?: number; text: string };
+type Step = {
+  stage: PilotResponseStage | "intro";
+  kind: StepKind;
+  durationSeconds?: number;
+  text: string;
+  // Parte 2 (falas do ATC) e Parte 3 (gravação piloto/controlador): áudio
+  // pré-gerado com efeito de rádio. Quando presente, o runner toca o arquivo
+  // direto; quando null, cai no TTS em runtime de `text`.
+  audioUrl?: string;
+};
 
 function buildSteps(part: Part, itemIndex: number, prompt: PilotPrompt): Step[] {
   const steps: Step[] = [];
@@ -38,9 +47,19 @@ function buildSteps(part: Part, itemIndex: number, prompt: PilotPrompt): Step[] 
   }
 
   if (part === "part2") {
-    steps.push({ stage: "readback", kind: "response", text: prompt.atcAudioText ?? "" });
+    steps.push({
+      stage: "readback",
+      kind: "response",
+      text: prompt.atcAudioText ?? "",
+      audioUrl: prompt.atcAudioUrl ?? undefined,
+    });
     steps.push({ stage: "reaction", kind: "response", text: prompt.complicationText ?? "" });
-    steps.push({ stage: "confirmation", kind: "response", text: prompt.atcFollowupAudioText ?? "" });
+    steps.push({
+      stage: "confirmation",
+      kind: "response",
+      text: prompt.atcFollowupAudioText ?? "",
+      audioUrl: prompt.atcFollowupAudioUrl ?? undefined,
+    });
     steps.push({
       stage: "report_back",
       kind: "response",
@@ -53,7 +72,13 @@ function buildSteps(part: Part, itemIndex: number, prompt: PilotPrompt): Step[] 
     // Narra o diálogo piloto/controlador (o candidato só escuta, não interage
     // como piloto aqui) e avança sozinho pro turno de relato, igual ao step
     // "auto" de introdução de parte.
-    steps.push({ stage: "report", kind: "auto", durationSeconds: 3, text: prompt.promptText });
+    steps.push({
+      stage: "report",
+      kind: "auto",
+      durationSeconds: 3,
+      text: prompt.promptText,
+      audioUrl: prompt.dialogueAudioUrl ?? undefined,
+    });
     steps.push({
       stage: "report",
       kind: "response",
@@ -234,14 +259,20 @@ export function PilotInterviewRunner({
   }, []);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    const audioMaybe = audioRef.current;
+    if (!audioMaybe) return;
+    const audio = audioMaybe;
 
     const step = stepAt(sequence, part, itemIndex, stepIndex);
+    // Gravação da Parte 3 (áudio pré-gerado, step "auto"): o exame real toca
+    // cada situação duas vezes (doc "Modelo SDEA com anotações", pág. 5).
+    const playTwice = Boolean(step.audioUrl) && step.kind === "auto";
     let finished = false;
+    let playsDone = 0;
     let advanceTimeout: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
 
-    function onFinished() {
+    function finish() {
       if (finished) return;
       finished = true;
       if (step.kind === "response") {
@@ -251,29 +282,47 @@ export function PilotInterviewRunner({
       }
     }
 
-    audio.addEventListener("ended", onFinished);
-    audio.addEventListener("error", onFinished);
-
-    let cancelled = false;
-    generateSpeech(attemptId, step.text)
-      .then(({ audioBase64, mimeType }) => {
-        if (cancelled) return;
-        audio.src = `data:${mimeType};base64,${audioBase64}`;
-        audio.play().catch((err) => {
+    function onEnded() {
+      playsDone += 1;
+      if (playTwice && playsDone < 2 && !cancelled) {
+        advanceTimeout = setTimeout(() => {
           if (cancelled) return;
-          if (isAutoplayBlocked(err)) setAudioBlocked(true);
-          onFinished();
-        });
-      })
-      .catch(() => {
-        if (!cancelled) onFinished();
+          audio.currentTime = 0;
+          audio.play().catch(() => finish());
+        }, 1500);
+        return;
+      }
+      finish();
+    }
+
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", finish);
+
+    function playSrc(src: string) {
+      if (cancelled) return;
+      audio.src = src;
+      audio.play().catch((err) => {
+        if (cancelled) return;
+        if (isAutoplayBlocked(err)) setAudioBlocked(true);
+        finish();
       });
+    }
+
+    if (step.audioUrl) {
+      playSrc(step.audioUrl);
+    } else {
+      generateSpeech(attemptId, step.text)
+        .then(({ audioBase64, mimeType }) => playSrc(`data:${mimeType};base64,${audioBase64}`))
+        .catch(() => {
+          if (!cancelled) finish();
+        });
+    }
 
     return () => {
       cancelled = true;
       if (advanceTimeout) clearTimeout(advanceTimeout);
-      audio.removeEventListener("ended", onFinished);
-      audio.removeEventListener("error", onFinished);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", finish);
     };
   }, [part, itemIndex, stepIndex, sequence, attemptId]);
 

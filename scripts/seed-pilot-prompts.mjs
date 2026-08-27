@@ -13,7 +13,8 @@
 //
 // Uso: `node scripts/seed-pilot-prompts.mjs` (rode
 // scripts/upload-pilot-part2-part4-images.mjs antes, pra as fotos da Parte
-// 2/4 já existirem no bucket).
+// 2/4 já existirem no bucket; e scripts/generate-pilot-prompt-audio.mjs
+// DEPOIS, pra gerar os áudios de rádio das Partes 2 e 3).
 import { readFileSync } from "node:fs";
 import { Client } from "pg";
 import { publicUrlFor } from "./upload-pilot-part2-part4-images.mjs";

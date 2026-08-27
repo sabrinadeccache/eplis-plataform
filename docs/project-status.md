@@ -76,6 +76,34 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-28) — Áudios de rádio da Parte 2 e Parte 3 (SDEA)
+
+Antes, todo áudio da entrevista do piloto era TTS em runtime (`generateSpeech` →
+`tts-1`/`alloy`), uma voz só, sem efeito. O documento (pág. 7) pede que as falas do
+controlador na Parte 2 e as gravações da Parte 3 sejam **sintéticas, com voz distinta e
+efeito de rádio/ruído**; a pág. 5 pede que cada gravação da Parte 3 **toque 2×**.
+
+- **Pipeline de pré-geração** (`scripts/generate-pilot-prompt-audio.mjs`, idempotente,
+  `--force` regenera): para cada `pilot_prompts` ativo das Partes 2/3 → TTS OpenAI
+  (`gpt-4o-mini-tts`, voz `onyx` p/ ATC, `echo` p/ piloto) → `ffmpeg` aplica rádio VHF
+  (passa-banda 300–3400 Hz + compressão + estática pink ~-20 dB + clique de PTT) → mp3
+  no bucket público **`pilot-prompt-audio`** → grava a URL em `pilot_prompts`.
+  Parte 3: parseia `prompt_text` (`Pilot:`/`ATC:`) com `src/lib/atc-dialogue.ts` e
+  concatena as falas com 250 ms de silêncio.
+- **Schema** (`20260828000000_pilot_prompt_audio_urls.sql`): 3 colunas nullable em
+  `pilot_prompts` — `atc_audio_url`, `atc_followup_audio_url`, `dialogue_audio_url`.
+  Nullable de propósito: URL `null` → runner cai no TTS em runtime, conteúdo sem áudio
+  gerado continua funcionando.
+- **Runner** (`src/components/sdea/pilot-interview-runner.tsx`): `Step` ganhou
+  `audioUrl`; quando presente toca o arquivo direto (sem `generateSpeech`). A narração
+  do examinador continua TTS `alloy`, sem efeito. O step "auto" da gravação da Parte 3
+  toca 2× (pausa de 1,5 s entre as duas). "Repetir pergunta" já opera sobre o `<audio>`.
+- **Ordem de execução**: `seed-pilot-prompts.mjs` → `generate-pilot-prompt-audio.mjs`
+  (mesma relação seed↔upload que já existe com as imagens da Parte 2/4).
+- **Escala futura**: quando o pool crescer pras 10 provas (200 áudios Parte 2 / 60
+  Parte 3), o script cobre automaticamente — é só rodar de novo.
+- `tsc`/`lint`/`test` (42/42, +5 do parser) e `build` limpos.
+
 ## Atualização (2026-08-27) — Demonstrativo por parte no modo Official
 
 Regra da pág. 8 do "Modelo SDEA com anotações": no modo `official` o relatório geral
