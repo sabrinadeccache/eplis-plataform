@@ -162,7 +162,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | simulation_attempt_id | uuid → simulation_attempts | |
 | phase | enum | `phase1`, `phase2`, `pilot_interview` |
 | overall_score | text/numeric | Fase 1: percentual. Fase 2/SDEA: estimativa geral (menor dos 6 critérios) |
-| pronunciation_score / structure_score / vocabulary_score / fluency_score / comprehension_score / interaction_score | enum | MVP: `weak`, `moderate`, `good` — evolução futura: escala numérica OACI 1–6 |
+| pronunciation_score / structure_score / vocabulary_score / fluency_score / comprehension_score / interaction_score | enum `public.proficiency_level` | 4 faixas (**[2026-08-27]**, migration `20260827000000_add_excellent_proficiency_level.sql`): `weak` = Fraco (N1–N3), `moderate` = Moderado (N4), `good` = Ótimo (N5), `excellent` = Excelente (N6). Antes eram 3 (`good` rotulado "Bom"); linhas históricas com `good` passam a ser exibidas como "Ótimo", sem migração de dados. Evolução futura: escala numérica OACI 1–6 |
 | general_feedback | text | |
 | ai_provider | text, nullable | |
 | model_version | text, nullable | |
@@ -260,5 +260,6 @@ pilot_response_stage: main | readback | reaction | confirmation | report_back
                | report | question | comparison
                | picture_description | narrative | discussion_1 | discussion_2 | agree_disagree
 processing_status: queued | transcribing | analyzing | done | error
-proficiency_level: weak | moderate | good (MVP) — evolução futura: escala numérica OACI 1–6
+proficiency_level: weak | moderate | good | excellent
+               (Fraco N1-N3 | Moderado N4 | Ótimo N5 | Excelente N6) — evolução futura: escala numérica OACI 1–6
 ```

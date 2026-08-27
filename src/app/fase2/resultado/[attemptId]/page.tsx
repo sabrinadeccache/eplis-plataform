@@ -4,18 +4,10 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import type { ProficiencyLevel, SimulationFeedbackRow } from "@/types/database";
-
-const LEVEL_LABEL: Record<ProficiencyLevel, string> = {
-  weak: "Fraco",
-  moderate: "Moderado",
-  good: "Bom",
-};
-
-const LEVEL_CLASS: Record<ProficiencyLevel, string> = {
-  weak: "border-red-300 text-red-700 dark:border-red-800 dark:text-red-400",
-  moderate: "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400",
-  good: "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400",
-};
+import {
+  PROFICIENCY_LABEL as LEVEL_LABEL,
+  PROFICIENCY_BADGE_CLASS as LEVEL_CLASS,
+} from "@/lib/proficiency-display";
 
 const CRITERIA: { key: keyof SimulationFeedbackRow; label: string }[] = [
   { key: "pronunciation_score", label: "Pronúncia" },

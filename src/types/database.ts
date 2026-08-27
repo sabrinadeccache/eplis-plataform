@@ -41,7 +41,23 @@ export type PilotResponseStage =
   | "discussion_2"
   | "agree_disagree";
 export type ProcessingStatus = "queued" | "transcribing" | "analyzing" | "done" | "error";
-export type ProficiencyLevel = "weak" | "moderate" | "good";
+// 4 faixas da Escala OACI (MVP): weak=Fraco (N1-N3), moderate=Moderado (N4),
+// good=Ótimo (N5), excellent=Excelente (N6). Ordem do enum no banco é a mesma.
+export type ProficiencyLevel = "weak" | "moderate" | "good" | "excellent";
+
+// Ordem crescente — usada pra calcular o overall como o MENOR dos 6 critérios.
+export const PROFICIENCY_ORDER: readonly ProficiencyLevel[] = [
+  "weak",
+  "moderate",
+  "good",
+  "excellent",
+];
+
+export function lowestProficiency(levels: ProficiencyLevel[]): ProficiencyLevel {
+  return levels.reduce((lowest, level) =>
+    PROFICIENCY_ORDER.indexOf(level) < PROFICIENCY_ORDER.indexOf(lowest) ? level : lowest,
+  );
+}
 export type Difficulty = "easy" | "medium" | "hard";
 export type McqOption = "a" | "b" | "c";
 

@@ -76,6 +76,38 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-27) — Escala de proficiência passa de 3 para 4 faixas
+
+O documento "Modelo SDEA com anotações" (pág. 9) fechou a escala de avaliação em **4
+faixas** da Escala OACI, retroativa também ao EPLIS:
+
+| enum (`public.proficiency_level`) | rótulo | equivalência OACI |
+|---|---|---|
+| `weak` | Fraco | N1, N2, N3 |
+| `moderate` | Moderado | N4 |
+| `good` | **Ótimo** (era "Bom") | N5 |
+| `excellent` | Excelente (**novo**) | N6 |
+
+- Migration `20260827000000_add_excellent_proficiency_level.sql`: só um
+  `alter type ... add value 'excellent' after 'good'`. Linhas históricas com `good`
+  passam a aparecer como "Ótimo" — sem migração de dados (decisão: aceitável pra um
+  tracker de progresso MVP).
+- `ProficiencyLevel` (`src/types/database.ts`) ganhou `"excellent"` + helpers
+  `PROFICIENCY_ORDER` e `lowestProficiency`. Rótulos/cores/eixo dos gráficos
+  centralizados em `src/lib/proficiency-display.ts` (as 4 telas — 2 de resultado, 2 de
+  desempenho — e os 2 componentes de gráfico deixaram de duplicar o mapa).
+- Prompts de relatório final (EPLIS e SDEA) descrevem as 4 faixas via
+  `PROFICIENCY_SCALE_PROMPT` compartilhado. A regra "overall = menor dos 6" agora é
+  **garantida no código** (`normalizeFinalReport` em `src/lib/ai/anthropic.ts`), não só
+  pedida no prompt — também saneia faixa desconhecida pra `moderate`.
+- `vitest.setup.ts` passou a guardar o stub de mídia com `typeof window` pra permitir
+  testes puros em `// @vitest-environment node` (`src/lib/ai/final-report.test.ts`).
+- `npx tsc --noEmit`, `npm run lint`, `npm run test` (34/34, 4 novos) e `npm run build`
+  limpos. **Migration ainda não aplicada em produção** / não commitado.
+- Pendente desta leva do documento: penalidade do botão "repeat question" na
+  compreensão + sinalização no relatório (Practice e Official), demonstrativo por parte
+  em inglês no modo Official, e a regra "não ser rígido entre Ótimo e Excelente".
+
 ## Atualização (2026-08-24) — Trilha do piloto (SDEA), implementada do zero
 
 Nova trilha completa pro exame de pilotos, paralela ao EPLIS do controlador: **Santos

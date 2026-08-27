@@ -1,0 +1,12 @@
+-- Escala de proficiência passa de 3 para 4 faixas, alinhando o modelo do SDEA
+-- (documento "Modelo SDEA com anotações", pág. 9) e retroativamente o EPLIS:
+--   weak      -> Fraco     (equivalente a N1, N2, N3 da Escala OACI)
+--   moderate  -> Moderado  (equivalente a N4)
+--   good      -> Ótimo     (equivalente a N5)   <- rótulo era "Bom"
+--   excellent -> Excelente (equivalente a N6)   <- NOVO
+--
+-- Só adiciona o valor novo no fim do enum; linhas históricas com `good`
+-- passam a ser exibidas como "Ótimo" (era "Bom"), sem migração de dados.
+-- ALTER TYPE ... ADD VALUE roda fora de transação e o valor não é usado nesta
+-- mesma migration, então é seguro pelo apply-migration.mjs (statement único).
+alter type public.proficiency_level add value if not exists 'excellent' after 'good';

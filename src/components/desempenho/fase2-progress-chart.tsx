@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 import type { ProficiencyLevel } from "@/types/database";
+import {
+  PROFICIENCY_LEVELS as LEVEL_ORDER,
+  PROFICIENCY_Y as LEVEL_Y,
+  PROFICIENCY_LABEL as LEVEL_LABEL,
+  PROFICIENCY_COLOR as LEVEL_COLOR,
+} from "@/lib/proficiency-display";
 
 export type Fase2ChartPoint = {
   attemptId: string;
@@ -16,19 +22,6 @@ const PADDING_BOTTOM = 28;
 const PADDING_TOP = 16;
 const PLOT_HEIGHT = HEIGHT - PADDING_TOP - PADDING_BOTTOM;
 const PLOT_WIDTH = WIDTH - PADDING_LEFT - 16;
-
-const LEVEL_ORDER: ProficiencyLevel[] = ["weak", "moderate", "good"];
-const LEVEL_Y: Record<ProficiencyLevel, number> = { weak: 0, moderate: 1, good: 2 };
-const LEVEL_LABEL: Record<ProficiencyLevel, string> = {
-  weak: "Fraco",
-  moderate: "Moderado",
-  good: "Bom",
-};
-const LEVEL_COLOR: Record<ProficiencyLevel, string> = {
-  weak: "#ef4444",
-  moderate: "#f59e0b",
-  good: "#10b981",
-};
 
 function yFor(level: ProficiencyLevel) {
   const step = PLOT_HEIGHT / (LEVEL_ORDER.length - 1);

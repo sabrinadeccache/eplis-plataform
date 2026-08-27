@@ -1,5 +1,10 @@
 import { client, MODEL_VERSION, extractText } from "@/lib/ai/anthropic-client";
-import { OFFICIAL_MODE_ADDENDUM, type FinalReport } from "@/lib/ai/anthropic";
+import {
+  OFFICIAL_MODE_ADDENDUM,
+  PROFICIENCY_SCALE_PROMPT,
+  normalizeFinalReport,
+  type FinalReport,
+} from "@/lib/ai/anthropic";
 
 export { MODEL_VERSION };
 
@@ -34,21 +39,34 @@ correct/standard aviation phraseology, and never suggest a "more correct" phrase
 evaluate the answer as spoken English (clarity, structure, grammar, fluency) and whether it
 communicated the relevant facts.`;
 
+// Regra da página 8 do modelo anotado do SDEA: nas etapas da Parte 2 em que o
+// candidato atua como piloto, se a resposta claramente não é uma interação de
+// piloto (ex.: comenta a tarefa, responde como aluno, descreve o que faria em
+// vez de falar no rádio), sinalizar isso — no Practice já no feedback curto, no
+// Official só no relatório final.
+const NOT_AS_PILOT_RULE = ` Separately: in this Part 2 step the candidate must respond in role, as the
+pilot speaking on the radio to the controller. If the answer is clearly not a pilot interaction at all
+(e.g. they talk about the task, answer as a student, narrate what they would do instead of transmitting,
+or otherwise step out of the role), point this out plainly — say that in Part 2 they must interact as
+the pilot and that this answer did not fit the expected role — and still give what linguistic feedback
+you can. Do NOT apply this to answers that are genuine pilot transmissions but use non-standard
+phraseology; phraseology is never the issue.`;
+
 const READBACK_RULE = `This answer is the "readback" step of a Part 2 role-play item — the
 candidate, acting as the pilot, must repeat back the controller's instruction they just heard.
 Give feedback ONLY about this as spoken English (clarity, structure) and whether the key facts from
 the instruction were conveyed — do NOT evaluate or comment on phraseology correctness/standardness
-(explicitly not graded in this exam, see system instructions).`;
+(explicitly not graded in this exam, see system instructions).${NOT_AS_PILOT_RULE}`;
 
 const REACTION_RULE = `This answer is the "reaction to an unexpected complication" step of a Part 2
 role-play item — the candidate, acting as the pilot, must report a new problem to the controller
 and state their intentions. Give feedback about how clearly and appropriately the problem and
-intentions were communicated, as spoken English — not about the earlier readback step.`;
+intentions were communicated, as spoken English — not about the earlier readback step.${NOT_AS_PILOT_RULE}`;
 
 const CONFIRMATION_RULE = `This answer is the "confirm or deny" step of a Part 2 role-play item —
 the controller asked the candidate (as pilot) to confirm or deny a detail, and the candidate must
 respond clearly (affirm/negative) and recap the relevant fact. Give feedback about whether that
-confirmation/negation and recap was clear and accurate, as spoken English.`;
+confirmation/negation and recap was clear and accurate, as spoken English.${NOT_AS_PILOT_RULE}`;
 
 const REPORT_BACK_RULE = `This answer is the "tell me everything the controller just said" step of
 a Part 2 role-play item — the candidate must paraphrase, in their own words, everything the
@@ -142,8 +160,7 @@ export async function generatePilotResponseFeedback(
 // Escala OACI, não específica de nenhuma trilha.
 const PILOT_FINAL_REPORT_SYSTEM = `Você é um examinador do Santos Dumont English Assessment (SDEA)
 avaliando pela Escala de Proficiência OACI (Doc 9835), seis critérios: pronúncia, estrutura,
-vocabulário, fluência, compreensão, interações — cada um classificado como "weak", "moderate" ou
-"good" (MVP).
+vocabulário, fluência, compreensão, interações. ${PROFICIENCY_SCALE_PROMPT}
 
 REGRA OBRIGATÓRIA E NÃO NEGOCIÁVEL DE SEGURANÇA OPERACIONAL: o nível geral relatado (overall)
 NUNCA é uma média dos seis critérios — é sempre igual ao MENOR valor entre eles (o critério mais
@@ -159,7 +176,12 @@ interações).
 Regra da Parte 2 (role-play em que o candidato interpreta o piloto, 4 respostas distintas por
 item — readback, reação a um imprevisto, confirmação/negação, e um relato em discurso indireto do
 que o controlador disse): avalie cada uma das 4 respostas pelo que ela especificamente pede, sem
-misturar critérios de uma resposta na avaliação de outra do mesmo item.
+misturar critérios de uma resposta na avaliação de outra do mesmo item. Se em alguma resposta da
+Parte 2 o candidato claramente não interagiu como piloto (comentou a tarefa, respondeu como aluno,
+narrou o que faria em vez de transmitir pelo rádio, ou saiu do papel de outra forma), registre isso
+explicitamente no general_feedback — algo como "Na Part 2, você não interagiu como piloto e sua
+resposta não se encaixou no perfil esperado" — sem que isso, por si só, rebaixe critério linguístico.
+Fraseologia não-padrão nunca conta como "não interagiu como piloto".
 
 Regra da Parte 3 (o candidato ouve um diálogo piloto/controlador e depois relata em discurso
 indireto + responde uma pergunta técnica, com um turno final de comparação entre as 3 situações):
@@ -186,7 +208,7 @@ extraído das respostas do candidato) e não só uma impressão geral, para que 
 exatamente onde está seu progresso e o que precisa melhorar.
 
 Responda APENAS com um JSON estrito, sem texto antes ou depois, no formato:
-{"pronunciation":"weak|moderate|good","structure":"weak|moderate|good","vocabulary":"weak|moderate|good","fluency":"weak|moderate|good","comprehension":"weak|moderate|good","interaction":"weak|moderate|good","overall":"<igual ao menor dos seis>","general_feedback":"<texto em português explicando cada um dos 6 critérios individualmente>"}`;
+{"pronunciation":"weak|moderate|good|excellent","structure":"weak|moderate|good|excellent","vocabulary":"weak|moderate|good|excellent","fluency":"weak|moderate|good|excellent","comprehension":"weak|moderate|good|excellent","interaction":"weak|moderate|good|excellent","overall":"<igual ao menor dos seis>","general_feedback":"<texto em português explicando cada um dos 6 critérios individualmente>"}`;
 
 const FALLBACK_REPORT: FinalReport = {
   pronunciation: "moderate",
@@ -225,7 +247,7 @@ export async function generatePilotFinalReport(
   const text = rawText.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
 
   try {
-    return JSON.parse(text) as FinalReport;
+    return normalizeFinalReport(JSON.parse(text) as FinalReport);
   } catch {
     return FALLBACK_REPORT;
   }

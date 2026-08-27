@@ -1,6 +1,12 @@
 import { client, MODEL_VERSION, extractText } from "@/lib/ai/anthropic-client";
+import {
+  type ProficiencyLevel,
+  PROFICIENCY_ORDER,
+  lowestProficiency,
+} from "@/types/database";
 
 export { MODEL_VERSION };
+export type { ProficiencyLevel };
 
 const SHORT_FEEDBACK_SYSTEM = `You are an EPLIS examiner (Brazilian aeronautical English
 proficiency exam, ICAO scale), speaking directly to the candidate as the interviewer would.
@@ -112,8 +118,6 @@ export async function generateResponseFeedback(
   return extractText(msg.content);
 }
 
-export type ProficiencyLevel = "weak" | "moderate" | "good";
-
 export type FinalReport = {
   pronunciation: ProficiencyLevel;
   structure: ProficiencyLevel;
@@ -125,13 +129,44 @@ export type FinalReport = {
   general_feedback: string;
 };
 
+// Descrição das 4 faixas da Escala OACI (MVP), compartilhada entre EPLIS e SDEA
+// (ver src/lib/ai/pilot-track.ts). "excellent" é a faixa nova (doc do SDEA, pág. 9).
+export const PROFICIENCY_SCALE_PROMPT = `Cada critério é classificado em uma de quatro faixas:
+"weak" (Fraco — equivalente aos níveis 1, 2 e 3 da Escala OACI), "moderate" (Moderado —
+equivalente ao nível 4), "good" (Ótimo — equivalente ao nível 5) e "excellent" (Excelente —
+equivalente ao nível 6). Use "excellent" só para desempenho realmente excepcional no critério, sem
+qualquer limitação perceptível; na dúvida entre "good" e "excellent", fique com "good".`;
+
+const REPORT_CRITERIA: (keyof FinalReport)[] = [
+  "pronunciation",
+  "structure",
+  "vocabulary",
+  "fluency",
+  "comprehension",
+  "interaction",
+];
+
+// O overall SEMPRE é o menor dos 6 critérios — regra de segurança operacional da
+// Escala OACI. Reforçamos no prompt, mas também garantimos no código (o modelo
+// às vezes "arredonda pra cima"). Também valida que cada faixa é um valor conhecido.
+export function normalizeFinalReport(raw: FinalReport): FinalReport {
+  const clean = { ...raw };
+  for (const key of REPORT_CRITERIA) {
+    if (!PROFICIENCY_ORDER.includes(clean[key] as ProficiencyLevel)) {
+      clean[key] = "moderate" as never;
+    }
+  }
+  clean.overall = lowestProficiency(REPORT_CRITERIA.map((k) => clean[k] as ProficiencyLevel));
+  return clean;
+}
+
 // A entrevista em si (perguntas, situações, feedback curto por resposta) é
 // toda em inglês — o aluno treina o ouvido antes do exame de verdade. Mas o
 // RELATÓRIO FINAL fica salvo como registro de progresso do aluno, então esse
 // sim é em português, explicando cada um dos 6 critérios individualmente.
 const FINAL_REPORT_SYSTEM = `Você é um examinador do EPLIS avaliando pela Escala de
 Proficiência OACI (Doc 9835), seis critérios: pronúncia, estrutura, vocabulário, fluência,
-compreensão, interações — cada um classificado como "weak", "moderate" ou "good" (MVP).
+compreensão, interações. ${PROFICIENCY_SCALE_PROMPT}
 
 REGRA OBRIGATÓRIA E NÃO NEGOCIÁVEL DE SEGURANÇA OPERACIONAL: o nível geral relatado (overall)
 NUNCA é uma média dos seis critérios — é sempre igual ao MENOR valor entre eles (o critério mais
@@ -172,7 +207,7 @@ extraído das respostas do candidato) e não só uma impressão geral, para que 
 exatamente onde está seu progresso e o que precisa melhorar.
 
 Responda APENAS com um JSON estrito, sem texto antes ou depois, no formato:
-{"pronunciation":"weak|moderate|good","structure":"weak|moderate|good","vocabulary":"weak|moderate|good","fluency":"weak|moderate|good","comprehension":"weak|moderate|good","interaction":"weak|moderate|good","overall":"<igual ao menor dos seis>","general_feedback":"<texto em português explicando cada um dos 6 critérios individualmente>"}`;
+{"pronunciation":"weak|moderate|good|excellent","structure":"weak|moderate|good|excellent","vocabulary":"weak|moderate|good|excellent","fluency":"weak|moderate|good|excellent","comprehension":"weak|moderate|good|excellent","interaction":"weak|moderate|good|excellent","overall":"<igual ao menor dos seis>","general_feedback":"<texto em português explicando cada um dos 6 critérios individualmente>"}`;
 
 // Só se aplica ao modo `official`, que não dá nenhum feedback durante a entrevista
 // (diferente do `practice`, que já mostra um feedback curto após cada resposta) —
@@ -234,7 +269,7 @@ export async function generateFinalReport(
   const text = rawText.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
 
   try {
-    return JSON.parse(text) as FinalReport;
+    return normalizeFinalReport(JSON.parse(text) as FinalReport);
   } catch {
     return FALLBACK_REPORT;
   }
