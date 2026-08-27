@@ -1,6 +1,6 @@
 // Adiciona os 33 novos áudios da Fase 1 (cortes de gravações reais de ATC do
 // YouTube, revisados e com transcrição corrigida manualmente pela Sabrina em
-// `Material Didático/Phase 1 - Audios/transcrições/`) + 60 perguntas no total
+// `Material Didático/ATC/Phase 1 - Audios/transcrições/`) + 60 perguntas no total
 // (10 já existentes de audio01-10 + 50 novas, distribuídas entre os 33 áudios
 // novos — os mais ricos em conteúdo ganham 2 perguntas em vez de 1).
 //
@@ -27,7 +27,8 @@ const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 const DB_URL = env.SUPABASE_DB_URL;
 
-const SOURCE_DIR = "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Material Didático/Phase 1 - Audios";
+const SOURCE_DIR =
+  "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Material Didático/ATC/Phase 1 - Audios";
 
 // Cada item: 1 áudio, 1-2 perguntas (prompt/opções/gabarito em português,
 // transcript em inglês — mesma convenção dos 10 áudios já existentes).

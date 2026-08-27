@@ -1,5 +1,5 @@
 // Adiciona as novas imagens da Parte 4 (uma pasta por perfil operacional em
-// `Material Didático/Phase 2 - Images/<PERFIL>/`, arquivos numerados 1..N)
+// `Material Didático/ATC/Phase 2/<PERFIL>/`, arquivos numerados 1..N)
 // ao bucket "phase2-images" + tabela phase2_prompts. Não mexe nas 4 imagens
 // "-01" já existentes (uma por perfil, cadastradas antes) — só adiciona,
 // deixando o sorteio da Parte 4 realmente aleatório dentro de cada perfil em
@@ -27,7 +27,7 @@ const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 const DB_URL = env.SUPABASE_DB_URL;
 
-const SOURCE_DIR = "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Material Didático/Phase 2 - Images";
+const SOURCE_DIR = "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Material Didático/ATC/Phase 2";
 const PROFILES = ["TWR", "APP", "ACC", "COpM"];
 const PROMPT_TEXT = "Describe what you see in this image.";
 const SECONDS = 120;

@@ -22,7 +22,7 @@ const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 const DB_URL = env.SUPABASE_DB_URL;
 
 const SOURCE_DIR =
-  "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Material Didático/Phase 1 - Audios";
+  "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Material Didático/ATC/Phase 1 - Audios";
 
 const ITEMS = [
   {

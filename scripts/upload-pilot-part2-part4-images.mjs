@@ -7,6 +7,16 @@
 // clara) — o pool de Parte 4 de rotary_wing fica vazio até haver fotos
 // próprias/licenciadas. Uso único/idempotente (upsert: true):
 // `node scripts/upload-pilot-part2-part4-images.mjs`.
+//
+// [2026-08-28] A Sabrina reorganizou o material didático e trocou o pool de
+// imagens do piloto por um conjunto novo e maior em
+// `Material Didático/Pilots/Material Didático/{Fixed-wing,Rotary-wing}/Images/`
+// (arquivos `fixed-wing01..NN.png` / `rotary-wing01..NN.png`). Os 3 arquivos
+// abaixo NÃO existem mais nesse novo diretório — este script já rodou e as 3
+// imagens seguem no bucket `pilot-images` + em `pilot_prompts`. Refazer o pool
+// de imagens da Parte 2/4 do piloto com o conjunto novo é uma tarefa à parte.
+// SOURCE_DIR abaixo aponta pro novo diretório só pra não ficar um caminho
+// morto; a lista IMAGES precisa ser remapeada antes de rodar de novo.
 import { readFileSync } from "node:fs";
 
 function loadEnv() {
@@ -24,7 +34,8 @@ const env = loadEnv();
 const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 
-const SOURCE_DIR = "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Pilots/Material Didático/Fase 2 - Images";
+const SOURCE_DIR =
+  "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Material Didático/Pilots/Material Didático";
 
 export const IMAGES = [
   { file: "sdea-fixed-wing-weather-radar.jpg", path: "fixed-wing/part2-situation-4-weather-radar.jpg" },

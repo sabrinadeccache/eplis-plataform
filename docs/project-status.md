@@ -100,6 +100,18 @@ efeito de rádio/ruído**; a pág. 5 pede que cada gravação da Parte 3 **toque
   toca 2× (pausa de 1,5 s entre as duas). "Repetir pergunta" já opera sobre o `<audio>`.
 - **Ordem de execução**: `seed-pilot-prompts.mjs` → `generate-pilot-prompt-audio.mjs`
   (mesma relação seed↔upload que já existe com as imagens da Parte 2/4).
+- O script também grava uma **cópia local** de cada mp3 em `Material Didático/Pilots/
+  Material Didático/{Fixed-wing,Rotary-wing}/Audios/` (`part2-01-atc.mp3` etc.); rodar
+  sem `--force` quando a URL já existe só rebaixa o arquivo do Storage pra atualizar a
+  cópia local.
+- **Reorganização do material didático (2026-08-28)**: a Sabrina moveu tudo pra
+  `Material Didático/{ATC,Pilots}/…`. Paths atualizados em `scripts/add-phase1-audios-batch2.mjs`,
+  `scripts/replace-phase1-audios.mjs` (→ `ATC/Phase 1 - Audios`),
+  `scripts/add-phase2-part4-images-batch2.mjs` (→ `ATC/Phase 2`) e
+  `scripts/upload-pilot-part2-part4-images.mjs` (→ `Pilots/Material Didático`; **os 3
+  arquivos de imagem que ele referenciava não existem mais nesse diretório novo — o
+  pool de imagens do piloto foi trocado por um conjunto maior, refazer isso é tarefa à
+  parte**).
 - **Escala futura**: quando o pool crescer pras 10 provas (200 áudios Parte 2 / 60
   Parte 3), o script cobre automaticamente — é só rodar de novo.
 - `tsc`/`lint`/`test` (42/42, +5 do parser) e `build` limpos.
@@ -401,7 +413,7 @@ seguindo a convenção do `CLAUDE.md`:
   `package.json`) baixou o áudio e cortou em trechos de 10-45s (spec oficial de duração
   do `phase1_audios`), e o Whisper (`OPENAI_API_KEY`) gerou transcrição com timestamps
   pra achar os pontos de corte certos. A Sabrina revisou manualmente todos os cortes,
-  corrigiu as transcrições (arquivos em `Material Didático/Phase 1 - Audios/
+  corrigiu as transcrições (arquivos em `Material Didático/ATC/Phase 1 - Audios/
   transcrições/`, fora do repo) e descartou 7 trechos de baixa qualidade. Áudios mais
   longos/ricos ganharam 2 perguntas em vez de 1 (17 dos 33 têm 2). Pergunta/opções em
   português, sem gírias em inglês entre parênteses/aspas explicativas (achado da
@@ -416,7 +428,7 @@ seguindo a convenção do `CLAUDE.md`:
   essas perguntas ainda; confirmado antes de mudar a estratégia).
 - **`add-phase2-part4-images-batch2.mjs`**: Parte 4 foi de 1 imagem fixa por perfil pra
   um pool real — 21 (TWR), 22 (APP), 22 (ACC), 21 (COpM), a partir de fotos fornecidas
-  pela Sabrina em `Material Didático/Phase 2 - Images/<PERFIL>/`. Confirmado que o
+  pela Sabrina em `Material Didático/ATC/Phase 2/<PERFIL>/`. Confirmado que o
   sorteio já filtra só pelo próprio perfil (`profileFilter = [profile, 'general']` em
   `src/services/simulations/phase2/queries.ts`, e não sobrou nenhuma imagem `general`
   ativa) — não precisou mudar código, só os dados já resolviam.
@@ -665,7 +677,7 @@ Postgres direta, que ignora GRANT).
 Conteúdo real da Fase 1 (ver Fase 4 no roadmap abaixo): os 10 áudios sintéticos (TTS) de
 teste foram substituídos por 10 gravações reais de comunicações ATC (bucket
 `phase1-audios`, script `scripts/replace-phase1-audios.mjs`), com perguntas baseadas nas
-transcrições reais (`Material Didático/Phase 1 - Audios/transcricoes_audios.pdf`, fora
+transcrições reais (`Material Didático/ATC/Phase 1 - Audios/transcricoes_audios.pdf`, fora
 do repo) e dificuldade variada (3 easy, 4 medium, 3 hard) proporcional à complexidade de
 cada gravação.
 
@@ -975,7 +987,7 @@ Fase 1 com mais áudios reais.
       a ponta via HTTP real (login, criação de tentativa, renderização de
       pergunta+áudio real, grading, tela de resultado) — não só build/lint.
       **Conteúdo**: os 10 áudios são gravações reais de comunicações ATC (fornecidas
-      pela Sabrina, `Material Didático/Phase 1 - Audios/`, fora do repo), com perguntas
+      pela Sabrina, `Material Didático/ATC/Phase 1 - Audios/`, fora do repo), com perguntas
       próprias baseadas na transcrição real e dificuldade alternada (3 easy/4 medium/3
       hard) — não é mais placeholder sintético. Script de carga:
       `scripts/replace-phase1-audios.mjs` (idempotente — roda de novo se precisar
