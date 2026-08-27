@@ -11,13 +11,15 @@
 // contribui um bloco contíguo de order_index; Parte 4 casa por image_url.
 // Item que sair da lista é só desativado (is_active = false), nunca apagado.
 //
-// Uso: `node scripts/seed-pilot-prompts.mjs` (rode
-// scripts/upload-pilot-part2-part4-images.mjs antes, pra as fotos da Parte
-// 2/4 já existirem no bucket; e scripts/generate-pilot-prompt-audio.mjs
-// DEPOIS, pra gerar os áudios de rádio das Partes 2 e 3).
+// Uso: `node scripts/seed-pilot-prompts.mjs`. Rode ANTES:
+//   - scripts/upload-pilot-part2-part4-images.mjs (fotos de complicação da Parte 2)
+//   - scripts/upload-pilot-part4-images.mjs (13+10 fotos da Parte 4)
+// Rode DEPOIS:
+//   - scripts/generate-pilot-prompt-audio.mjs (áudios de rádio das Partes 2 e 3)
 import { readFileSync } from "node:fs";
 import { Client } from "pg";
 import { publicUrlFor } from "./upload-pilot-part2-part4-images.mjs";
+import { part4Url } from "./upload-pilot-part4-images.mjs";
 
 function loadEnv() {
   const lines = readFileSync(".env.local", "utf8").split(/\r?\n/);
@@ -492,20 +494,55 @@ const PART3_ROTARY_WING = [
   },
 ];
 
-// Parte 4 — só fixed_wing por agora (a única foto real com direitos claros:
-// vem do documento oficial da ANAC). Pool de rotary_wing fica vazio até
-// existirem fotos próprias/licenciadas — ver CLAUDE.md e histórico da sessão.
+// Parte 4 — pool de fotos IA-geradas fornecido pela Sabrina (13 avião + 10
+// helicóptero, ver scripts/upload-pilot-part4-images.mjs). Só a AFIRMAÇÃO
+// (agree_disagree_statement) é específica da foto; a descrição, as hipóteses de
+// antes/depois e as 2 perguntas de discussão são FIXAS e vivem no runner
+// (PART4_* em src/components/sdea/pilot-interview-runner.tsx), conforme
+// orientação da Sabrina e o "Modelo SDEA com anotações". Por isso
+// discussion_question / discussion_question_2 ficam null aqui.
+const PART4_PROMPT_TEXT = "Please describe this picture to me.";
+
 const PART4_FIXED_WING = [
-  {
-    prompt_text: "Please describe this picture to me.",
-    image_url: publicUrlFor("fixed-wing/part4-tire-blowout.jpg"),
-    discussion_question: "How dangerous can a burst tyre be during landings or takeoffs?",
-    discussion_question_2:
-      "How are traffic operations at airports affected when there is a damaged aircraft obstructing the runway?",
-    agree_disagree_statement:
-      "Anomalies during takeoff roll, such as an underinflated tyre, might cause instability and, therefore, a takeoff rejection.",
-  },
-];
+  "An engine fire on the ground is always easier to handle than one that starts in flight.",
+  "Airport congestion is a commercial issue and has little effect on flight safety.",
+  "Most runway excursions could be prevented if crews were quicker to decide to go around or divert.",
+  "With today's weather radar and forecasting, flying into severe weather is entirely the flight crew's responsibility.",
+  "Medical flights should always be given priority over commercial traffic, whatever the delay to other aircraft.",
+  "In uncontrolled airspace, see-and-avoid alone is not enough to prevent mid-air collisions.",
+  "A pilot must always follow a TCAS resolution advisory, even when it goes against an air traffic control instruction.",
+  "Reducing the vertical separation between aircraft at cruising level has made busy airspace less safe.",
+  "The pressure to keep turnaround times short is one of the main causes of ground handling mistakes.",
+  "Any passenger who becomes violent on board should be banned from flying with that airline for life.",
+  "A first officer should openly challenge the captain whenever they believe a decision is unsafe, regardless of the captain's seniority.",
+  "A commercial flight should divert whenever a passenger becomes seriously ill, no matter the cost to the airline.",
+  "A burst tyre detected during the takeoff roll should always lead to a rejected takeoff.",
+].map((statement, i) => ({
+  prompt_text: PART4_PROMPT_TEXT,
+  image_url: part4Url("fixed_wing", i + 1),
+  discussion_question: null,
+  discussion_question_2: null,
+  agree_disagree_statement: statement,
+}));
+
+const PART4_ROTARY_WING = [
+  "The benefits of helicopter medical services outweigh the extra risks of landing away from proper airfields.",
+  "Transferring a critically ill patient between hospitals is safer by helicopter than by road ambulance.",
+  "Frequent training exercises matter more than advanced equipment for the success of a rescue operation.",
+  "For fighting wildfires, helicopters are more useful than fixed-wing water bombers.",
+  "In an air rescue mission, the speed of the response matters more than any other factor.",
+  "Firefighting aircraft should stop operating when smoke reduces visibility below safe limits, even if the fire keeps spreading.",
+  "Flying close to terrain in poor visibility is an acceptable risk during firefighting operations.",
+  "Helicopter mountain rescue should only be carried out by crews with specific mountain training.",
+  "During a hoist operation, it is the winch operator, not the pilot, who is effectively in control of the helicopter.",
+  "In a rescue at sea, a helicopter is always a better choice than a lifeboat.",
+].map((statement, i) => ({
+  prompt_text: PART4_PROMPT_TEXT,
+  image_url: part4Url("rotary_wing", i + 1),
+  discussion_question: null,
+  discussion_question_2: null,
+  agree_disagree_statement: statement,
+}));
 
 const PART2_DURATION = 90;
 const PART3_DURATION = 90;
@@ -596,12 +633,13 @@ async function upsertPart3(client, aircraftType, orderIndex, item) {
   return inserted.rows[0].id;
 }
 
-async function upsertPart4(client, aircraftType, item) {
+async function upsertPart4(client, aircraftType, orderIndex, item) {
   const { rows } = await client.query(
     `update public.pilot_prompts
        set prompt_text = $1, discussion_question = $2, discussion_question_2 = $3,
-           agree_disagree_statement = $4, expected_duration_seconds = $5, is_active = true
-     where part = 'part4' and aircraft_type = $6 and image_url = $7
+           agree_disagree_statement = $4, expected_duration_seconds = $5, order_index = $6,
+           is_active = true
+     where part = 'part4' and aircraft_type = $7 and image_url = $8
      returning id`,
     [
       item.prompt_text,
@@ -609,6 +647,7 @@ async function upsertPart4(client, aircraftType, item) {
       item.discussion_question_2,
       item.agree_disagree_statement,
       PART4_DURATION,
+      orderIndex,
       aircraftType,
       item.image_url,
     ],
@@ -616,12 +655,13 @@ async function upsertPart4(client, aircraftType, item) {
   if (rows.length > 0) return rows[0].id;
   const inserted = await client.query(
     `insert into public.pilot_prompts
-       (part, aircraft_type, image_url, prompt_text, discussion_question, discussion_question_2,
-        agree_disagree_statement, expected_duration_seconds, is_active)
-     values ('part4', $1, $2, $3, $4, $5, $6, $7, true)
+       (part, aircraft_type, order_index, image_url, prompt_text, discussion_question,
+        discussion_question_2, agree_disagree_statement, expected_duration_seconds, is_active)
+     values ('part4', $1, $2, $3, $4, $5, $6, $7, $8, true)
      returning id`,
     [
       aircraftType,
+      orderIndex,
       item.image_url,
       item.prompt_text,
       item.discussion_question,
@@ -678,18 +718,22 @@ async function main() {
   await deactivateStale(client, "part3", "rotary_wing", part3RotaryIds);
 
   const part4FixedIds = [];
-  for (const item of PART4_FIXED_WING) {
-    part4FixedIds.push(await upsertPart4(client, "fixed_wing", item));
+  for (let i = 0; i < PART4_FIXED_WING.length; i++) {
+    part4FixedIds.push(await upsertPart4(client, "fixed_wing", i + 1, PART4_FIXED_WING[i]));
   }
   await deactivateStale(client, "part4", "fixed_wing", part4FixedIds);
-  // rotary_wing Parte 4 fica sem conteúdo nesta rodada (ver comentário acima)
-  // — não chamamos upsertPart4 pra esse perfil, então nada é desativado
-  // também (deactivateStale só rodaria se algum dia existir algo pra limpar).
+
+  const part4RotaryIds = [];
+  for (let i = 0; i < PART4_ROTARY_WING.length; i++) {
+    part4RotaryIds.push(await upsertPart4(client, "rotary_wing", i + 1, PART4_ROTARY_WING[i]));
+  }
+  await deactivateStale(client, "part4", "rotary_wing", part4RotaryIds);
 
   console.log(
     `Seed concluído: ${PART1.length} Parte 1 (general), ${part2FixedIds.length} Parte 2 fixed_wing, ` +
       `${part2RotaryIds.length} Parte 2 rotary_wing, ${part3FixedIds.length} Parte 3 fixed_wing, ` +
-      `${part3RotaryIds.length} Parte 3 rotary_wing, ${part4FixedIds.length} Parte 4 fixed_wing (rotary_wing: 0, ver comentário).`,
+      `${part3RotaryIds.length} Parte 3 rotary_wing, ${part4FixedIds.length} Parte 4 fixed_wing, ` +
+      `${part4RotaryIds.length} Parte 4 rotary_wing.`,
   );
   await client.end();
 }

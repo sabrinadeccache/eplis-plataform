@@ -18,6 +18,7 @@
 // SOURCE_DIR abaixo aponta pro novo diretório só pra não ficar um caminho
 // morto; a lista IMAGES precisa ser remapeada antes de rodar de novo.
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 function loadEnv() {
   const lines = readFileSync(".env.local", "utf8").split(/\r?\n/);
@@ -74,7 +75,7 @@ async function main() {
 // Só sobe as imagens quando o arquivo é executado diretamente — quando
 // importado só por `publicUrlFor` (ex.: scripts/seed-pilot-prompts.mjs), o
 // upload não deve rodar de novo.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((e) => {
     console.error(e);
     process.exit(1);

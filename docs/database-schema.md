@@ -200,10 +200,10 @@ separadas):
 | atc_followup_audio_url | text, nullable | **[2026-08-28]** Parte2: mp3 pré-gerado de `atc_followup_audio_text` (mesmo pipeline de `atc_audio_url`) |
 | expected_confirmation | text, nullable | Parte2: referência da confirmação esperada — só pra IA |
 | dialogue_audio_url | text, nullable | **[2026-08-28]** Parte3: mp3 pré-gerado de `prompt_text` (diálogo `Pilot:`/`ATC:` — voz `echo` p/ piloto, `onyx` p/ ATC, efeito de rádio, falas concatenadas). O runner toca **duas vezes** (fidelidade ao exame real). `null` → TTS em runtime |
-| discussion_question | text, nullable | Parte3: pergunta técnica/de opinião feita após o relato da situação. Parte4: 1ª pergunta de discussão sobre o tema da foto |
-| discussion_question_2 | text, nullable | Parte4: 2ª pergunta de discussão |
-| image_url | text, nullable | Parte4: foto principal do item |
-| agree_disagree_statement | text, nullable | Parte4: afirmação pra o candidato concordar/discordar com justificativa |
+| discussion_question | text, nullable | Parte3: pergunta técnica/de opinião feita após o relato da situação. **[2026-08-28] Parte4: não usada** — os itens 4 e 5 da Parte 4 passaram a ser fixos no runner (`PART4_DISCUSSION_1/2` em `pilot-interview-runner.tsx`), conforme o "Modelo SDEA com anotações" |
+| discussion_question_2 | text, nullable | Parte3: não usada. **[2026-08-28] Parte4: não usada** (ver acima) |
+| image_url | text, nullable | Parte4: foto principal do item. **[2026-08-28]** pool de 13 fotos `fixed_wing` + 10 `rotary_wing` (`pilot-images/<perfil>/part4/NN.jpg`), IA-geradas, ver `scripts/upload-pilot-part4-images.mjs` |
+| agree_disagree_statement | text, nullable | Parte4: afirmação pra o candidato concordar/discordar com justificativa — **o único item da Parte 4 específico da foto** (os demais são fixos no runner) |
 | order_index | int, nullable | sequência dentro da parte (Parte2: 1-N; Parte3: 1-N, contíguo por prova de origem) — sem regra de ordenação por dificuldade nem tiering concreto/abstrato, diferente da Parte 2/3 do controlador (os documentos reais do SDEA não pedem isso) |
 | expected_duration_seconds | int | |
 | is_active | boolean | |

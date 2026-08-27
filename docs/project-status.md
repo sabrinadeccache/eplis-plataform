@@ -76,6 +76,39 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-28) — Pool de fotos da Parte 4 (SDEA), avião e helicóptero
+
+A Sabrina forneceu 23 cenas IA-geradas pra Parte 4 (descrição de imagem): 13 de avião
+(`fixed_wing`) + 10 de helicóptero (`rotary_wing`), em `Material Didático/Pilots/
+Material Didático/{Fixed-wing,Rotary-wing}/Images/`. Isso **fecha a lacuna** da Parte 4
+de `rotary_wing`, que estava vazia desde a implementação da trilha (2026-08-24).
+
+- **`scripts/upload-pilot-part4-images.mjs`** (novo): converte cada PNG (até ~46 MB) pra
+  JPEG (máx. 1600px, q82) com ImageMagick e sobe pra `pilot-images/<perfil>/part4/NN.jpg`.
+- **Estrutura da Parte 4 alinhada com o "Modelo SDEA com anotações"** (decisão da
+  Sabrina): dos 6 itens, **só a afirmação (item 6, `agree_disagree_statement`) é
+  específica da foto**. Os demais são fixos e vivem no runner
+  (`PART4_BEFORE_VARIATIONS`, `PART4_DISCUSSION_1/2` em `pilot-interview-runner.tsx`):
+  - item 1 — descrição (prompt fixo)
+  - item 2 — hipótese de "antes", **4 variações**, uma sorteada por prova
+    (determinística por `hashStringToSeed(prompt.id)`, e a foto já é sorteada por
+    tentativa)
+  - item 3 — hipótese de "depois" (prompt fixo, mesmo estágio `narrative`)
+  - itens 4 e 5 — perguntas de discussão fixas (severidade/risco; consequências e
+    prevenção)
+  - item 6 — afirmação da foto, do banco
+  `discussion_question` / `discussion_question_2` de `pilot_prompts` **não são mais
+  lidas na Parte 4**.
+- **`scripts/seed-pilot-prompts.mjs`**: `PART4_FIXED_WING` (13) + `PART4_ROTARY_WING`
+  (10), cada um só com a afirmação; `upsertPart4` ganhou `order_index`; `deactivateStale`
+  desativou a foto antiga do pneu (`part4-tire-blowout.jpg`) automaticamente.
+- **Achado**: o guard `import.meta.url === \`file://${process.argv[1]}\`` dos scripts de
+  upload quebra em path com espaço (o real é URL-encoded) — o `main()` nunca rodava.
+  Trocado por `pathToFileURL(process.argv[1]).href` em `upload-pilot-part4-images.mjs` e
+  `upload-pilot-part2-part4-images.mjs`.
+- 23 imagens no bucket, 23 linhas ativas (`13` + `10`), `tsc`/`lint`/`test` (42/42) e
+  `build` limpos. Sem migration.
+
 ## Atualização (2026-08-28) — Áudios de rádio da Parte 2 e Parte 3 (SDEA)
 
 Antes, todo áudio da entrevista do piloto era TTS em runtime (`generateSpeech` →
@@ -291,8 +324,9 @@ limpos antes de considerar a rodada pronta.
 
 **Ainda em aberto** (fora do escopo desta rodada, por decisão): ampliar o pool de conteúdo
 pra "dezenas por parte" nos dois perfis (script de geração + arquivo de revisão pra
-Sabrina aprovar, igual ao histórico do EPLIS); conseguir fotos de helicóptero
-próprias/licenciadas pra Parte 4 de `rotary_wing`; testes automatizados de
+Sabrina aprovar, igual ao histórico do EPLIS); ~~conseguir fotos de helicóptero
+próprias/licenciadas pra Parte 4 de `rotary_wing`~~ (resolvido em 2026-08-28, ver seção
+"Pool de fotos da Parte 4" acima); testes automatizados de
 `generateResponseFeedback`/`generateFinalReport` (mesma lacuna já registrada pro
 controlador); nenhum teste manual real com áudio/microfone ainda (Playwright headless não
 grava áudio de verdade — só validou o fluxo até o botão "Falar" ficar disponível).
