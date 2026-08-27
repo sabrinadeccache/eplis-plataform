@@ -8,6 +8,7 @@ const generateSpeechAudio = vi.fn(async () => ({
 vi.mock("@/lib/ai/openai", () => ({ generateSpeechAudio }));
 vi.mock("@/lib/ai/anthropic", () => ({
   generateFinalReport: vi.fn(),
+  generateResponseFeedback: vi.fn(),
   MODEL_VERSION: "test-model",
 }));
 

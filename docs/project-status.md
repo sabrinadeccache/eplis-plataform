@@ -76,6 +76,29 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-27) — Demonstrativo por parte no modo Official
+
+Regra da pág. 8 do "Modelo SDEA com anotações": no modo `official` o relatório geral
+fica em português, mas o **demonstrativo de cada resposta** (pergunta + resposta +
+feedback curto) fica **em inglês**. Antes o `official` não gerava `ai_feedback` nenhum.
+
+- `advanceState` (EPLIS `phase2/actions.ts` e SDEA `pilot/actions.ts`), no bloco de
+  finalização: depois de salvar `simulation_feedbacks` e concluir a tentativa, se o
+  modo é `official`, gera `generateResponseFeedback`/`generatePilotResponseFeedback`
+  para cada resposta **em paralelo** (`Promise.all`) e grava em `ai_feedback`. Cada
+  item tem `try/catch` — falha/timeout de um não derruba a finalização (o resultado
+  principal já está persistido nesse ponto).
+- Nada muda no fluxo da prova `official`: a `submit-response` route continua NÃO
+  chamando IA por resposta (sem latência entre perguntas, `feedback: null` pro
+  cliente). O feedback só existe depois, na tela de resultado.
+- Telas de resultado (`/fase2/resultado`, `/sdea/resultado`) já renderizavam
+  `ai_feedback` quando presente — só passam a ter conteúdo no `official` agora. Rótulo
+  "Sua resposta" → "Answer" (demonstrativo em inglês).
+- `tsc`/`lint`/`test` (37/37) e `build` limpos. Sem migration.
+- **Fim dos pendentes desta leva do documento** (escala 4 faixas, botão repeat,
+  não-rigidez Ótimo/Excelente, demonstrativo Official). Segue aberto o pool de
+  conteúdo amplo e as fotos de helicóptero.
+
 ## Atualização (2026-08-27) — Botão "repetir pergunta" pesa no relatório
 
 Regra da pág. 8 do "Modelo SDEA com anotações", aplicada a EPLIS **e** SDEA (Partes 2/4
@@ -98,9 +121,6 @@ do controlador e todas as 4 do piloto):
     nível Ótimo/Excelente (essa última parte também cobre o item "não ser rígido entre
     Ótimo e Excelente" do documento).
 - `tsc`/`lint`/`test` (37/37, +3) e `build` limpos.
-- **Ainda pendente do documento**: demonstrativo por parte em inglês no modo Official
-  (pergunta + resposta + feedback curto) — hoje o Official não gera `ai_feedback`.
-
 ## Atualização (2026-08-27) — Escala de proficiência passa de 3 para 4 faixas
 
 O documento "Modelo SDEA com anotações" (pág. 9) fechou a escala de avaliação em **4
@@ -129,9 +149,9 @@ faixas** da Escala OACI, retroativa também ao EPLIS:
   testes puros em `// @vitest-environment node` (`src/lib/ai/final-report.test.ts`).
 - `npx tsc --noEmit`, `npm run lint`, `npm run test` (34/34, 4 novos) e `npm run build`
   limpos. **Migration ainda não aplicada em produção** / não commitado.
-- Pendente desta leva do documento (ver seções seguintes com a mesma data): o botão
-  "repeat question" e a regra "não ser rígido entre Ótimo e Excelente" foram feitos logo
-  em seguida; falta o demonstrativo por parte em inglês no modo Official.
+- Os outros pontos desta leva do documento (botão "repeat question", não-rigidez
+  Ótimo/Excelente, demonstrativo Official) foram feitos logo em seguida — ver as
+  seções acima com a mesma data.
 
 ## Atualização (2026-08-24) — Trilha do piloto (SDEA), implementada do zero
 

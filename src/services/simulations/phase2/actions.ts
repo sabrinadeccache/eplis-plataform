@@ -3,7 +3,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { generateSpeechAudio } from "@/lib/ai/openai";
-import { generateFinalReport, MODEL_VERSION } from "@/lib/ai/anthropic";
+import {
+  generateFinalReport,
+  generateResponseFeedback,
+  MODEL_VERSION,
+  type FeedbackStage,
+} from "@/lib/ai/anthropic";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
 import { DAILY_ATTEMPT_LIMIT, countAttemptsToday } from "@/services/simulations/phase2/limits";
 import {
@@ -122,22 +127,25 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
   if (next === null) {
     const { data: responses } = await supabase
       .from("phase2_responses")
-      .select("transcript, response_stage, repetition_count, phase2_prompts(part, prompt_text)")
+      .select("id, transcript, response_stage, repetition_count, phase2_prompts(part, prompt_text)")
       .eq("simulation_attempt_id", attemptId)
       .not("transcript", "is", null);
 
     type ResponseWithPrompt = {
+      id: string;
       transcript: string | null;
       response_stage: string;
       repetition_count: number | null;
       phase2_prompts: { part: Part; prompt_text: string } | null;
     };
 
-    const transcripts = ((responses as ResponseWithPrompt[] | null) ?? [])
+    const rows = ((responses as ResponseWithPrompt[] | null) ?? [])
       .filter((r): r is ResponseWithPrompt & { transcript: string; phase2_prompts: { part: Part; prompt_text: string } } =>
         r.transcript !== null && r.phase2_prompts !== null,
       )
       .map((r) => ({
+        id: r.id,
+        stage: r.response_stage,
         part: r.phase2_prompts.part,
         // Na Parte 4, o prompt_text salvo é sempre o texto de descrição da
         // imagem, reaproveitado pros dois estágios do item (descrição e
@@ -153,7 +161,7 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
         repetitionCount: r.repetition_count ?? 0,
       }));
 
-    const report = await generateFinalReport(transcripts, attempt.mode as SimulationMode);
+    const report = await generateFinalReport(rows, attempt.mode as SimulationMode);
 
     await supabase.from("simulation_feedbacks").insert({
       simulation_attempt_id: attemptId,
@@ -174,6 +182,38 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
       .from("simulation_attempts")
       .update({ status: "completed", finished_at: new Date().toISOString(), current_state: "INTERVIEW_FINISHED" })
       .eq("id", attemptId);
+
+    // Modo `official` não gera feedback curto por resposta durante a entrevista
+    // (fidelidade ao exame real). Mas o demonstrativo por parte na tela de
+    // resultado precisa mostrar pergunta + resposta + feedback curto em inglês
+    // (doc "Modelo SDEA com anotações", pág. 8) — geramos aqui, no fim, em
+    // paralelo. Feito DEPOIS de salvar relatório + concluir a tentativa: se
+    // falhar/estourar tempo, o resultado principal já está persistido.
+    if (attempt.mode === "official") {
+      const FEEDBACK_STAGES: FeedbackStage[] = [
+        "situation_check",
+        "suggestion",
+        "image_description",
+        "story_telling",
+      ];
+      await Promise.all(
+        rows.map(async (r) => {
+          try {
+            const feedback = await generateResponseFeedback(
+              r.promptText,
+              r.transcript,
+              FEEDBACK_STAGES.includes(r.stage as FeedbackStage) ? (r.stage as FeedbackStage) : undefined,
+            );
+            await supabase
+              .from("phase2_responses")
+              .update({ ai_feedback: feedback, ai_provider: "anthropic", model_version: MODEL_VERSION })
+              .eq("id", r.id);
+          } catch {
+            // deixa ai_feedback null nesse item
+          }
+        }),
+      );
+    }
 
     return { finished: true };
   }

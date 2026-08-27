@@ -136,7 +136,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | response_stage | enum | **[ALTERADO]** agora cobre todos os sub-estágios da state machine: `main`, `situation_intro`, `situation_check`, `suggestion` (Parte 2), `image_observation`, `image_description`, `story_preparation`, `story_telling` (Parte 4) |
 | audio_url | text, nullable | |
 | transcript | text, nullable | |
-| ai_feedback | text, nullable | preenchido em tempo real no `practice`, só ao final no `official` |
+| ai_feedback | text, nullable | feedback curto em inglês por resposta. `practice`: preenchido em tempo real (mostrado ao candidato após cada resposta). `official`: **[2026-08-27]** preenchido só na finalização (`advanceState`, em lote), para o demonstrativo por parte da tela de resultado — nunca mostrado durante a prova |
 | ai_provider | text, nullable | ex: `anthropic` |
 | model_version | text, nullable | ex: `claude-sonnet-5` |
 | processing_status | enum | `queued`, `transcribing`, `analyzing`, `done`, `error` — controla a UI, não implica necessariamente fila assíncrona real (ver nota de arquitetura no SPD) |

@@ -118,7 +118,7 @@ export default async function Fase2ResultadoPage({
               </p>
               {r.transcript ? (
                 <p className="mt-2 text-zinc-700 dark:text-zinc-300">
-                  <span className="text-xs font-medium text-zinc-400">Sua resposta: </span>
+                  <span className="text-xs font-medium text-zinc-400">Answer: </span>
                   {r.transcript as string}
                 </p>
               ) : null}
