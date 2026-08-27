@@ -141,7 +141,7 @@ meio de um item reinicia os sub-estágios, mas não perde a posição de item.
 **Diferenças reais em relação à Parte 2/3 do controlador**, confirmadas nos documentos
 oficiais do SDEA:
 - A Parte 2 é um **role-play bidirecional de fraseologia** (o candidato interpreta o
-  piloto de uma aeronave fixa, call sign `ANAC 123`), não uma "situação pra comentar" —
+  piloto de uma aeronave fixa, call sign `LEVEL 6`), não uma "situação pra comentar" —
   por isso 4 sub-turnos por item em vez de 2.
 - A Parte 3 termina com um turno de **comparação entre as 3 situações**, que não existe
   na Parte 3 do controlador.

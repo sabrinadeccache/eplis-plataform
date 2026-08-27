@@ -77,6 +77,31 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   (`pg`, `SUPABASE_DB_URL` do Session pooler) continuam válidas e são o caminho dos
   scripts em `scripts/`.
 
+## Atualização (2026-08-28) — Call sign `LEVEL 6` e áudios sintéticos da Parte 2/3 zerados (SDEA)
+
+- **Call sign da Parte 2 trocado `ANAC 123` → `LEVEL 6`** (a plataforma não tem vínculo
+  com a ANAC; `LEVEL 6` é um trocadilho com o nível máximo da escala de proficiência
+  linguística da OACI, que é o alvo do candidato). Troca feita em
+  `scripts/seed-pilot-prompts.mjs` (dados da Parte 2 — falas do ATC e respostas de
+  referência), no texto de introdução da Parte 2 em
+  `src/components/sdea/pilot-interview-runner.tsx` e nos docs. Referências à **ANAC como
+  órgão** (nome do exame SDEA em `src/lib/ai/pilot-track.ts`, comentários) foram mantidas.
+  Seed já rodado em produção (`ANAC 123` restante: 0).
+- **Todos os áudios sintéticos pré-gerados da Parte 2/3 foram apagados** (decisão da
+  Sabrina — ela vai gravar/subir os TTS manualmente): 65 objetos removidos do bucket
+  `pilot-prompt-audio` (o bucket em si foi mantido) e as 40 linhas de `pilot_prompts`
+  com `atc_audio_url`/`atc_followup_audio_url`/`dialogue_audio_url` foram zeradas.
+  Enquanto essas colunas estiverem `null`, o runner cai no **TTS em runtime** (`alloy`,
+  sem efeito de rádio) — comportamento de fallback que já existia. Não havia cópia local
+  no Material Didático.
+- **Script novo**: `scripts/delete-pilot-prompt-audio.mjs` (idempotente, tem `--dry-run`)
+  — lista recursivamente o bucket, apaga os objetos e zera as 3 colunas de URL.
+- Para religar um áudio manual: subir o mp3 e gravar a URL pública na coluna
+  correspondente de `pilot_prompts` (casar por `id`: `<id>/atc.mp3`, `<id>/followup.mp3`,
+  `<id>/dialogue.mp3`). O pipeline `scripts/generate-pilot-prompt-audio.mjs` continua
+  existindo caso se queira regenerar via OpenAI no futuro (`--force`).
+- `tsc`/`lint`/`test`/`build` limpos.
+
 ## Atualização (2026-08-27) — Pool de 30 perguntas da Parte 1 do SDEA
 
 A Parte 1 da trilha do piloto rodava com as **15 perguntas** herdadas das provas-modelo
@@ -172,6 +197,9 @@ efeito de rádio/ruído**; a pág. 5 pede que cada gravação da Parte 3 **toque
 - **Escala futura**: quando o pool crescer pras 10 provas (200 áudios Parte 2 / 60
   Parte 3), o script cobre automaticamente — é só rodar de novo.
 - `tsc`/`lint`/`test` (42/42, +5 do parser) e `build` limpos.
+- **[2026-08-28] Revertido**: os 65 áudios gerados aqui foram apagados depois (Storage +
+  colunas de URL zeradas) — a Sabrina vai subir os TTS manualmente. Ver a atualização de
+  2026-08-28 no topo. Toda a infra descrita acima continua válida.
 
 ## Atualização (2026-08-27) — Demonstrativo por parte no modo Official
 
@@ -262,7 +290,7 @@ difíceis) + **1 prova-modelo oficial completa** (`Modelo SDEA.pdf`, avião/`fix
 documentos:
 - **Parte 1** — 3 perguntas abertas de carreira/aviação (pool compartilhado entre
   perfis, agnóstico a tipo de aeronave).
-- **Parte 2** — 5 situações de role-play como piloto (call sign fixo `ANAC 123`), cada
+- **Parte 2** — 5 situações de role-play como piloto (call sign fixo `LEVEL 6`), cada
   uma com **4 sub-turnos**: readback de uma instrução do controlador, reação a um
   imprevisto narrado (às vezes com foto), confirmação/negação de um detalhe, e um relato
   em discurso indireto do que o controlador disse — mecanicamente bem mais rico que a
@@ -1352,7 +1380,9 @@ na Vercel dispara a partir daí):
    do SDEA: TTS + ffmpeg (VHF + estática + clique de PTT). Migration `20260828000000`
    (`atc_audio_url`/`atc_followup_audio_url`/`dialogue_audio_url`) e bucket
    `pilot-prompt-audio` **já aplicados em produção**; 65 áudios gerados e no Storage.
-   Parte 3 toca 2x.
+   Parte 3 toca 2x. **[2026-08-28] Esses 65 áudios foram DEPOIS apagados** (Storage +
+   colunas de URL zeradas) — a Sabrina vai subir os TTS manualmente; ver a atualização
+   de 2026-08-28 no topo. O runner voltou ao TTS em runtime enquanto as URLs forem `null`.
 5. `95e476b` — a Sabrina reorganizou o material didático (`Material Didático/{ATC,Pilots}/`);
    caminhos atualizados em 4 scripts de seed/upload. `generate-pilot-prompt-audio.mjs`
    passou a gravar cópia local dos mp3 em `Pilots/Material Didático/{Fixed-wing,Rotary-wing}/Audios/`.
@@ -1484,11 +1514,18 @@ mudanças nesta rodada.
   hipótese de depois, 2 perguntas de discussão) são **fixos no runner** (`PART4_*` em
   `pilot-interview-runner.tsx`) — decisão da Sabrina, seguindo o "Modelo SDEA com
   anotações". `discussion_question`/`_2` de `pilot_prompts` não são lidas na Parte 4.
-- **[2026-08-28] Áudio da Parte 2/3 do SDEA**: falas do ATC e diálogos são áudios
-  sintéticos **pré-gerados** (TTS `gpt-4o-mini-tts` + efeito de rádio VHF via ffmpeg,
-  bucket `pilot-prompt-audio`), não áudio real (licenciamento) nem TTS em runtime. Voz
-  `onyx` p/ ATC, `echo` p/ piloto, `alloy` (runtime, limpa) p/ examinador. Gravação da
-  Parte 3 toca 2x. Regenerar com `scripts/generate-pilot-prompt-audio.mjs`.
+- **[2026-08-28] Áudio da Parte 2/3 do SDEA**: as colunas `atc_audio_url`/
+  `atc_followup_audio_url`/`dialogue_audio_url` de `pilot_prompts` estão **todas `null`** e
+  o bucket `pilot-prompt-audio` está **vazio** — a Sabrina vai subir os TTS manualmente
+  (apagados em 2026-08-28 via `scripts/delete-pilot-prompt-audio.mjs`). Enquanto `null`, o
+  runner usa **TTS em runtime** (`alloy`, sem efeito de rádio) para todas as falas. A
+  infra do pré-gerado continua de pé (migration `20260828000000`, bucket, pipeline
+  `scripts/generate-pilot-prompt-audio.mjs` — `onyx` p/ ATC, `echo` p/ piloto, rádio VHF
+  via ffmpeg, Parte 3 toca 2x); é só religar gravando a URL de cada mp3 na coluna
+  correspondente (casar por `id`: `<id>/atc.mp3`, `<id>/followup.mp3`, `<id>/dialogue.mp3`).
+- **[2026-08-28] Call sign da Parte 2 = `LEVEL 6`** (não `ANAC 123` — sem vínculo com a
+  ANAC; trocadilho com o nível OACI máximo). Fixo nos dados da Parte 2 e no runner.
+  Referências à ANAC como órgão regulador (nome do exame SDEA) foram mantidas.
 - **[2026-08-27] Escala de proficiência = 4 faixas** (`weak`/`moderate`/`good`/`excellent`
   = Fraco N1-3 / Moderado N4 / Ótimo N5 / Excelente N6), retroativa ao EPLIS. Regra
   "overall = menor dos 6" agora garantida no código (`normalizeFinalReport`).

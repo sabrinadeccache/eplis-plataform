@@ -18,7 +18,7 @@ import type { Part, PilotResponseStage, SimulationMode } from "@/types/database"
 const PART_INTRO_TEXT: Record<Part, string> = {
   part1: "Let's begin Part 1. I will ask you a few questions about your career and aviation in general.",
   part2:
-    "Now Part 2. You are the pilot of a twin-engined aircraft, call sign ANAC 123. I will describe five situations — listen to the controller, read back the instruction, and react appropriately.",
+    "Now Part 2. You are the pilot of a twin-engined aircraft, call sign LEVEL 6. I will describe five situations — listen to the controller, read back the instruction, and react appropriately.",
   part3:
     "Part 3. You will hear three unexpected situations between a pilot and a controller. Listen carefully, then tell me what you heard.",
   part4: "The last part. You will see a picture. Describe it, and then we'll discuss it.",
