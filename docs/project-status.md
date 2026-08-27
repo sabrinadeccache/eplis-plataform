@@ -1310,6 +1310,53 @@ dia, numa sessão seguinte.]**
 
 ---
 
+**Ponto de retomada (2026-08-28, fim da sessão de conteúdo do SDEA)** — sessão inteira
+dedicada a implementar as diretrizes do documento **"Modelo SDEA com anotações"** (trazido
+pela Sabrina) e a plugar o material didático. Detalhamento técnico completo nas seções
+datadas 2026-08-27 e 2026-08-28 acima. **6 commits enviados a `main`** (deploy automático
+na Vercel dispara a partir daí):
+
+1. `e25e28d` — escala de proficiência de 3 → 4 faixas (+`excellent`/N6), retroativa ao
+   EPLIS. Migration `20260827000000` **já aplicada em produção**. `normalizeFinalReport`
+   garante `overall = menor dos 6` no código.
+2. `a9c40fb` — botão "repetir pergunta" pesa no critério Compreensão do relatório
+   (practice: qualquer uso; official: 2ª repetição em diante), sem rebaixar quem
+   demonstrou Ótimo/Excelente.
+3. `70f8e13` — modo `official` passou a gerar o demonstrativo por resposta em inglês
+   (pergunta + resposta + feedback curto) na finalização, sem latência durante a prova.
+4. `e57b801` — áudios de rádio pré-gerados da Parte 2 (50 clipes) e Parte 3 (15 diálogos)
+   do SDEA: TTS + ffmpeg (VHF + estática + clique de PTT). Migration `20260828000000`
+   (`atc_audio_url`/`atc_followup_audio_url`/`dialogue_audio_url`) e bucket
+   `pilot-prompt-audio` **já aplicados em produção**; 65 áudios gerados e no Storage.
+   Parte 3 toca 2x.
+5. `95e476b` — a Sabrina reorganizou o material didático (`Material Didático/{ATC,Pilots}/`);
+   caminhos atualizados em 4 scripts de seed/upload. `generate-pilot-prompt-audio.mjs`
+   passou a gravar cópia local dos mp3 em `Pilots/Material Didático/{Fixed-wing,Rotary-wing}/Audios/`.
+6. `bc3f421` — pool de fotos da Parte 4: 13 avião + 10 helicóptero (IA-geradas, fornecidas
+   pela Sabrina), otimizadas e no bucket `pilot-images/<perfil>/part4/`; 23 linhas ativas
+   em `pilot_prompts`. **Fecha a lacuna da Parte 4 de `rotary_wing`.** Estrutura da Parte 4:
+   só a afirmação é da foto, resto fixo no runner (item 2 com sorteio 1-de-4).
+
+**Tudo já aplicado no Supabase de produção durante a sessão** (2 migrations, 1 bucket,
+re-seed de `pilot_prompts`, 65 áudios + 23 imagens no Storage) — não há "falta aplicar"
+pendente; os pushes só levaram o código do repo. `npx tsc --noEmit`, `npm run lint`,
+`npm run test` (42/42, +12 novos), `npm run build` conferidos limpos antes de cada push.
+Working tree limpa.
+
+**Pendências reais em aberto** (sem mudança nesta sessão): ampliar o pool de conteúdo do
+SDEA pras 10 provas por perfil (as 200/60 áudios da Parte 2/3 e mais imagens da Parte 4 —
+o script de áudio já cobre linhas novas automaticamente); refazer o pool de **imagens de
+complicação da Parte 2** do piloto com o conjunto novo (o `upload-pilot-part2-part4-images.mjs`
+referencia 3 arquivos que não existem mais — as 2 imagens em uso seguem no bucket/DB);
+testes automatizados de `generate*Feedback`/`generate*FinalReport` (lacuna antiga, EPLIS e
+SDEA); nenhum teste manual real com áudio/microfone da entrevista do piloto ainda; item 2
+da Parte 4 poderia virar estágio `future` próprio (hoje reusa `narrative`) se quiser
+feedback separado por item.
+
+**Achado de máquina** (registrado em memória): o `ffmpeg` do Homebrew nesta máquina está
+quebrado (`libx265` defasado) — usar `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg` via
+`FFMPEG_BIN`.
+
 **Ponto de retomada (2026-08-24, fim da sessão da trilha do piloto)** — trilha completa do
 SDEA implementada nesta rodada (ver "Atualização (2026-08-24) — Trilha do piloto (SDEA)"
 acima para o detalhamento técnico completo: schema, backend, IA, UI, role gating,
@@ -1386,9 +1433,24 @@ mudanças nesta rodada.
   Correção do SDEA **nunca avalia fraseologia** (nem no readback), só proficiência
   linguística — confirmado nos documentos oficiais da ANAC. Conteúdo de Parte 2/3/4 é
   segregado por `aircraft_type` (`fixed_wing`/`rotary_wing`), sem fallback pro outro tipo
-  (diferente do `general` da Parte 1); Parte 4 de `rotary_wing` roda intencionalmente sem
-  conteúdo até haver fotos licenciadas — não usar fotos com marca d'água/sem licença clara
-  nem como placeholder temporário (achado real desta sessão).
+  (diferente do `general` da Parte 1). Regra de licença de imagem: nunca usar fotos com
+  marca d'água/sem licença clara, nem como placeholder — por isso a Parte 4 de
+  `rotary_wing` rodou sem conteúdo até 2026-08-28, quando a Sabrina forneceu um pool
+  IA-gerado (13 avião + 10 helicóptero, ver "Atualização (2026-08-28) — Pool de fotos da
+  Parte 4").
+- **[2026-08-28] Parte 4 do SDEA**: dos 6 itens, só a afirmação (`agree_disagree_statement`)
+  é específica da foto; os demais (descrição, hipótese de antes com 4 variações sorteadas,
+  hipótese de depois, 2 perguntas de discussão) são **fixos no runner** (`PART4_*` em
+  `pilot-interview-runner.tsx`) — decisão da Sabrina, seguindo o "Modelo SDEA com
+  anotações". `discussion_question`/`_2` de `pilot_prompts` não são lidas na Parte 4.
+- **[2026-08-28] Áudio da Parte 2/3 do SDEA**: falas do ATC e diálogos são áudios
+  sintéticos **pré-gerados** (TTS `gpt-4o-mini-tts` + efeito de rádio VHF via ffmpeg,
+  bucket `pilot-prompt-audio`), não áudio real (licenciamento) nem TTS em runtime. Voz
+  `onyx` p/ ATC, `echo` p/ piloto, `alloy` (runtime, limpa) p/ examinador. Gravação da
+  Parte 3 toca 2x. Regenerar com `scripts/generate-pilot-prompt-audio.mjs`.
+- **[2026-08-27] Escala de proficiência = 4 faixas** (`weak`/`moderate`/`good`/`excellent`
+  = Fraco N1-3 / Moderado N4 / Ótimo N5 / Excelente N6), retroativa ao EPLIS. Regra
+  "overall = menor dos 6" agora garantida no código (`normalizeFinalReport`).
 - Tela de Desempenho (Fase 6): **não mostrar evolução por critério ICAO individual**, só
   o nível geral (Fraco/Moderado/Bom) por simulado — proposital, não limitação a
   corrigir. Evita que a tela pareça afirmar um nível OACI oficial específico pro aluno;

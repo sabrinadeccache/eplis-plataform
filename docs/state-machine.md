@@ -113,22 +113,23 @@ PILOT_PART_1_QUESTION x3
 PILOT_PART_2_INTRO
  ↓
 PILOT_PART_2_SITUATION x5
-   ├─ readback        (transforma a instrução do controlador em readback)
+   ├─ readback        (áudio de rádio pré-gerado do controlador → readback)
    ├─ reaction         (reage a um imprevisto narrado pelo examinador, às vezes com foto)
-   ├─ confirmation      (confirma/nega um detalhe que o controlador perguntou de volta)
+   ├─ confirmation      (2º áudio de rádio do controlador → confirma/nega um detalhe)
    └─ report_back        (discurso indireto: "tell me everything the controller said")
  ↓
 PILOT_PART_3_INTRO
  ↓
 PILOT_PART_3_SITUATION x3
-   ├─ (narração automática do diálogo piloto/controlador, TTS)
+   ├─ (áudio de rádio pré-gerado do diálogo piloto/controlador — toca 2x, fiel ao exame)
    ├─ report            (discurso indireto do diálogo inteiro)
    ├─ question           (pergunta técnica/de opinião sobre o tema)
    └─ comparison           (só no 3º item: compara as 3 situações — severidade/solução/prevenção)
  ↓
 PILOT_PART_4_INTRO
  ↓
-picture_description → narrative → discussion_1 → discussion_2 → agree_disagree
+picture_description → narrative(antes, 1 de 4 variações) → narrative(depois)
+   → discussion_1 → discussion_2 → agree_disagree
  ↓
 INTERVIEW_FINISHED
 ```
@@ -146,6 +147,11 @@ oficiais do SDEA:
   na Parte 3 do controlador.
 - Sem tiering concreto/abstrato nem ordenação por dificuldade nas Partes 2/3 (diferente do
   controlador) — os documentos reais do SDEA não pedem isso.
+- **[2026-08-28]** Áudios de rádio da Parte 2/3 são **pré-gerados** (TTS + efeito VHF,
+  bucket `pilot-prompt-audio`), não TTS em runtime — só a narração do examinador é
+  runtime. A gravação da Parte 3 toca **2x**. Na Parte 4, só a afirmação (`agree_disagree`)
+  é específica da foto; itens 1–5 são fixos no runner (`PART4_*` em
+  `pilot-interview-runner.tsx`), incluindo o sorteio 1-de-4 da pergunta de "antes".
 
 **Correção — mesma regra do controlador, com uma ressalva própria do exame:** nota final
 sempre o menor dos 6 critérios OACI, nunca média. A ressalva: os documentos oficiais do
