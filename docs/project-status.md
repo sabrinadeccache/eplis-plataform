@@ -71,10 +71,34 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
 
 - `gh` (GitHub CLI) — não instalado. Push feito via `git push` com credenciais já
   configuradas no sistema (funcionou sem prompt).
-- MCP do Supabase (`mcp__claude_ai_Supabase__*`) — não autorizado. Precisaria ser
-  liberado nas configurações de conector do claude.ai. Enquanto isso, migrations são
-  aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
-  `package.json`).
+- MCP do Supabase (`mcp__claude_ai_Supabase__*`) — **autorizado a partir de 2026-08-27**
+  (projeto `nkjnvmuatkibrvfsojmp` / org `hnhboswcygsjdczakfif`). `execute_sql` e
+  `apply_migration` funcionam direto. As migrations/seeds via conexão Postgres direta
+  (`pg`, `SUPABASE_DB_URL` do Session pooler) continuam válidas e são o caminho dos
+  scripts em `scripts/`.
+
+## Atualização (2026-08-27) — Pool de 30 perguntas da Parte 1 do SDEA
+
+A Parte 1 da trilha do piloto rodava com as **15 perguntas** herdadas das provas-modelo
+(3 do "Modelo SDEA.pdf" + 12 dos "Test 1-4 helicopter"). A Sabrina escreveu um **pool
+próprio de 30 perguntas abertas** pra substituir, mantendo o pool `general` (Parte 1 é
+agnóstica ao tipo de aeronave). As 30 estão organizadas em 3 blocos temáticos
+(conhecimento operacional/técnico, experiência pessoal/carreira, opinião/futuro da
+aviação) — só comentário no seed, não há campo de categoria no schema.
+
+- **DB**: as 15 linhas antigas de `pilot_prompts` (`part='part1'`) foram **apagadas**
+  (`DELETE`, não `is_active=false`) — confirmado antes que nenhuma `pilot_responses` as
+  referenciava (`count = 0`), então não havia risco de FK. As 30 novas foram inseridas
+  (`aircraft_type='general'`, `expected_duration_seconds=60`, `is_active=true`).
+  Aplicado direto via MCP do Supabase (`execute_sql`). Contagem final: 30.
+- **`scripts/seed-pilot-prompts.mjs`**: array `PART1` reescrito com as 30, comentário de
+  cabeçalho atualizado. O seed continua idempotente (`upsertPart1` casa por `prompt_text`,
+  `deactivateStale` desativa o que sair da lista) — rodar de novo mantém as 30.
+- **`Material Didático/Pilots/Material Didático/Docs/Material_pilotos.docx`**: catálogo do
+  material do piloto. Ganhou a seção **PART 1** com as 30 perguntas numeradas (já tinha
+  PART 4). Editado com `python-docx`.
+
+`npm run lint` limpo.
 
 ## Atualização (2026-08-28) — Pool de fotos da Parte 4 (SDEA), avião e helicóptero
 
@@ -1356,6 +1380,23 @@ feedback separado por item.
 **Achado de máquina** (registrado em memória): o `ffmpeg` do Homebrew nesta máquina está
 quebrado (`libx265` defasado) — usar `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg` via
 `FFMPEG_BIN`.
+
+**Ponto de retomada (2026-08-27, pool da Parte 1 do SDEA)** — sessão curta: a Sabrina
+trocou o conteúdo da Parte 1 da trilha do piloto. Detalhe técnico na seção "Atualização
+(2026-08-27) — Pool de 30 perguntas da Parte 1 do SDEA" acima. Resumo:
+
+- `pilot_prompts` (`part='part1'`): 15 linhas antigas **apagadas**, 30 novas inseridas
+  (pool `general`), aplicado direto no Supabase de produção via MCP — **não há "falta
+  aplicar"**, o commit só leva o código.
+- `scripts/seed-pilot-prompts.mjs` — array `PART1` e comentário de cabeçalho atualizados.
+- `Material Didático/Pilots/Material Didático/Docs/Material_pilotos.docx` — nova seção
+  PART 1 (30 perguntas). Fora do repo Git (mora em `Material Didático/`, irmão de
+  `Project/`), então não entra no commit.
+- Verificação: `npm run lint`, `npx tsc --noEmit` e `npm run test` limpos antes do push.
+- Novidade de ambiente: **MCP do Supabase agora está autorizado** (ver "Ferramentas
+  indisponíveis" — a seção foi atualizada).
+
+Nada mais do projeto mudou nesta rodada.
 
 **Ponto de retomada (2026-08-24, fim da sessão da trilha do piloto)** — trilha completa do
 SDEA implementada nesta rodada (ver "Atualização (2026-08-24) — Trilha do piloto (SDEA)"

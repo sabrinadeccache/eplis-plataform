@@ -229,9 +229,11 @@ diferente do controlador):
   antes/depois, 2 perguntas de discussão, 1 afirmação pra concordar/discordar
 
 **Conteúdo inicial (2026-08-24):** carregado via `scripts/seed-pilot-prompts.mjs` a partir
-das 5 provas reais levantadas — 15 perguntas de Parte 1 (`general`), 5 situações de Parte 2
+das 5 provas reais levantadas — 5 situações de Parte 2
 + 3 de Parte 3 + 1 foto de Parte 4 pra `fixed_wing`, e 20 situações de Parte 2 + 12 de Parte
-3 pra `rotary_wing`. **Parte 4 de `rotary_wing` ficou sem conteúdo nesta rodada** — as
+3 pra `rotary_wing`. A Parte 1 herdou 15 perguntas dessas provas; **[2026-08-27]**
+substituídas por um pool próprio de **30 perguntas abertas** escrito pela Sabrina (pool
+`general`), ver `docs/project-status.md`. **Parte 4 de `rotary_wing` ficou sem conteúdo nesta rodada** — as
 únicas fotos de helicóptero disponíveis tinham marca d'água de banco de imagens ou eram
 fotos profissionais sem licença clara (achado real durante a sessão); só as 3 fotos vindas
 do documento oficial da ANAC (Modelo SDEA) foram usadas. Um piloto `rotary_wing` hoje recebe

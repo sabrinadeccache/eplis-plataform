@@ -1,9 +1,11 @@
-// Conteúdo inicial da trilha do piloto (SDEA) — carrega as 5 provas reais
-// levantadas nesta sessão: 1 prova-modelo oficial da ANAC (fixed_wing,
-// "Modelo SDEA.pdf") + 4 provas reais de helicóptero (rotary_wing, "Test 1-4
-// helicopter ICAO 2024"). Suficiente pra 1 tentativa completa por perfil sem
-// repetição — ampliação do pool pra "dezenas por parte" fica pra uma rodada
-// separada (decisão fechada com a Sabrina), igual ao histórico do EPLIS.
+// Conteúdo inicial da trilha do piloto (SDEA). Partes 2 a 4 vêm das 5 provas
+// reais levantadas: 1 prova-modelo oficial da ANAC (fixed_wing, "Modelo
+// SDEA.pdf") + 4 provas reais de helicóptero (rotary_wing, "Test 1-4
+// helicopter ICAO 2024"). Parte 1 usa um pool próprio de 30 perguntas abertas
+// (pool 'general', agnóstico ao tipo de aeronave) escrito pela Sabrina —
+// substituiu as 15 originais das provas-modelo. Ampliação das Partes 2 a 4 pra
+// "dezenas por parte" fica pra uma rodada separada (decisão fechada com a
+// Sabrina), igual ao histórico do EPLIS.
 //
 // Idempotente via UPSERT (nunca delete-and-reinsert, convenção do CLAUDE.md):
 // Parte 1 casa por prompt_text (pool 'general', compartilhado entre
@@ -33,26 +35,39 @@ function loadEnv() {
 }
 
 const PART1 = [
-  // Modelo SDEA (fixed_wing, oficial ANAC)
-  "When do pilots need to perform an emergency landing?",
-  "How was your flight training experience?",
-  "In your opinion, what will aviation be like in the future?",
-  // Test 1 Helicopter
-  "How can flight simulators help pilots for real emergencies?",
-  "What pieces of advice your flight instructor gave you when you started flying?",
-  "How do you think Brazilian aviation regulations will be different in a near future?",
-  // Test 2 Helicopter
-  "How was your first check ride?",
-  "Why do pilots need to take medical exams? Give some details.",
-  "What is your opinion about the future of communication between pilots and controllers?",
-  // Test 3 Helicopter
-  "What was the most difficult situation you have ever had during a flight?",
-  "What is an effective briefing?",
-  "Can you describe the airport or helipad where you operate more often?",
-  // Test 4 Helicopter
-  "When should pilots perform a missed approach procedure / go around procedure?",
-  "Why is ICAO phraseology important to aviation? How can you define standard phraseology?",
+  // Bloco 1 — conhecimento operacional / técnico (perguntas 1-10)
+  "What are the main causes of flight delays?",
+  "When do pilots decide to divert to an alternate aerodrome?",
+  "How do crew members handle a passenger who becomes ill during a flight?",
+  "What kind of weather conditions can make a landing difficult?",
+  "Why is standard phraseology so important in radio communications?",
+  "What does a pilot check during the walk-around inspection?",
+  "How does fatigue affect a pilot's performance?",
+  "What happens when an aircraft experiences a bird strike?",
+  "Who is responsible for the safety of an aircraft on the ground?",
+  "How do pilots and air traffic controllers avoid misunderstandings?",
+  // Bloco 2 — experiência pessoal / carreira (perguntas 11-20)
   "How did you become interested in aviation?",
+  "Tell me about your first solo flight.",
+  "Have you ever faced a difficult weather situation during a flight?",
+  "What was the most challenging part of your flight training?",
+  "Describe a flight you will never forget.",
+  "Have you ever had a problem communicating in English during a flight?",
+  "Tell me about an interesting airport you have flown from.",
+  "Was there a moment when you had to make a quick decision in the cockpit?",
+  "How was your experience working with different crew members?",
+  "Have you ever witnessed or heard about an incident at an airport?",
+  // Bloco 3 — opinião / futuro da aviação (perguntas 21-30)
+  "In your opinion, what is the biggest safety challenge in aviation today?",
+  "Do you think automation makes flying safer? Why?",
+  "What would you do if you lost radio contact with ATC?",
+  "How do you think pilot training will change in the next twenty years?",
+  "In your opinion, should airlines invest more in crew rest facilities?",
+  "What would you do if a passenger became aggressive during a flight?",
+  "Do you believe unmanned aircraft will replace pilots one day?",
+  "How can aviation become more environmentally friendly?",
+  "If you could improve one thing at the airport where you work, what would it be?",
+  "What advice would you give to someone who wants to become a pilot?",
 ];
 
 // Parte 2 — 5 sub-turnos por situação: contexto (prompt_text), instrução do
