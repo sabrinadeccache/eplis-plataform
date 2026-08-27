@@ -76,6 +76,31 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   aplicadas via conexão Postgres direta (`pg` instalado com `--no-save`, não está no
   `package.json`).
 
+## Atualização (2026-08-27) — Botão "repetir pergunta" pesa no relatório
+
+Regra da pág. 8 do "Modelo SDEA com anotações", aplicada a EPLIS **e** SDEA (Partes 2/4
+do controlador e todas as 4 do piloto):
+
+- **UI** (`InterviewRunner` e `PilotInterviewRunner`, modo `official`): o botão
+  "Repetir pergunta" não bloqueia mais depois do 1º uso — fica verde no 1º clique e
+  âmbar a partir daí, sempre clicável, com um aviso de que repetições extras podem
+  reduzir o critério Compreensão. No `practice` o botão já era ilimitado; ganhou o mesmo
+  aviso.
+- **Relatório final**: `repetition_count` (já persistido por resposta) agora é lido em
+  `generateFinalReport`/`generatePilotFinalReport` e marcado no corpo enviado ao modelo
+  (`[pediu repetição Nx neste item]`). Regra no prompt (`repetitionRuleFor(mode)` em
+  `src/lib/ai/anthropic.ts`):
+  - `practice`: **qualquer** repetição conta — só no critério Compreensão — e é
+    mencionada no `general_feedback`.
+  - `official`: só quando um item teve **mais de uma** repetição.
+  - Nos dois: nunca afeta os outros 5 critérios nem bloqueia; e **não rebaixa
+    Compreensão abaixo de "good"** se a compreensão demonstrada nas respostas foi de
+    nível Ótimo/Excelente (essa última parte também cobre o item "não ser rígido entre
+    Ótimo e Excelente" do documento).
+- `tsc`/`lint`/`test` (37/37, +3) e `build` limpos.
+- **Ainda pendente do documento**: demonstrativo por parte em inglês no modo Official
+  (pergunta + resposta + feedback curto) — hoje o Official não gera `ai_feedback`.
+
 ## Atualização (2026-08-27) — Escala de proficiência passa de 3 para 4 faixas
 
 O documento "Modelo SDEA com anotações" (pág. 9) fechou a escala de avaliação em **4
@@ -104,9 +129,9 @@ faixas** da Escala OACI, retroativa também ao EPLIS:
   testes puros em `// @vitest-environment node` (`src/lib/ai/final-report.test.ts`).
 - `npx tsc --noEmit`, `npm run lint`, `npm run test` (34/34, 4 novos) e `npm run build`
   limpos. **Migration ainda não aplicada em produção** / não commitado.
-- Pendente desta leva do documento: penalidade do botão "repeat question" na
-  compreensão + sinalização no relatório (Practice e Official), demonstrativo por parte
-  em inglês no modo Official, e a regra "não ser rígido entre Ótimo e Excelente".
+- Pendente desta leva do documento (ver seções seguintes com a mesma data): o botão
+  "repeat question" e a regra "não ser rígido entre Ótimo e Excelente" foram feitos logo
+  em seguida; falta o demonstrativo por parte em inglês no modo Official.
 
 ## Atualização (2026-08-24) — Trilha do piloto (SDEA), implementada do zero
 

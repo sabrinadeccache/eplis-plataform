@@ -3,6 +3,8 @@ import {
   OFFICIAL_MODE_ADDENDUM,
   PROFICIENCY_SCALE_PROMPT,
   normalizeFinalReport,
+  repetitionRuleFor,
+  repetitionMarker,
   type FinalReport,
 } from "@/lib/ai/anthropic";
 
@@ -223,15 +225,20 @@ const FALLBACK_REPORT: FinalReport = {
 };
 
 export async function generatePilotFinalReport(
-  transcripts: { part: string; promptText: string; transcript: string }[],
+  transcripts: { part: string; promptText: string; transcript: string; repetitionCount?: number }[],
   mode: "practice" | "official",
 ): Promise<FinalReport> {
   const body = transcripts
-    .map((t, i) => `[${i + 1}] (${t.part}) Contexto: ${t.promptText}\nResposta: ${t.transcript}`)
+    .map(
+      (t, i) =>
+        `[${i + 1}] (${t.part}) Contexto: ${t.promptText}\nResposta: ${t.transcript}${repetitionMarker(t.repetitionCount)}`,
+    )
     .join("\n\n");
 
   const system =
-    mode === "official" ? `${PILOT_FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}` : PILOT_FINAL_REPORT_SYSTEM;
+    (mode === "official"
+      ? `${PILOT_FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}`
+      : PILOT_FINAL_REPORT_SYSTEM) + repetitionRuleFor(mode);
 
   const msg = await client.messages.create({
     model: MODEL_VERSION,

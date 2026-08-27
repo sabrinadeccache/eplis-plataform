@@ -140,7 +140,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | ai_provider | text, nullable | ex: `anthropic` |
 | model_version | text, nullable | ex: `claude-sonnet-5` |
 | processing_status | enum | `queued`, `transcribing`, `analyzing`, `done`, `error` — controla a UI, não implica necessariamente fila assíncrona real (ver nota de arquitetura no SPD) |
-| repetition_count | int, default 0 | **[NOVO]** quantas vezes o candidato pediu repetição/esclarecimento neste item — necessário para aplicar a regra abaixo |
+| repetition_count | int, default 0 | quantas vezes o candidato pediu repetição da pergunta neste item. **[2026-08-27]** passou a ser lido pelo relatório final (`generateFinalReport`/`generatePilotFinalReport`): no `practice` qualquer repetição pesa no critério Compreensão; no `official` só a partir da 2ª. Ver "Regra de repetição" abaixo e a regra do botão no `docs/project-status.md` (2026-08-27). |
 | started_at | timestamp, nullable | |
 | finished_at | timestamp, nullable | |
 | created_at | timestamp | |

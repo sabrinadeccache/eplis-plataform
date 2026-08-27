@@ -122,13 +122,14 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
   if (next === null) {
     const { data: responses } = await supabase
       .from("phase2_responses")
-      .select("transcript, response_stage, phase2_prompts(part, prompt_text)")
+      .select("transcript, response_stage, repetition_count, phase2_prompts(part, prompt_text)")
       .eq("simulation_attempt_id", attemptId)
       .not("transcript", "is", null);
 
     type ResponseWithPrompt = {
       transcript: string | null;
       response_stage: string;
+      repetition_count: number | null;
       phase2_prompts: { part: Part; prompt_text: string } | null;
     };
 
@@ -149,6 +150,7 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
             ? "Tell a short story related to the image you were shown."
             : r.phase2_prompts.prompt_text,
         transcript: r.transcript,
+        repetitionCount: r.repetition_count ?? 0,
       }));
 
     const report = await generateFinalReport(transcripts, attempt.mode as SimulationMode);

@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { normalizeFinalReport, type FinalReport } from "@/lib/ai/anthropic";
+import {
+  normalizeFinalReport,
+  repetitionMarker,
+  repetitionRuleFor,
+  type FinalReport,
+} from "@/lib/ai/anthropic";
 import { lowestProficiency } from "@/types/database";
 
 const base: FinalReport = {
@@ -46,5 +51,27 @@ describe("normalizeFinalReport", () => {
     const out = normalizeFinalReport({ ...base, vocabulary: "amazing" as never });
     expect(out.vocabulary).toBe("moderate");
     expect(out.overall).toBe("moderate");
+  });
+});
+
+describe("repetitionMarker", () => {
+  it("marca só quando houve pelo menos uma repetição", () => {
+    expect(repetitionMarker(0)).toBe("");
+    expect(repetitionMarker(undefined)).toBe("");
+    expect(repetitionMarker(null)).toBe("");
+    expect(repetitionMarker(2)).toContain("2x");
+  });
+});
+
+describe("repetitionRuleFor", () => {
+  it("practice penaliza qualquer repetição; official só mais de uma", () => {
+    expect(repetitionRuleFor("practice")).toContain("QUALQUER pedido de repetição");
+    expect(repetitionRuleFor("official")).toContain("MAIS DE UMA repetição");
+  });
+
+  it("os dois modos protegem quem demonstrou Ótimo/Excelente", () => {
+    for (const mode of ["practice", "official"] as const) {
+      expect(repetitionRuleFor(mode)).toContain('NÃO rebaixe COMPREENSÃO abaixo de "good"');
+    }
   });
 });

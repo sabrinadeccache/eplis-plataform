@@ -95,6 +95,7 @@ export async function generateSpeech(
 type ResponseWithPrompt = {
   transcript: string | null;
   response_stage: PilotResponseStage;
+  repetition_count: number | null;
   pilot_prompts: {
     part: Part;
     prompt_text: string;
@@ -122,7 +123,8 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
     const { data: responses } = await supabase
       .from("pilot_responses")
       .select(
-        "transcript, response_stage, pilot_prompts(part, prompt_text, atc_audio_text, complication_text, " +
+        "transcript, response_stage, repetition_count, " +
+          "pilot_prompts(part, prompt_text, atc_audio_text, complication_text, " +
           "atc_followup_audio_text, discussion_question, discussion_question_2, agree_disagree_statement)",
       )
       .eq("simulation_attempt_id", attemptId)
@@ -137,6 +139,7 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
         part: r.pilot_prompts.part,
         promptText: pilotResponseContext(r.response_stage, r.pilot_prompts),
         transcript: r.transcript,
+        repetitionCount: r.repetition_count ?? 0,
       }));
 
     const report = await generatePilotFinalReport(transcripts, attempt.mode as SimulationMode);

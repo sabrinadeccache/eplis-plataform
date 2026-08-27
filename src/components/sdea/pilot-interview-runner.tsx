@@ -513,11 +513,20 @@ export function PilotInterviewRunner({
                   <button
                     type="button"
                     onClick={replayAudio}
-                    disabled={repetitionCount >= 1}
-                    className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
+                    className={`rounded-md border px-4 py-2 text-sm font-medium ${
+                      repetitionCount === 0
+                        ? "border-emerald-400 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"
+                        : "border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-400"
+                    }`}
                   >
                     Repetir pergunta
                   </button>
+                  {repetitionCount >= 1 && (
+                    <p className="w-full text-xs text-amber-700 dark:text-amber-500">
+                      Pedir a pergunta de novo mais de uma vez pode reduzir o critério Compreensão no
+                      relatório final.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -538,6 +547,12 @@ export function PilotInterviewRunner({
                 >
                   Repetir pergunta
                 </button>
+                {repetitionCount >= 1 && (
+                  <p className="w-full text-xs text-amber-700 dark:text-amber-500">
+                    No exame real, pedir a pergunta de novo pesa no critério Compreensão — o relatório
+                    final vai sinalizar isso.
+                  </p>
+                )}
               </div>
             )}
 

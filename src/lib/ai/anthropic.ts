@@ -233,6 +233,24 @@ continua valendo), o general_feedback também deve, na mesma resposta em portugu
 Não é necessário organizar esse conteúdo por parte (1/2/3/4) nem cobrir cada item
 individualmente — o objetivo é uma visão geral útil, não uma lista exaustiva.`;
 
+// Regra do botão "repeat question" — doc "Modelo SDEA com anotações", pág. 8.
+// O relatório recebe, por resposta, quantas vezes o candidato pediu repetição da
+// pergunta naquele item (coluna `repetition_count` de *_responses), marcado no
+// corpo enviado ao modelo. Vale pro EPLIS e pro SDEA (mesma linha de avaliação).
+const REPETITION_RULE_PRACTICE = `Sobre o botão "repetir pergunta": no modo practice, QUALQUER pedido de repetição (respostas marcadas com "[pediu repetição Nx neste item]") é um sinal a considerar SOMENTE no critério COMPREENSÃO e deve ser mencionado no general_feedback, explicando ao aluno que, no exame real, pedir a pergunta de novo pesa nesse critério.`;
+
+const REPETITION_RULE_OFFICIAL = `Sobre o botão "repetir pergunta": no modo official, uma repetição por item é tolerada e não penaliza; só quando um item teve MAIS DE UMA repetição (marca "[pediu repetição 2x neste item]" ou mais) isso deve pesar SOMENTE no critério COMPREENSÃO e ser mencionado no general_feedback.`;
+
+const REPETITION_RULE_COMMON = `Pedidos de repetição nunca afetam os outros 5 critérios e nunca são motivo de bloqueio. Modere o peso: se a compreensão demonstrada nas próprias respostas foi claramente de nível "good" (Ótimo) ou "excellent" (Excelente), NÃO rebaixe COMPREENSÃO abaixo de "good" só por causa das repetições — registre a observação no general_feedback, mas sem rigidez na nota.`;
+
+export function repetitionRuleFor(mode: "practice" | "official"): string {
+  return `\n\n${mode === "official" ? REPETITION_RULE_OFFICIAL : REPETITION_RULE_PRACTICE}\n${REPETITION_RULE_COMMON}`;
+}
+
+export function repetitionMarker(count?: number | null): string {
+  return count && count > 0 ? `\n[pediu repetição ${count}x neste item]` : "";
+}
+
 const FALLBACK_REPORT: FinalReport = {
   pronunciation: "moderate",
   structure: "moderate",
@@ -246,14 +264,19 @@ const FALLBACK_REPORT: FinalReport = {
 };
 
 export async function generateFinalReport(
-  transcripts: { part: string; promptText: string; transcript: string }[],
+  transcripts: { part: string; promptText: string; transcript: string; repetitionCount?: number }[],
   mode: "practice" | "official",
 ): Promise<FinalReport> {
   const body = transcripts
-    .map((t, i) => `[${i + 1}] (${t.part}) Pergunta: ${t.promptText}\nResposta: ${t.transcript}`)
+    .map(
+      (t, i) =>
+        `[${i + 1}] (${t.part}) Pergunta: ${t.promptText}\nResposta: ${t.transcript}${repetitionMarker(t.repetitionCount)}`,
+    )
     .join("\n\n");
 
-  const system = mode === "official" ? `${FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}` : FINAL_REPORT_SYSTEM;
+  const system =
+    (mode === "official" ? `${FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}` : FINAL_REPORT_SYSTEM) +
+    repetitionRuleFor(mode);
 
   const msg = await client.messages.create({
     model: MODEL_VERSION,
