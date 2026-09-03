@@ -141,8 +141,21 @@ de `Part 3/questions-map-part-3.xlsx` (hardcoded; ordem conferida 1:1 com
 **Rodado em produção**: 38/38, HEAD → 200 `audio/mpeg`. O runner toca 2x
 (comportamento já existente).
 
-**Segue em aberto**: teste real do runner da Parte 2/3 ponta a ponta (áudios
-reais + fotos + os 2x da Parte 3); revisão do inglês do ATC; teste com microfone.
+**Teste ponta a ponta do runner (feito nesta rodada, Playwright headless, modo
+practice, perfil `fixed_wing`)**: login → dashboard → `/sdea` → iniciar practice →
+Parte 1 (3 respostas com transcrição Whisper + feedback Claude reais) → Parte 2.
+Confirmado que o `<audio>` da Parte 2 carrega as **URLs reais do Storage**
+(`pilot-prompt-audio/<id>/atc.mp3` e `/followup.mp3`) nos passos readback/confirmation
+das situações 1 e 2 — não mais data-URI de TTS (o TTS em runtime segue só na
+narração do examinador, que é o esperado). Zero erro de página/console em toda a
+navegação. Não coberto pelo headless: reprodução real do áudio no alto-falante, a
+imagem de complicação nos slots 4-5 e o 2x da Parte 3 — mesmo caminho de dados
+(query → `toPrompt` → prop do runner) já exercitado pelos áudios, e o `<img
+src={complicationImageUrl}>` / `playTwice` são render condicional simples. Usuários
+e tentativas de teste apagados no fim.
+
+**Segue em aberto**: revisão do inglês de ~10 falas do ATC da Parte 2; teste com
+microfone real (só a Sabrina).
 
 ## Atualização (2026-09-03) — Conteúdo novo das Partes 2, 3 e 4 do SDEA no banco (só texto)
 
