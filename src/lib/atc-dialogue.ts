@@ -1,8 +1,8 @@
 // Parser dos diálogos da Parte 3 do SDEA. O `prompt_text` da Parte 3 vem no
-// formato "Pilot: <fala>. ATC: <fala>." (uma ou mais trocas) — o script de
-// geração de áudio (scripts/generate-pilot-prompt-audio.mjs) usa isto pra
-// gerar uma voz por interlocutor. Função pura, sem dependências, pra poder ser
-// testada e importada tanto pelo app quanto por um script .mjs.
+// formato "Pilot: <fala>. ATC: <fala>." (uma ou mais trocas) — usado pra separar
+// as falas por interlocutor (ex.: uma voz por locutor na reprodução do diálogo).
+// Função pura, sem dependências, pra poder ser testada e importada tanto pelo
+// app quanto por um script .mjs.
 
 export type DialogueSpeaker = "pilot" | "atc" | "narration";
 

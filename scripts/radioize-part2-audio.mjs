@@ -2,17 +2,24 @@
 // Cada arquivo tem um "perfil de rádio" próprio, derivado de forma determinística
 // do nome (mesmo arquivo => mesmo som sempre; a01 e a02 soam de estações diferentes).
 // Uso: node radioize.mjs [--inplace] [--intensity N]   (N ~0.7..1.4, default 1)
+//
+// A fonte é SEMPRE `Audios-ORIGINAIS-backup/` quando ela existe (os mp3 limpos
+// que a Sabrina guardou) — assim re-rodar o script é idempotente e nunca empilha
+// o efeito de rádio sobre um arquivo já processado. Sem o backup, cai pra
+// `Audios/`. Com `--inplace` a saída é `Audios/` (o que o app/upload usa); sem
+// ele, `Audios-radio/` (espelho pra conferência).
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, mkdirSync, statSync, copyFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, mkdirSync, statSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 
 const FFMPEG = process.env.FFMPEG_BIN || "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg";
 const ROOT = "/Users/sabrinadeccache/Desktop/Projeto Plataforma/Material Didático/Pilots/Material Didático/Part 2";
-const SRC = join(ROOT, "Audios");
+const BACKUP = join(ROOT, "Audios-ORIGINAIS-backup");
+const SRC = existsSync(BACKUP) ? BACKUP : join(ROOT, "Audios");
 const INPLACE = process.argv.includes("--inplace");
-const OUT = INPLACE ? SRC : join(ROOT, "Audios-radio");
+const OUT = INPLACE ? join(ROOT, "Audios") : join(ROOT, "Audios-radio");
 const ii = process.argv.indexOf("--intensity");
 const INTENSITY = ii > -1 ? Number(process.argv[ii + 1]) : 1;
 
@@ -110,11 +117,6 @@ function walk(dir) {
     if (statSync(full).isDirectory()) { walk(full); continue; }
     if (!name.toLowerCase().endsWith(".mp3")) continue;
     const rel = relative(SRC, full);
-    if (INPLACE) {
-      const bak = join(ROOT, "Audios-clean", rel);
-      mkdirSync(dirname(bak), { recursive: true });
-      copyFileSync(full, bak);
-    }
     const p = radioize(full, join(OUT, rel), rel);
     console.log(`ok ${rel}  [hp${p.hp} lp${p.lp} hiss${p.hiss.toFixed(3)} bed:${p.bed}${p.dropouts ? " drop" : ""}]`);
   }
