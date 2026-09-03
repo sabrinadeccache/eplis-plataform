@@ -180,6 +180,13 @@ oficiais da ANAC (escala OACI — as mesmas 6 áreas do EPLIS) e de 5 provas rea
 (1 prova-modelo oficial de avião + 4 provas reais de helicóptero). Ver `docs/state-machine.md`
 pro detalhamento dos 4 estágios da Parte 2.
 
+**[2026-09-03]** Pool de conteúdo ampliado a partir do Material Didático reescrito pela
+Sabrina (só texto no banco nesta rodada — áudios/imagens pendentes): Parte 1 = 30
+`general`; Parte 2 = 43 `fixed_wing` + 44 `rotary_wing` (por perfil: `order_index` 1-30 sem
+imagem + 31+ com imagem, `complication_image_url` ainda null); Parte 3 = 38 `general` (as
+antigas por perfil desativadas); Parte 4 = 13+10 (inalterado). Gerado de
+`scripts/pilot-content-part234.mjs`. Ver `docs/project-status.md` (2026-09-03).
+
 **`pilot_prompts`** — uma tabela larga (mesma convenção de `phase2_prompts`: colunas
 nullable reaproveitadas por parte, documentadas aqui em vez de normalizadas em tabelas
 separadas):
@@ -194,7 +201,7 @@ separadas):
 | atc_audio_url | text, nullable | **[2026-08-28]** Parte2: mp3 pré-gerado de `atc_audio_text` (TTS voz `onyx` + efeito de rádio VHF), bucket público `pilot-prompt-audio`. `null` → runner cai no TTS em runtime. Gerado por `scripts/generate-pilot-prompt-audio.mjs` |
 | expected_readback | text, nullable | Parte2: referência de readback esperado — só contexto pra IA, nunca mostrado ao candidato |
 | complication_text | text, nullable | Parte2: narração do examinador sobre o imprevisto que motiva a reação do candidato |
-| complication_image_url | text, nullable | Parte2: foto do imprevisto, quando a complicação é introduzida por imagem em vez de só texto (2 das 5 situações reais levantadas) |
+| complication_image_url | text, nullable | Parte2: foto do imprevisto, quando a complicação é introduzida por imagem em vez de só texto. **[2026-09-03]** no pool novo são as situações de `order_index` 31+ por perfil; ainda `null` até o upload das fotos |
 | expected_reaction | text, nullable | Parte2: referência da reação esperada — só pra IA |
 | atc_followup_audio_text | text, nullable | Parte2: resposta do controlador (2º áudio), geralmente pedindo confirmação/negação de um detalhe |
 | atc_followup_audio_url | text, nullable | **[2026-08-28]** Parte2: mp3 pré-gerado de `atc_followup_audio_text` (mesmo pipeline de `atc_audio_url`) |
@@ -202,6 +209,7 @@ separadas):
 | dialogue_audio_url | text, nullable | **[2026-08-28]** Parte3: mp3 pré-gerado de `prompt_text` (diálogo `Pilot:`/`ATC:` — voz `echo` p/ piloto, `onyx` p/ ATC, efeito de rádio, falas concatenadas). O runner toca **duas vezes** (fidelidade ao exame real). `null` → TTS em runtime |
 | discussion_question | text, nullable | Parte3: pergunta técnica/de opinião feita após o relato da situação. **[2026-08-28] Parte4: não usada** — os itens 4 e 5 da Parte 4 passaram a ser fixos no runner (`PART4_DISCUSSION_1/2` em `pilot-interview-runner.tsx`), conforme o "Modelo SDEA com anotações" |
 | discussion_question_2 | text, nullable | Parte3: não usada. **[2026-08-28] Parte4: não usada** (ver acima) |
+| comparison_question | text, nullable | **[2026-09-03]** Parte3: enunciado da comparação final das 3 situações ("How would you compare them?" / "Which one is the most difficult…" / "…in terms of severity, possible solutions or ways of prevention" — uma ou duas por linha de conteúdo). Migration `20260903000000_pilot_part3_comparison_question.sql`. Null nas outras partes |
 | image_url | text, nullable | Parte4: foto principal do item. **[2026-08-28]** pool de 13 fotos `fixed_wing` + 10 `rotary_wing` (`pilot-images/<perfil>/part4/NN.jpg`), IA-geradas, ver `scripts/upload-pilot-part4-images.mjs` |
 | agree_disagree_statement | text, nullable | Parte4: afirmação pra o candidato concordar/discordar com justificativa — **o único item da Parte 4 específico da foto** (os demais são fixos no runner) |
 | order_index | int, nullable | sequência dentro da parte (Parte2: 1-N; Parte3: 1-N, contíguo por prova de origem) — sem regra de ordenação por dificuldade nem tiering concreto/abstrato, diferente da Parte 2/3 do controlador (os documentos reais do SDEA não pedem isso) |

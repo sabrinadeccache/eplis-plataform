@@ -77,6 +77,55 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   (`pg`, `SUPABASE_DB_URL` do Session pooler) continuam válidas e são o caminho dos
   scripts em `scripts/`.
 
+## Atualização (2026-09-03) — Conteúdo novo das Partes 2, 3 e 4 do SDEA no banco (só texto)
+
+Pool de conteúdo do piloto ampliado a partir do Material Didático reescrito pela Sabrina
+(planilhas `questions-map*.xlsx` + roteiros em `Material Didático/Pilots/Material
+Didático/Part 2..4/`). **Esta rodada inseriu só o TEXTO no banco** — áudios e imagens
+ficam pra depois (upload pro Storage + ajustes no runner).
+
+- **Parte 1**: inalterada (as 30 perguntas já estavam no banco).
+- **Parte 2**: de 25 → **87 situações** (43 `fixed_wing` + 44 `rotary_wing`), sendo por
+  perfil 30 sem imagem (`order_index` 1-30) + as com imagem (`order_index` 31+). Colunas:
+  `prompt_text` = fala de contexto do examinador, `atc_audio_text` = ÁUDIO 1 do
+  controlador, `complication_text` = narração do imprevisto ("Now, …"),
+  `atc_followup_audio_text` = ÁUDIO 2. `expected_readback`/`expected_reaction`/
+  `expected_confirmation` agora ficam **null** (o roteiro novo não traz respostas de
+  referência e a correção da trilha do piloto não julga fraseologia).
+  `complication_image_url` = **null** nesta rodada; as situações "com imagem" rodam como
+  texto até o upload das fotos + marcação no runner.
+- **Parte 3**: de 15 (separadas por perfil) → **38 diálogos reais `general`** (o roteiro
+  novo não segmenta por tipo de aeronave, igual à Parte 1). As 15 antigas
+  (`fixed_wing`/`rotary_wing`) foram **desativadas** (`is_active = false`). `prompt_text` =
+  transcrição com rótulos `pilot:`/`atc:` (parser `src/lib/atc-dialogue.ts` aceita),
+  `discussion_question` = pergunta do áudio, **`comparison_question`** (coluna nova) =
+  pergunta de comparação final das 3 situações.
+- **Parte 4**: 13+10 já estavam no banco com imagens funcionando; só sincronizei o texto
+  de 2 `agree_disagree_statement` que a Sabrina encurtou. As 23 imagens novas em
+  `Part 4/Images/` (renomeadas `fixed-wing01..13`, `rotary-wing01..10`) **não foram
+  comparadas** com o pool atual — se forem diferentes, precisam de upload numa próxima
+  rodada.
+
+- **Migration** `20260903000000_pilot_part3_comparison_question.sql`: `pilot_prompts`
+  ganhou `comparison_question text` nullable. Aplicada em produção via MCP.
+- **Código**: `scripts/pilot-content-part234.mjs` (novo, gerado das planilhas, exporta
+  `PART2_FIXED_WING`/`PART2_ROTARY_WING`/`PART3_GENERAL`); `scripts/seed-pilot-prompts.mjs`
+  passou a importar dele, Parte 3 virou loop único `general`, `upsertPart3` grava
+  `comparison_question`. `tsc`/`lint` limpos. Seed rodado: 30/43/44/38/13/10.
+- **Efeito de rádio da Parte 2**: `scripts/radioize-part2-audio.mjs` (novo) aplica um
+  efeito VHF **variado por arquivo** (perfil determinístico pelo nome — `a01`/`a02` soam
+  de estações diferentes) nos 174 mp3 de `Part 2/Audios/` → espelho `Part 2/Audios-radio/`.
+  Aceita `--intensity N` (0.7 limpo … 1.4 sujo) e `--inplace` (faz backup em
+  `Audios-clean/`). **A Sabrina ainda não aprovou a intensidade final** — decidir isso
+  antes de rodar `--inplace` e subir pro Storage. Os áudios da Parte 3 são gravações
+  reais de R/T e provavelmente não precisam do efeito.
+- **Falta pra virar simulador SDEA usável** (fora do escopo desta rodada): upload dos
+  ~260 áudios (Parte 2 radioizados em `Audios-radio/`, Parte 3) e ~50 imagens pro Storage;
+  runner da Parte 2 (87 situações + split 3 sem imagem / 2 com imagem + tocar a01/a02
+  pré-gravados) e da Parte 3 (tocar 2×, 5 s de intervalo, 1 repetição, turno de
+  comparação lendo `comparison_question`); passe de revisão do inglês de ~10 falas do ATC
+  da Parte 2; teste real ponta a ponta com microfone.
+
 ## Atualização (2026-08-28) — Call sign `LEVEL 6` e áudios sintéticos da Parte 2/3 zerados (SDEA)
 
 - **Call sign da Parte 2 trocado `ANAC 123` → `LEVEL 6`** (a plataforma não tem vínculo
