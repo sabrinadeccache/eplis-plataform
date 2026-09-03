@@ -112,7 +112,9 @@ PILOT_PART_1_QUESTION x3
  ↓
 PILOT_PART_2_INTRO
  ↓
-PILOT_PART_2_SITUATION x5
+PILOT_PART_2_SITUATION x5   (as 3 primeiras SEM imagem, as 2 últimas COM imagem de
+                             complicação — o sorteio tira 3 do pool `order_index` 1..30
+                             e 2 do pool `order_index` 31+, ver queries.ts)
    ├─ readback        (áudio de rádio pré-gerado do controlador → readback)
    ├─ reaction         (reage a um imprevisto narrado pelo examinador, às vezes com foto)
    ├─ confirmation      (2º áudio de rádio do controlador → confirma/nega um detalhe)
@@ -145,8 +147,11 @@ oficiais do SDEA:
   por isso 4 sub-turnos por item em vez de 2.
 - A Parte 3 termina com um turno de **comparação entre as 3 situações**, que não existe
   na Parte 3 do controlador.
-- Sem tiering concreto/abstrato nem ordenação por dificuldade nas Partes 2/3 (diferente do
-  controlador) — os documentos reais do SDEA não pedem isso.
+- Sem tiering concreto/abstrato nem ordenação por dificuldade na Parte 3. **A Parte 2 tem
+  um split fixo**: situações 1–3 sem imagem, 4–5 com imagem de complicação (estrutura real
+  do SDEA). No pool isso é o `order_index` (1..30 sem imagem, 31+ com imagem, convenção de
+  `scripts/pilot-content-part234.mjs` e das pastas `Part 2/Audios/<perfil>/{"1, 2 e 3","4 e 5"}`);
+  `getSequenceForAttempt` sorteia 3 do primeiro grupo e 2 do segundo.
 - **[2026-08-28]** Áudios de rádio da Parte 2/3 são **pré-gerados** (TTS + efeito VHF,
   bucket `pilot-prompt-audio`), não TTS em runtime — só a narração do examinador é
   runtime. A gravação da Parte 3 toca **2x**. Na Parte 4, só a afirmação (`agree_disagree`)

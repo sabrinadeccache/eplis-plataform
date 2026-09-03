@@ -9,23 +9,30 @@ type FakeRow = {
   order_index: number | null;
   aircraft_type: string;
   is_active: boolean;
+  complication_image_url: string | null;
 };
 
-function makeRows(part: Part, aircraftType: string, count: number): FakeRow[] {
-  return Array.from({ length: count }, (_, i) => ({
-    id: `${part}-${aircraftType}-${i}`,
-    part,
-    prompt_text: `${part} prompt ${i}`,
-    expected_duration_seconds: 60,
-    order_index: i + 1,
-    aircraft_type: aircraftType,
-    is_active: true,
-  }));
+function makeRows(part: Part, aircraftType: string, count: number, orderStart = 1): FakeRow[] {
+  return Array.from({ length: count }, (_, i) => {
+    const orderIndex = orderStart + i;
+    return {
+      id: `${part}-${aircraftType}-${orderIndex}`,
+      part,
+      prompt_text: `${part} prompt ${orderIndex}`,
+      expected_duration_seconds: 60,
+      order_index: orderIndex,
+      aircraft_type: aircraftType,
+      is_active: true,
+      complication_image_url: part === "part2" && orderIndex >= 31 ? `img-${orderIndex}.jpg` : null,
+    };
+  });
 }
 
 const ALL_ROWS: FakeRow[] = [
   ...makeRows("part1", "general", 8),
+  // Parte 2: 8 situações sem imagem (order_index 1-8) + 4 com imagem (31-34).
   ...makeRows("part2", "fixed_wing", 8),
+  ...makeRows("part2", "fixed_wing", 4, 31),
   ...makeRows("part3", "fixed_wing", 6),
   ...makeRows("part4", "fixed_wing", 5),
 ];
@@ -84,6 +91,19 @@ describe("getSequenceForAttempt (piloto)", () => {
 
     const part2Ids = new Set(sequence.part2.map((p) => p.id));
     expect(part2Ids.size).toBe(5);
+  });
+
+  it("Parte 2: 3 primeiras situações sem imagem, 2 últimas com imagem", async () => {
+    const { part2 } = await getSequenceForAttempt("attempt-3", "fixed_wing");
+    expect(part2.slice(0, 3).every((p) => p.complicationImageUrl === null)).toBe(true);
+    expect(part2.slice(3).every((p) => p.complicationImageUrl !== null)).toBe(true);
+  });
+
+  it("Parte 2 sem situações com imagem no pool → conteúdo insuficiente", async () => {
+    // rotary_wing não tem nenhuma linha no fixture
+    const sequence = await getSequenceForAttempt("attempt-5", "rotary_wing");
+    expect(sequence.part2.length).toBeLessThan(5);
+    expect(sequenceHasEnoughItems(sequence)).toBe(false);
   });
 
   it("perfil sem pool cadastrado (rotary_wing) detecta conteúdo insuficiente", async () => {

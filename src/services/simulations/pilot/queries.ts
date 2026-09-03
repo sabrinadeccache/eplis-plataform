@@ -34,6 +34,17 @@ export type PilotSequence = {
 
 const PART_SIZES: Record<Part, number> = { part1: 3, part2: 5, part3: 3, part4: 1 };
 
+// Parte 2 tem 5 situações: as 3 primeiras SEM imagem, as 2 últimas COM imagem de
+// complicação (estrutura real do SDEA). O pool reflete isso pelo `order_index`:
+// 1..30 = situações sem imagem, 31+ = situações com imagem (convenção fixada em
+// `scripts/pilot-content-part234.mjs` e nas pastas do material didático
+// `Part 2/Audios/<perfil>/{"1, 2 e 3","4 e 5"}`). O sorteio precisa tirar 3 do
+// primeiro grupo e 2 do segundo — nunca misturar. (`complication_image_url` pode
+// estar null enquanto as fotos não sobem; o runner mostra só o texto nesse caso.)
+const PART2_NO_IMAGE = 3;
+const PART2_WITH_IMAGE = 5 - PART2_NO_IMAGE;
+const PART2_WITH_IMAGE_MIN_ORDER = 31;
+
 type PromptRow = {
   id: string;
   part: Part;
@@ -113,7 +124,12 @@ export async function getSequenceForAttempt(
   const part1 = seededShuffle(pool1, rng).slice(0, PART_SIZES.part1).map(toPrompt);
 
   const pool2 = await poolFor("part2");
-  const part2 = seededShuffle(pool2, rng).slice(0, PART_SIZES.part2).map(toPrompt);
+  const pool2NoImage = pool2.filter((r) => (r.order_index ?? 1) < PART2_WITH_IMAGE_MIN_ORDER);
+  const pool2WithImage = pool2.filter((r) => (r.order_index ?? 1) >= PART2_WITH_IMAGE_MIN_ORDER);
+  const part2 = [
+    ...seededShuffle(pool2NoImage, rng).slice(0, PART2_NO_IMAGE),
+    ...seededShuffle(pool2WithImage, rng).slice(0, PART2_WITH_IMAGE),
+  ].map(toPrompt);
 
   const pool3 = await poolFor("part3");
   const part3 = seededShuffle(pool3, rng).slice(0, PART_SIZES.part3).map(toPrompt);

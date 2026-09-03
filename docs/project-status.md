@@ -77,6 +77,66 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   (`pg`, `SUPABASE_DB_URL` do Session pooler) continuam válidas e são o caminho dos
   scripts em `scripts/`.
 
+## Atualização (2026-09-03) — Conserto da pipeline do SDEA + áudios e imagens reais da Parte 2 + fix do sorteio
+
+A Sabrina reorganizou o material didático do piloto de
+`Material Didático/Pilots/Material Didático/{Fixed-wing,Rotary-wing}/` para
+`.../Part 1..4/`, aplicou o efeito de rádio VHF nos áudios da Parte 2 **in-place**
+(originais preservados em `Part 2/Audios-ORIGINAIS-backup/`) e vai subir os áudios
+manualmente. Isso deixou vários scripts com caminho morto. Nesta rodada só o
+conserto (sem tocar em conteúdo do banco nem em código do app):
+
+- **Removidos**: `scripts/generate-pilot-prompt-audio.mjs` (gerador de TTS
+  sintético + rádio VHF — superado pelas gravações reais da Sabrina) e
+  `scripts/upload-pilot-part2-part4-images.mjs` (100% morto: referenciava 3 jpgs
+  que não existem mais, ninguém importava).
+- **`scripts/upload-pilot-part4-images.mjs`**: caminho corrigido para
+  `Part 4/Images/<slug>/<slug>NN.png` (era `{Fixed-wing,Rotary-wing}/Images/`);
+  guard `import.meta.url` protegido contra `process.argv[1]` undefined.
+- **`scripts/radioize-part2-audio.mjs`**: fonte agora é sempre
+  `Part 2/Audios-ORIGINAIS-backup/` quando existe (re-rodar não empilha mais o
+  efeito); `--inplace` escreve em `Part 2/Audios/`; removido o backup hard-coded
+  `Audios-clean/` (que não batia com o nome real `Audios-ORIGINAIS-backup/`).
+- **`scripts/seed-pilot-prompts.mjs`** e **`src/lib/atc-dialogue.ts`**:
+  comentários de cabeçalho atualizados (não citam mais os scripts removidos).
+- **Docs**: `database-schema.md` — colunas `atc_audio_url`/`atc_followup_audio_url`/
+  `dialogue_audio_url` não citam mais o gerador removido.
+**Upload dos áudios da Parte 2 (feito nesta rodada)**: script novo
+`scripts/upload-pilot-part2-audio.mjs` — sobe as 174 gravações reais
+(`Part 2/Audios/<slug>/{1, 2 e 3 | 4 e 5}/sN-a{01,02}[-I].mp3`) pro bucket
+`pilot-prompt-audio` como `<prompt_id>/{atc,followup}.mp3` e grava
+`atc_audio_url` (a01) / `atc_followup_audio_url` (a02) casando por `order_index`
+(s1..s30 → 1..30; `4 e 5/` sufixo `-I` → 30+K). Idempotente (`x-upsert` + update
+incondicional), tem `--dry-run`. **Rodado em produção**: 174/174 enviadas, 0
+faltando; as 87 situações (43 fixed_wing + 44 rotary_wing) agora têm as duas URLs,
+HEAD na URL pública retorna 200 `audio/mpeg`.
+
+**Sorteio da Parte 2 corrigido** (`src/services/simulations/pilot/queries.ts`): as
+pastas `1, 2 e 3` / `4 e 5` são os **slots da prova**, não um índice plano — a
+Parte 2 do SDEA tem 5 situações, sendo as 3 primeiras SEM imagem e as 2 últimas
+COM imagem de complicação. `getSequenceForAttempt` fazia `shuffle(pool).slice(0,5)`
+sem distinguir; agora separa o pool por `order_index` (1..30 sem imagem, 31+ com
+imagem — convenção de `scripts/pilot-content-part234.mjs`) e sorteia **3 do
+primeiro grupo + 2 do segundo**, nessa ordem. +2 testes em `queries.test.ts`.
+
+- `tsc`/`lint`/`test` (44/44) limpos. Áudios já no Storage/DB de produção; código
+  (correções + uploader + sorteio) ainda não commitado.
+
+**Imagens de complicação da Parte 2 (feito nesta rodada)**: script novo
+`scripts/upload-pilot-part2-images.mjs` — 13 `fixed_wing` + 14 `rotary_wing`
+(`Part 2/Images/<slug>/<slug>-<nome>.png`) → JPEG (máx. 1600px, q82) →
+`pilot-images/<slug>/part2/<order_index>.jpg`, grava `complication_image_url` nas
+situações `order_index` 31+. Mapa nome→situação nas abas `FIXED-WING IMAGE` /
+`ROTARY-WING IMAGE` de `Part 2/questions-map.xlsx` (`s{N}` → `order_index` 30+N),
+hardcoded no script; conferido 1:1 pelo texto da situação contra
+`pilot-content-part234.mjs`. Idempotente, `--dry-run`. **Rodado em produção**:
+27/27, 0 faltando, 0 vazando pra `order_index` ≤30; HEAD → 200 `image/jpeg`.
+
+**Segue em aberto** pra Parte 2 SDEA virar usável: áudios da Parte 3
+(`Part 3/Audios/` → `dialogue_audio_url`); teste real do runner da Parte 2 ponta a
+ponta (5 situações, split sem imagem / com imagem, tocando os áudios reais e
+mostrando as fotos); revisão do inglês do ATC; teste com microfone.
+
 ## Atualização (2026-09-03) — Conteúdo novo das Partes 2, 3 e 4 do SDEA no banco (só texto)
 
 Pool de conteúdo do piloto ampliado a partir do Material Didático reescrito pela Sabrina
@@ -1563,15 +1623,18 @@ mudanças nesta rodada.
   hipótese de depois, 2 perguntas de discussão) são **fixos no runner** (`PART4_*` em
   `pilot-interview-runner.tsx`) — decisão da Sabrina, seguindo o "Modelo SDEA com
   anotações". `discussion_question`/`_2` de `pilot_prompts` não são lidas na Parte 4.
-- **[2026-08-28] Áudio da Parte 2/3 do SDEA**: as colunas `atc_audio_url`/
-  `atc_followup_audio_url`/`dialogue_audio_url` de `pilot_prompts` estão **todas `null`** e
-  o bucket `pilot-prompt-audio` está **vazio** — a Sabrina vai subir os TTS manualmente
-  (apagados em 2026-08-28 via `scripts/delete-pilot-prompt-audio.mjs`). Enquanto `null`, o
-  runner usa **TTS em runtime** (`alloy`, sem efeito de rádio) para todas as falas. A
-  infra do pré-gerado continua de pé (migration `20260828000000`, bucket, pipeline
-  `scripts/generate-pilot-prompt-audio.mjs` — `onyx` p/ ATC, `echo` p/ piloto, rádio VHF
-  via ffmpeg, Parte 3 toca 2x); é só religar gravando a URL de cada mp3 na coluna
-  correspondente (casar por `id`: `<id>/atc.mp3`, `<id>/followup.mp3`, `<id>/dialogue.mp3`).
+- **[2026-09-03] Áudio da Parte 2/3 do SDEA**: gravações reais da Sabrina (não mais TTS).
+  **Parte 2**: as 174 falas (a01/a02 de cada uma das 87 situações) já estão no bucket
+  `pilot-prompt-audio` (`<prompt_id>/atc.mp3` e `<prompt_id>/followup.mp3`) e
+  `atc_audio_url`/`atc_followup_audio_url` estão preenchidas — subidas por
+  `scripts/upload-pilot-part2-audio.mjs` a partir de
+  `Material Didático/.../Part 2/Audios/<slug>/{1, 2 e 3 | 4 e 5}/sN-a{01,02}[-I].mp3`
+  (efeito de rádio VHF por `scripts/radioize-part2-audio.mjs`, originais em
+  `Part 2/Audios-ORIGINAIS-backup/`). **Parte 3**: `dialogue_audio_url` ainda **`null`**
+  (upload manual pendente; fonte em `.../Part 3/Audios/`) → runner usa **TTS em runtime**
+  (`alloy`) como fallback. O gerador sintético `scripts/generate-pilot-prompt-audio.mjs`
+  foi **removido** (superado). O runner/`queries.ts` tocam o mp3 direto quando a URL
+  existe; Parte 3 toca 2x.
 - **[2026-08-28] Call sign da Parte 2 = `LEVEL 6`** (não `ANAC 123` — sem vínculo com a
   ANAC; trocadilho com o nível OACI máximo). Fixo nos dados da Parte 2 e no runner.
   Referências à ANAC como órgão regulador (nome do exame SDEA) foram mantidas.
