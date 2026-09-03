@@ -132,10 +132,17 @@ hardcoded no script; conferido 1:1 pelo texto da situação contra
 `pilot-content-part234.mjs`. Idempotente, `--dry-run`. **Rodado em produção**:
 27/27, 0 faltando, 0 vazando pra `order_index` ≤30; HEAD → 200 `image/jpeg`.
 
-**Segue em aberto** pra Parte 2 SDEA virar usável: áudios da Parte 3
-(`Part 3/Audios/` → `dialogue_audio_url`); teste real do runner da Parte 2 ponta a
-ponta (5 situações, split sem imagem / com imagem, tocando os áudios reais e
-mostrando as fotos); revisão do inglês do ATC; teste com microfone.
+**Áudios da Parte 3 (feito nesta rodada)**: script novo
+`scripts/upload-pilot-part3-audio.mjs` — 38 gravações reais de R/T
+(`Part 3/Audios/<basename>.mp3`, sem efeito sintético) → `pilot-prompt-audio/<id>/dialogue.mp3`,
+grava `dialogue_audio_url`. Mapa situação→arquivo da coluna ÁUDIO da aba `PART III`
+de `Part 3/questions-map-part-3.xlsx` (hardcoded; ordem conferida 1:1 com
+`order_index` no banco e com `pilot-content-part234.mjs`). Idempotente, `--dry-run`.
+**Rodado em produção**: 38/38, HEAD → 200 `audio/mpeg`. O runner toca 2x
+(comportamento já existente).
+
+**Segue em aberto**: teste real do runner da Parte 2/3 ponta a ponta (áudios
+reais + fotos + os 2x da Parte 3); revisão do inglês do ATC; teste com microfone.
 
 ## Atualização (2026-09-03) — Conteúdo novo das Partes 2, 3 e 4 do SDEA no banco (só texto)
 
@@ -1630,11 +1637,12 @@ mudanças nesta rodada.
   `scripts/upload-pilot-part2-audio.mjs` a partir de
   `Material Didático/.../Part 2/Audios/<slug>/{1, 2 e 3 | 4 e 5}/sN-a{01,02}[-I].mp3`
   (efeito de rádio VHF por `scripts/radioize-part2-audio.mjs`, originais em
-  `Part 2/Audios-ORIGINAIS-backup/`). **Parte 3**: `dialogue_audio_url` ainda **`null`**
-  (upload manual pendente; fonte em `.../Part 3/Audios/`) → runner usa **TTS em runtime**
-  (`alloy`) como fallback. O gerador sintético `scripts/generate-pilot-prompt-audio.mjs`
-  foi **removido** (superado). O runner/`queries.ts` tocam o mp3 direto quando a URL
-  existe; Parte 3 toca 2x.
+  `Part 2/Audios-ORIGINAIS-backup/`). **Parte 3**: as 38 gravações reais de R/T já estão
+  no bucket (`<prompt_id>/dialogue.mp3`) e `dialogue_audio_url` preenchida — subidas por
+  `scripts/upload-pilot-part3-audio.mjs` (fonte `.../Part 3/Audios/`, sem efeito sintético).
+  O gerador `scripts/generate-pilot-prompt-audio.mjs` foi **removido** (superado). O
+  runner/`queries.ts` tocam o mp3 direto quando a URL existe; Parte 3 toca 2x. `null` em
+  qualquer coluna → fallback TTS em runtime (`alloy`).
 - **[2026-08-28] Call sign da Parte 2 = `LEVEL 6`** (não `ANAC 123` — sem vínculo com a
   ANAC; trocadilho com o nível OACI máximo). Fixo nos dados da Parte 2 e no runner.
   Referências à ANAC como órgão regulador (nome do exame SDEA) foram mantidas.
