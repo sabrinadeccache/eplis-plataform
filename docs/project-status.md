@@ -79,6 +79,43 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
 
 ## Atualização (2026-09-03) — Conserto da pipeline do SDEA + áudios e imagens reais da Parte 2 + fix do sorteio
 
+**Ponto de retomada (2026-09-03, fim da sessão)** — conteúdo do SDEA agora **completo
+e verificado no fluxo**. Todo áudio e imagem das Partes 2, 3 e 4 está no Storage de
+produção e populado no banco. **6 commits em `main`, enviados a produção (deploy
+automático na Vercel)**:
+
+1. `1d2a97e` — conserta a pipeline de conteúdo do piloto após a reorganização de pastas
+2. `e1944c2` — sobe áudios (174) e imagens (27) reais da Parte 2 pro Storage
+3. `2e4fb2d` — sorteio da Parte 2 respeita o split sem imagem / com imagem
+4. `a514dba` — sobe as 38 gravações reais da Parte 3 pro Storage
+5. `79e6954` — docs: registra o teste ponta a ponta do runner SDEA
+6. `db9473b` — ponto de retomada + verificação final (lint/tsc/test/build)
+
+Estado por parte (SDEA): **Parte 1** 30 perguntas (narração TTS runtime, ok);
+**Parte 2** 87 situações — texto + 174 falas de ATC reais (`atc_audio_url`/
+`atc_followup_audio_url`) + 27 fotos de complicação (`complication_image_url`,
+situações `order_index` 31+) + sorteio 3-sem-imagem/2-com-imagem; **Parte 3** 38
+diálogos `general` — texto + `dialogue_audio_url` real (runner toca 2x); **Parte 4**
+23 fotos, ok. Bucket `pilot-prompt-audio` repovoado (174 + 38 objetos), bucket
+`pilot-images` com `<slug>/part2/<order_index>.jpg` (27) além do `part4/` (23).
+
+Scripts de upload (idempotentes, `--dry-run`, casam por `order_index`), rodar nesta
+ordem depois de `seed-pilot-prompts.mjs`: `upload-pilot-part4-images.mjs` (antes do
+seed) → `upload-pilot-part2-audio.mjs` → `upload-pilot-part2-images.mjs` →
+`upload-pilot-part3-audio.mjs`. O gerador sintético `generate-pilot-prompt-audio.mjs`
+**não existe mais**.
+
+**Ainda em aberto pro SDEA** (nenhum bloqueio técnico): (1) passe de revisão do
+inglês de ~10 falas do ATC da Parte 2 (conteúdo, não código); (2) teste real com
+microfone da entrevista do piloto — só a Sabrina (o Playwright headless validou o
+fluxo até o áudio real da Parte 2 tocar, sem erro, mas não grava áudio de verdade);
+(3) testes automatizados de `generatePilotResponseFeedback`/`generatePilotFinalReport`
+(lacuna antiga, vale pro controlador também). A trilha do **controlador (EPLIS)**
+segue tecnicamente pronta pra lançar — falta só a decisão de negócio de abrir o
+cadastro (ver Roadmap → Fase 7).
+
+---
+
 A Sabrina reorganizou o material didático do piloto de
 `Material Didático/Pilots/Material Didático/{Fixed-wing,Rotary-wing}/` para
 `.../Part 1..4/`, aplicou o efeito de rádio VHF nos áudios da Parte 2 **in-place**
@@ -119,8 +156,7 @@ sem distinguir; agora separa o pool por `order_index` (1..30 sem imagem, 31+ com
 imagem — convenção de `scripts/pilot-content-part234.mjs`) e sorteia **3 do
 primeiro grupo + 2 do segundo**, nessa ordem. +2 testes em `queries.test.ts`.
 
-- `tsc`/`lint`/`test` (44/44) limpos. Áudios já no Storage/DB de produção; código
-  (correções + uploader + sorteio) ainda não commitado.
+- `tsc`/`lint`/`test` (44/44)/`build` limpos. Tudo commitado e em produção.
 
 **Imagens de complicação da Parte 2 (feito nesta rodada)**: script novo
 `scripts/upload-pilot-part2-images.mjs` — 13 `fixed_wing` + 14 `rotary_wing`
@@ -199,12 +235,12 @@ ficam pra depois (upload pro Storage + ajustes no runner).
   `Audios-clean/`). **A Sabrina ainda não aprovou a intensidade final** — decidir isso
   antes de rodar `--inplace` e subir pro Storage. Os áudios da Parte 3 são gravações
   reais de R/T e provavelmente não precisam do efeito.
-- **Falta pra virar simulador SDEA usável** (fora do escopo desta rodada): upload dos
-  ~260 áudios (Parte 2 radioizados em `Audios-radio/`, Parte 3) e ~50 imagens pro Storage;
-  runner da Parte 2 (87 situações + split 3 sem imagem / 2 com imagem + tocar a01/a02
-  pré-gravados) e da Parte 3 (tocar 2×, 5 s de intervalo, 1 repetição, turno de
-  comparação lendo `comparison_question`); passe de revisão do inglês de ~10 falas do ATC
-  da Parte 2; teste real ponta a ponta com microfone.
+- **Falta pra virar simulador SDEA usável** — **RESOLVIDO na sessão seguinte, mesmo dia**
+  (ver seção "Conserto da pipeline do SDEA + áudios e imagens reais da Parte 2" no topo):
+  todos os áudios e imagens das Partes 2/3 subiram pro Storage, o sorteio da Parte 2
+  passou a fazer o split sem-imagem/com-imagem, e o runner (que já tocava áudio pré-
+  gerado quando presente) foi validado ponta a ponta. Segue aberto só o passe de revisão
+  do inglês do ATC e o teste com microfone real.
 
 ## Atualização (2026-08-28) — Call sign `LEVEL 6` e áudios sintéticos da Parte 2/3 zerados (SDEA)
 
