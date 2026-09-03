@@ -14,10 +14,16 @@
 // Item que sair da lista é só desativado (is_active = false), nunca apagado.
 //
 // Uso: `node scripts/seed-pilot-prompts.mjs`. Rode ANTES:
-//   - scripts/upload-pilot-part2-part4-images.mjs (fotos de complicação da Parte 2)
 //   - scripts/upload-pilot-part4-images.mjs (13+10 fotos da Parte 4)
-// Rode DEPOIS:
-//   - scripts/generate-pilot-prompt-audio.mjs (áudios de rádio das Partes 2 e 3)
+// Rode DEPOIS (casam por order_index / posição):
+//   - scripts/upload-pilot-part2-audio.mjs   (174 falas do ATC da Parte 2)
+//   - scripts/upload-pilot-part2-images.mjs  (27 fotos de complicação, situações 31+)
+//
+// Áudio (atc_audio_url / atc_followup_audio_url / dialogue_audio_url) e imagem de
+// complicação (complication_image_url): gravações/fotos reais da Sabrina. Parte 3
+// (dialogue_audio_url) ainda é upload manual. Enquanto as URLs/imagens estiverem
+// null o runner usa fallback (TTS em runtime / só texto). O antigo gerador
+// sintético de áudio (generate-pilot-prompt-audio.mjs) foi removido.
 import { readFileSync } from "node:fs";
 import { Client } from "pg";
 import { part4Url } from "./upload-pilot-part4-images.mjs";
