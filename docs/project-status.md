@@ -89,7 +89,7 @@ automático na Vercel)**:
 3. `2e4fb2d` — sorteio da Parte 2 respeita o split sem imagem / com imagem
 4. `a514dba` — sobe as 38 gravações reais da Parte 3 pro Storage
 5. `79e6954` — docs: registra o teste ponta a ponta do runner SDEA
-6. `db9473b` — ponto de retomada + verificação final (lint/tsc/test/build)
+6. `e51ed8a` — ponto de retomada + verificação final (lint/tsc/test/build)
 
 Estado por parte (SDEA): **Parte 1** 30 perguntas (narração TTS runtime, ok);
 **Parte 2** 87 situações — texto + 174 falas de ATC reais (`atc_audio_url`/
