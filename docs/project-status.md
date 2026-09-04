@@ -77,6 +77,28 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   (`pg`, `SUPABASE_DB_URL` do Session pooler) continuam válidas e são o caminho dos
   scripts em `scripts/`.
 
+## Atualização (2026-09-04) — Testes automatizados do engine de IA (EPLIS + SDEA)
+
+**Ponto de retomada (2026-09-04)** — fechada a lacuna antiga de cobertura de
+`generateResponseFeedback`/`generateFinalReport` (controlador) e
+`generatePilotResponseFeedback`/`generatePilotFinalReport` (piloto). Antes só as funções
+puras (`normalizeFinalReport`, `repetitionMarker`, `repetitionRuleFor`) tinham teste; as
+funções que chamam a Anthropic não tinham nenhuma rede.
+
+- **`src/lib/ai/pilot-track.test.ts`** (novo, 11 testes) e **`src/lib/ai/anthropic.test.ts`**
+  (novo, 9 testes): mockam `client.messages.create` via `vi.hoisted` +
+  `vi.importActual` (mantêm `extractText`/`MODEL_VERSION` reais). Cobrem: texto extraído
+  da resposta, `model`/`thinking: disabled`, injeção da regra de etapa no system por
+  `stage` (e ausência quando omitido / stage desconhecido), substituição do prompt no
+  `story_telling`, parsing de JSON estrito, remoção de cercas ```json, `overall` = menor
+  dos 6 via `normalizeFinalReport`, `FALLBACK_REPORT` em JSON inválido, adendo do modo
+  `official`, regra de repetição por modo e marcação de `repetitionCount` no corpo.
+- Nenhuma mudança de código de produção — só testes. `tsc`/`lint`/`test` (64/64, +20)
+  limpos.
+
+Segue em aberto pro SDEA: revisão do inglês de ~10 falas do ATC da Parte 2 (conteúdo);
+teste real com microfone (só a Sabrina).
+
 ## Atualização (2026-09-03) — Conserto da pipeline do SDEA + áudios e imagens reais da Parte 2 + fix do sorteio
 
 **Ponto de retomada (2026-09-03, fim da sessão)** — conteúdo do SDEA agora **completo
