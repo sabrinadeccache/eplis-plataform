@@ -96,8 +96,8 @@ funções que chamam a Anthropic não tinham nenhuma rede.
 - Nenhuma mudança de código de produção — só testes. `tsc`/`lint`/`test` (64/64, +20)
   limpos.
 
-Segue em aberto pro SDEA: revisão do inglês de ~10 falas do ATC da Parte 2 (conteúdo);
-teste real com microfone (só a Sabrina).
+Segue em aberto pro SDEA: teste real com microfone (só a Sabrina). A revisão do
+inglês das falas do ATC da Parte 2 foi concluída pela Sabrina (2026-09-06).
 
 ## Atualização (2026-09-03) — Conserto da pipeline do SDEA + áudios e imagens reais da Parte 2 + fix do sorteio
 
@@ -127,12 +127,13 @@ seed) → `upload-pilot-part2-audio.mjs` → `upload-pilot-part2-images.mjs` →
 `upload-pilot-part3-audio.mjs`. O gerador sintético `generate-pilot-prompt-audio.mjs`
 **não existe mais**.
 
-**Ainda em aberto pro SDEA** (nenhum bloqueio técnico): (1) passe de revisão do
-inglês de ~10 falas do ATC da Parte 2 (conteúdo, não código); (2) teste real com
+**Ainda em aberto pro SDEA** (nenhum bloqueio técnico): teste real com
 microfone da entrevista do piloto — só a Sabrina (o Playwright headless validou o
-fluxo até o áudio real da Parte 2 tocar, sem erro, mas não grava áudio de verdade);
-(3) testes automatizados de `generatePilotResponseFeedback`/`generatePilotFinalReport`
-(lacuna antiga, vale pro controlador também). A trilha do **controlador (EPLIS)**
+fluxo até o áudio real da Parte 2 tocar, sem erro, mas não grava áudio de verdade).
+CONCLUÍDOS depois: revisão do inglês das falas do ATC da Parte 2 (Sabrina, 2026-09-06);
+testes automatizados de `generatePilotResponseFeedback`/`generatePilotFinalReport` e
+das versões do controlador (2026-09-04, ver "Atualização (2026-09-04)" acima).
+A trilha do **controlador (EPLIS)**
 segue tecnicamente pronta pra lançar — falta só a decisão de negócio de abrir o
 cadastro (ver Roadmap → Fase 7).
 
@@ -212,8 +213,8 @@ imagem de complicação nos slots 4-5 e o 2x da Parte 3 — mesmo caminho de dad
 src={complicationImageUrl}>` / `playTwice` são render condicional simples. Usuários
 e tentativas de teste apagados no fim.
 
-**Segue em aberto**: revisão do inglês de ~10 falas do ATC da Parte 2; teste com
-microfone real (só a Sabrina).
+**Segue em aberto**: teste com microfone real (só a Sabrina). Revisão do inglês das
+falas do ATC da Parte 2 concluída pela Sabrina (2026-09-06).
 
 ## Atualização (2026-09-03) — Conteúdo novo das Partes 2, 3 e 4 do SDEA no banco (só texto)
 
