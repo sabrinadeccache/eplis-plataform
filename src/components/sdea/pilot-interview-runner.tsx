@@ -188,12 +188,16 @@ export function PilotInterviewRunner({
   sequence,
   initialPart,
   initialItemIndex,
+  canSkip = false,
 }: {
   attemptId: string;
   mode: SimulationMode;
   sequence: PilotSequence;
   initialPart: Part;
   initialItemIndex: number;
+  // Atalho de QA manual (só contas em isDevTester) — pula o passo/parte atual
+  // sem gravar resposta. Ver src/lib/auth/dev-testers.ts.
+  canSkip?: boolean;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -264,6 +268,21 @@ export function PilotInterviewRunner({
   }, [stepIndex, steps.length, goToNextItem]);
   useEffect(() => {
     goToNextStepRef.current = goToNextStep;
+  }, [goToNextStep]);
+
+  // Só aparece pra contas de teste (canSkip). Interrompe qualquer gravação/áudio
+  // em andamento e avança pro próximo passo (ou próximo item/parte, ou fim) sem
+  // enviar resposta — o passo pulado simplesmente não gera linha em
+  // pilot_responses, e advanceState/o relatório final já ignoram passos sem
+  // transcrição.
+  const skipStep = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = () => recorder.stream.getTracks().forEach((t) => t.stop());
+      recorder.stop();
+    }
+    audioRef.current?.pause();
+    goToNextStep();
   }, [goToNextStep]);
 
   useEffect(() => {
@@ -537,15 +556,26 @@ export function PilotInterviewRunner({
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           Parte {part.replace("part", "")} — item {itemIndex + 1}
         </p>
-        {mode === "practice" && (
-          <button
-            type="button"
-            onClick={pauseAttempt}
-            className="shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
-          >
-            Pausar simulado
-          </button>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {canSkip && (
+            <button
+              type="button"
+              onClick={skipStep}
+              className="rounded-md border border-dashed border-fuchsia-400 px-3 py-1.5 text-xs font-medium text-fuchsia-700 dark:border-fuchsia-600 dark:text-fuchsia-400"
+            >
+              Pular (teste) →
+            </button>
+          )}
+          {mode === "practice" && (
+            <button
+              type="button"
+              onClick={pauseAttempt}
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+            >
+              Pausar simulado
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">

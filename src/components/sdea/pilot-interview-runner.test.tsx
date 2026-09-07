@@ -133,3 +133,57 @@ describe("PilotInterviewRunner — trava de concorrência no avanço de item", (
     expect(advanceState).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("PilotInterviewRunner — botão de pular (contas de teste)", () => {
+  it("não renderiza o botão sem canSkip", () => {
+    render(
+      <PilotInterviewRunner
+        attemptId="attempt-1"
+        mode="practice"
+        sequence={makeSequence()}
+        initialPart="part1"
+        initialItemIndex={0}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Pular \(teste\)/ })).toBeNull();
+  });
+
+  it("com canSkip, pular no último item vai pra tela de resultado", async () => {
+    vi.mocked(advanceState).mockResolvedValueOnce({ finished: true });
+    render(
+      <PilotInterviewRunner
+        attemptId="attempt-1"
+        mode="official"
+        sequence={makeSequence()}
+        initialPart="part1"
+        initialItemIndex={2}
+        canSkip
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Pular \(teste\)/ }));
+    await waitFor(() => expect(advanceState).toHaveBeenCalledWith("attempt-1"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/sdea/resultado/attempt-1"));
+  });
+
+  it("com canSkip, pular avança sem enviar resposta (nenhum fetch de submit)", async () => {
+    render(
+      <PilotInterviewRunner
+        attemptId="attempt-1"
+        mode="official"
+        sequence={makeSequence()}
+        initialPart="part1"
+        initialItemIndex={0}
+        canSkip
+      />,
+    );
+
+    const skip = () => screen.getByRole("button", { name: /Pular \(teste\)/ });
+    // item 0 tem 2 steps (intro + main): 1º pulo troca de step, 2º avança o item.
+    fireEvent.click(skip());
+    fireEvent.click(skip());
+    await waitFor(() => expect(advanceState).toHaveBeenCalledWith("attempt-1"));
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+});

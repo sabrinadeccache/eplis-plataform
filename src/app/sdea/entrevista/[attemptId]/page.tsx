@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
+import { isDevTester } from "@/lib/auth/dev-testers";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import { PilotInterviewRunner } from "@/components/sdea/pilot-interview-runner";
@@ -53,6 +54,7 @@ export default async function SdeaEntrevistaPage({
         sequence={sequence}
         initialPart={(attempt.current_part ?? "part1") as Part}
         initialItemIndex={attempt.current_item_index ?? 0}
+        canSkip={isDevTester(user.email)}
       />
     </AppShell>
   );
