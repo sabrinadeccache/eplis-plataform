@@ -7,6 +7,20 @@ import { computeNextPosition, PART_SIZES } from "@/services/simulations/pilot/st
 import { hashStringToSeed } from "@/lib/prng";
 import type { PilotSequence, PilotPrompt } from "@/services/simulations/pilot/queries";
 import type { Part, PilotResponseStage, SimulationMode } from "@/types/database";
+import { AudioOrb, type OrbState } from "@/components/interview/audio-orb";
+import {
+  InterviewStrip,
+  RecLight,
+  StatusLine,
+  KeyDeck,
+  KeyButton,
+  DeckSpacer,
+  DeckNote,
+  CaptionsToggle,
+  CaptionsPanel,
+  formatElapsed,
+  createMicAnalyser,
+} from "@/components/interview/interview-ui";
 
 // Fork dedicado do InterviewRunner do controlador (src/components/fase2/interview-runner.tsx)
 // — a Parte 2 do piloto é um role-play com sub-estágios genuinamente diferentes
@@ -172,9 +186,10 @@ function ResponseStartTimer({ seconds, onExpire }: { seconds: number; onExpire: 
   }, [remaining, onExpire]);
 
   return (
-    <p className="text-sm text-caution">
-      A gravação começa automaticamente em <span className="data">{remaining}s</span>…
-    </p>
+    <div className="iv-countdown">
+      <span className="iv-k">Gravação automática</span>
+      <span>{formatElapsed(remaining)}</span>
+    </div>
   );
 }
 
@@ -219,11 +234,28 @@ export function PilotInterviewRunner({
   const [awaitingFeedbackSpeech, setAwaitingFeedbackSpeech] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  const [captionsOn, setCaptionsOn] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const advancingItemRef = useRef(false);
+  const micAnalyserRef = useRef<{ analyser: AnalyserNode; close: () => void } | null>(null);
+
+  const teardownMic = useCallback(() => {
+    micAnalyserRef.current?.close();
+    micAnalyserRef.current = null;
+    setMicAnalyser(null);
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => teardownMic, [teardownMic]);
 
   const currentPrompt = pickPrompt(sequence, part, itemIndex);
   const steps = buildSteps(part, itemIndex, currentPrompt);
@@ -287,9 +319,10 @@ export function PilotInterviewRunner({
       recorder.onstop = () => recorder.stream.getTracks().forEach((t) => t.stop());
       recorder.stop();
     }
+    teardownMic();
     audioRef.current?.pause();
     goToNextStep();
-  }, [goToNextStep]);
+  }, [goToNextStep, teardownMic]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -419,6 +452,10 @@ export function PilotInterviewRunner({
     };
     recorder.start();
     mediaRecorderRef.current = recorder;
+    teardownMic();
+    const mic = createMicAnalyser(stream);
+    micAnalyserRef.current = mic;
+    setMicAnalyser(mic?.analyser ?? null);
     setRecorderState("recording");
   }
 
@@ -438,6 +475,7 @@ export function PilotInterviewRunner({
       recorder.onstop = () => recorder.stream.getTracks().forEach((t) => t.stop());
       recorder.stop();
     }
+    teardownMic();
     chunksRef.current = [];
     setRecorderState("ready");
   }
@@ -463,6 +501,7 @@ export function PilotInterviewRunner({
     if (recorder && recorder.state !== "inactive") {
       recorder.stream.getTracks().forEach((t) => t.stop());
     }
+    teardownMic();
     if (recorderState === "feedback" && stepIndex + 1 >= steps.length) {
       const result = await advanceState(attemptId);
       if (result.finished) {
@@ -475,6 +514,7 @@ export function PilotInterviewRunner({
 
   function finishAndSubmit() {
     setRecorderState("submitting");
+    teardownMic();
     stopRecorderAndGetBlob().then((blob) => {
       startTransition(async () => {
         const formData = new FormData();
@@ -532,8 +572,139 @@ export function PilotInterviewRunner({
   const showPart2ComplicationImage =
     part === "part2" && currentStep.stage === "reaction" && currentPrompt.complicationImageUrl;
 
+  const isRecording = recorderState === "recording" || recorderState === "paused";
+  const orbState: OrbState = isRecording
+    ? "rec"
+    : speaking || recorderState === "waiting_ai" || awaitingFeedbackSpeech
+      ? "speak"
+      : "idle";
+
+  const status: { tone: OrbState; title: string; sub?: string } = (() => {
+    if (recorderState === "recording")
+      return { tone: "rec", title: "Sua vez — gravando", sub: "Fale sua resposta e conclua quando terminar." };
+    if (recorderState === "paused")
+      return { tone: "rec", title: "Gravação pausada", sub: "Retome quando estiver pronto." };
+    if (recorderState === "submitting")
+      return { tone: "idle", title: "Processando", sub: "Transcrevendo e avaliando sua resposta…" };
+    if (recorderState === "feedback")
+      return awaitingFeedbackSpeech
+        ? { tone: "speak", title: "Examinador falando", sub: "Ouça o comentário do examinador." }
+        : { tone: "idle", title: "Feedback", sub: "Leia o comentário e siga em frente." };
+    if (speaking || recorderState === "waiting_ai")
+      return { tone: "speak", title: "Examinador falando", sub: "Ouça com atenção." };
+    if (recorderState === "ready")
+      return {
+        tone: "idle",
+        title: "Sua vez",
+        sub:
+          mode === "official"
+            ? "A gravação começa automaticamente."
+            : "Toque no microfone para responder.",
+      };
+    return { tone: "idle", title: "Aguarde", sub: undefined };
+  })();
+
+  function renderDeck() {
+    if (currentStep.kind !== "response") {
+      return (
+        <>
+          <DeckNote>Aguarde a IA terminar de falar…</DeckNote>
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (recorderState === "ready" && mode === "practice") {
+      return (
+        <>
+          <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
+          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (recorderState === "ready" && mode === "official") {
+      return (
+        <>
+          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (isRecording) {
+      return (
+        <>
+          {recorderState === "recording" ? (
+            <KeyButton icon="pause" label="Pausar" variant="accent" onClick={pauseRecording} />
+          ) : (
+            <KeyButton
+              icon="play"
+              label="Continuar falando"
+              variant="accent"
+              onClick={resumeRecording}
+            />
+          )}
+          {mode === "practice" && (
+            <KeyButton icon="restart" label="Recomeçar" onClick={restartRecording} />
+          )}
+          <KeyButton
+            icon="check"
+            label="Concluir e enviar"
+            variant="primary"
+            onClick={finishAndSubmit}
+          />
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (recorderState === "submitting") {
+      return (
+        <>
+          <DeckNote>Transcrevendo e avaliando sua resposta…</DeckNote>
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (recorderState === "feedback") {
+      return (
+        <>
+          {awaitingFeedbackSpeech ? (
+            <DeckNote>Aguarde a IA terminar de falar o feedback…</DeckNote>
+          ) : (
+            <KeyButton icon="play" label="Continuar" variant="primary" onClick={goToNextStep} />
+          )}
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    return (
+      <>
+        <DeckNote>Aguarde a IA terminar de falar…</DeckNote>
+        <DeckSpacer />
+        <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+      </>
+    );
+  }
+
+  const contextImage = showPart4Image
+    ? { src: currentPrompt.imageUrl!, alt: "Imagem para descrição e discussão" }
+    : showPart2ComplicationImage
+      ? { src: currentPrompt.complicationImageUrl!, alt: "Situação apresentada por imagem" }
+      : null;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <audio ref={audioRef} />
 
       {micError && <div className="note note-danger">{micError}</div>}
@@ -554,11 +725,8 @@ export function PilotInterviewRunner({
         </div>
       )}
 
-      <div className="section-head">
-        <p className="data text-sm text-muted">
-          Parte {part.replace("part", "")} · item {itemIndex + 1}
-        </p>
-        <div className="flex shrink-0 items-center gap-2">
+      {(canSkip || mode === "practice") && (
+        <div className="flex justify-end gap-2">
           {canSkip && (
             <button
               type="button"
@@ -578,154 +746,63 @@ export function PilotInterviewRunner({
             </button>
           )}
         </div>
-      </div>
+      )}
 
-      <div className="card p-6">
-        {showPart4Image && (
-          // eslint-disable-next-line @next/next/no-img-element
+      {contextImage && (
+        <div className="card p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={currentPrompt.imageUrl!}
-            alt="Imagem para descrição e discussão"
-            className="mb-4 max-h-96 w-full rounded-md object-contain"
+            src={contextImage.src}
+            alt={contextImage.alt}
+            className="max-h-96 w-full rounded-md object-contain"
           />
+        </div>
+      )}
+
+      <div className="iv">
+        <InterviewStrip
+          mode={mode}
+          part={part}
+          itemIndex={itemIndex}
+          elapsedLabel={formatElapsed(elapsed)}
+        />
+
+        <div className="iv-stage">
+          <RecLight active={isRecording} />
+          <div className="iv-orb-wrap">
+            <AudioOrb state={orbState} analyser={micAnalyser} />
+          </div>
+          <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
+
+          {currentStep.kind === "response" &&
+            recorderState === "ready" &&
+            mode === "official" &&
+            !speaking && (
+              <ResponseStartTimer
+                key={stepKey(part, itemIndex, stepIndex)}
+                seconds={5}
+                onExpire={startRecording}
+              />
+            )}
+
+          {repetitionCount >= 1 && recorderState === "ready" && (
+            <p className="iv-sub text-caution">
+              Pedir a pergunta de novo pesa no critério Compreensão — o relatório final sinaliza
+              isso.
+            </p>
+          )}
+        </div>
+
+        <KeyDeck>{renderDeck()}</KeyDeck>
+
+        {captionsOn && currentStep.kind === "response" && currentStep.text && (
+          <CaptionsPanel text={currentStep.text} />
         )}
-        {showPart2ComplicationImage && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={currentPrompt.complicationImageUrl!}
-            alt="Situação apresentada por imagem"
-            className="mb-4 max-h-96 w-full rounded-md object-contain"
-          />
-        )}
 
-        {speaking && (
-          <p className="text-sm font-medium text-brand">A IA está falando…</p>
-        )}
-
-        {currentStep.kind === "response" && (
-          <div className="space-y-4">
-            {recorderState === "waiting_ai" && (
-              <p className="text-sm text-muted">Aguarde a IA terminar de falar…</p>
-            )}
-
-            {recorderState === "ready" && mode === "official" && (
-              <div className="space-y-2">
-                {!speaking && (
-                  <ResponseStartTimer
-                    key={stepKey(part, itemIndex, stepIndex)}
-                    seconds={5}
-                    onExpire={startRecording}
-                  />
-                )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={replayAudio}
-                    className={`btn btn-secondary ${
-                      repetitionCount === 0
-                        ? "!border-success/50 !text-success"
-                        : "!border-caution/50 !text-caution"
-                    }`}
-                  >
-                    Repetir pergunta
-                  </button>
-                  {repetitionCount >= 1 && (
-                    <p className="w-full text-xs text-caution">
-                      Pedir a pergunta de novo mais de uma vez pode reduzir o critério Compreensão no
-                      relatório final.
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {recorderState === "ready" && mode === "practice" && (
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={startRecording}
-                  className="btn btn-primary"
-                >
-                  Falar
-                </button>
-                <button
-                  type="button"
-                  onClick={replayAudio}
-                  className="btn btn-secondary"
-                >
-                  Repetir pergunta
-                </button>
-                {repetitionCount >= 1 && (
-                  <p className="w-full text-xs text-caution">
-                    No exame real, pedir a pergunta de novo pesa no critério Compreensão — o relatório
-                    final vai sinalizar isso.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {(recorderState === "recording" || recorderState === "paused") && (
-              <div className="flex flex-wrap gap-2">
-                {recorderState === "recording" ? (
-                  <button
-                    type="button"
-                    onClick={pauseRecording}
-                    className="btn btn-secondary"
-                  >
-                    Pausar
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={resumeRecording}
-                    className="btn btn-secondary"
-                  >
-                    Continuar falando
-                  </button>
-                )}
-                {mode === "practice" && (
-                  <button
-                    type="button"
-                    onClick={restartRecording}
-                    className="btn btn-secondary"
-                  >
-                    Recomeçar
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={finishAndSubmit}
-                  className="btn btn-primary"
-                >
-                  Concluir e enviar
-                </button>
-              </div>
-            )}
-
-            {recorderState === "submitting" && (
-              <p className="text-sm text-muted">
-                Transcrevendo e avaliando sua resposta…
-              </p>
-            )}
-
-            {recorderState === "feedback" && (
-              <div className="space-y-3">
-                <p className="note">{feedback}</p>
-                {awaitingFeedbackSpeech ? (
-                  <p className="text-sm text-muted">
-                    Aguarde a IA terminar de falar o feedback…
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={goToNextStep}
-                    className="btn btn-primary"
-                  >
-                    Continuar
-                  </button>
-                )}
-              </div>
-            )}
+        {recorderState === "feedback" && feedback && (
+          <div className="iv-cc">
+            <span className="iv-who">Feedback</span>
+            {feedback}
           </div>
         )}
       </div>

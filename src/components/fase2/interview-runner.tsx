@@ -6,6 +6,20 @@ import { generateSpeech, advanceState } from "@/services/simulations/phase2/acti
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
 import type { Phase2Sequence, Phase2Prompt } from "@/services/simulations/phase2/queries";
 import type { Part, ResponseStage, SimulationMode } from "@/types/database";
+import { AudioOrb, type OrbState } from "@/components/interview/audio-orb";
+import {
+  InterviewStrip,
+  RecLight,
+  StatusLine,
+  KeyDeck,
+  KeyButton,
+  DeckSpacer,
+  DeckNote,
+  CaptionsToggle,
+  CaptionsPanel,
+  formatElapsed,
+  createMicAnalyser,
+} from "@/components/interview/interview-ui";
 
 // Tudo que a IA fala é em inglês (inclusive introduções/instruções) — o
 // aluno já deve treinar o ouvido em inglês antes do exame de verdade.
@@ -92,9 +106,10 @@ function SilentTimer({ seconds, onExpire }: { seconds: number; onExpire: () => v
   }, [remaining, onExpire]);
 
   return (
-    <p className="text-sm text-muted">
-      <span className="data">{remaining}s</span> restantes…
-    </p>
+    <div className="iv-countdown">
+      <span className="iv-k">Preparação</span>
+      <span>{formatElapsed(remaining)}</span>
+    </div>
   );
 }
 
@@ -117,9 +132,10 @@ function ResponseStartTimer({ seconds, onExpire }: { seconds: number; onExpire: 
   }, [remaining, onExpire]);
 
   return (
-    <p className="text-sm text-caution">
-      A gravação começa automaticamente em <span className="data">{remaining}s</span>…
-    </p>
+    <div className="iv-countdown">
+      <span className="iv-k">Gravação automática</span>
+      <span>{formatElapsed(remaining)}</span>
+    </div>
   );
 }
 
@@ -165,11 +181,29 @@ export function InterviewRunner({
   const [awaitingFeedbackSpeech, setAwaitingFeedbackSpeech] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  const [captionsOn, setCaptionsOn] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const advancingItemRef = useRef(false);
+  const micAnalyserRef = useRef<{ analyser: AnalyserNode; close: () => void } | null>(null);
+
+  const teardownMic = useCallback(() => {
+    micAnalyserRef.current?.close();
+    micAnalyserRef.current = null;
+    setMicAnalyser(null);
+  }, []);
+
+  // Cronômetro da faixa de progresso — decorrido desde que a tela abriu.
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => teardownMic, [teardownMic]);
 
   const currentPrompt = pickPrompt(sequence, part, itemIndex);
   const steps = buildSteps(part, itemIndex, currentPrompt);
@@ -349,6 +383,11 @@ export function InterviewRunner({
     };
     recorder.start();
     mediaRecorderRef.current = recorder;
+    // Alimenta o visualizador com o nível real da voz do candidato.
+    teardownMic();
+    const mic = createMicAnalyser(stream);
+    micAnalyserRef.current = mic;
+    setMicAnalyser(mic?.analyser ?? null);
     setRecorderState("recording");
   }
 
@@ -368,6 +407,7 @@ export function InterviewRunner({
       recorder.onstop = () => recorder.stream.getTracks().forEach((t) => t.stop());
       recorder.stop();
     }
+    teardownMic();
     chunksRef.current = [];
     setRecorderState("ready");
   }
@@ -403,6 +443,7 @@ export function InterviewRunner({
     if (recorder && recorder.state !== "inactive") {
       recorder.stream.getTracks().forEach((t) => t.stop());
     }
+    teardownMic();
     if (recorderState === "feedback" && stepIndex + 1 >= steps.length) {
       const result = await advanceState(attemptId);
       if (result.finished) {
@@ -415,6 +456,7 @@ export function InterviewRunner({
 
   function finishAndSubmit() {
     setRecorderState("submitting");
+    teardownMic();
     stopRecorderAndGetBlob().then((blob) => {
       startTransition(async () => {
         // Upload via multipart/form-data numa route handler comum, NÃO uma
@@ -482,13 +524,141 @@ export function InterviewRunner({
     });
   }
 
+  const isRecording = recorderState === "recording" || recorderState === "paused";
+  const orbState: OrbState = isRecording
+    ? "rec"
+    : speaking || recorderState === "waiting_ai" || awaitingFeedbackSpeech
+      ? "speak"
+      : "idle";
+
+  const status: { tone: OrbState; title: string; sub?: string } = (() => {
+    if (recorderState === "recording")
+      return { tone: "rec", title: "Sua vez — gravando", sub: "Fale sua resposta e conclua quando terminar." };
+    if (recorderState === "paused")
+      return { tone: "rec", title: "Gravação pausada", sub: "Retome quando estiver pronto." };
+    if (recorderState === "submitting")
+      return { tone: "idle", title: "Processando", sub: "Transcrevendo e avaliando sua resposta…" };
+    if (recorderState === "feedback")
+      return awaitingFeedbackSpeech
+        ? { tone: "speak", title: "Examinador falando", sub: "Ouça o comentário do examinador." }
+        : { tone: "idle", title: "Feedback", sub: "Leia o comentário e siga em frente." };
+    if (currentStep.kind === "silent" && ttsEnded)
+      return { tone: "idle", title: "Preparando", sub: currentStep.text };
+    if (speaking || recorderState === "waiting_ai")
+      return { tone: "speak", title: "Examinador falando", sub: "Ouça com atenção." };
+    if (recorderState === "ready")
+      return {
+        tone: "idle",
+        title: "Sua vez",
+        sub:
+          mode === "official"
+            ? "A gravação começa automaticamente."
+            : "Toque no microfone para responder.",
+      };
+    return { tone: "idle", title: "Aguarde", sub: undefined };
+  })();
+
+  function renderDeck() {
+    if (currentStep.kind === "silent") {
+      return (
+        <>
+          <DeckNote>
+            <b>Estágio cronometrado.</b> A tela avança sozinha ao fim do tempo.
+          </DeckNote>
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (recorderState === "ready" && mode === "practice") {
+      return (
+        <>
+          <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
+          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (recorderState === "ready" && mode === "official") {
+      return (
+        <>
+          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (isRecording) {
+      return (
+        <>
+          {recorderState === "recording" ? (
+            <KeyButton icon="pause" label="Pausar" variant="accent" onClick={pauseRecording} />
+          ) : (
+            <KeyButton
+              icon="play"
+              label="Continuar falando"
+              variant="accent"
+              onClick={resumeRecording}
+            />
+          )}
+          {mode === "practice" && (
+            <KeyButton icon="restart" label="Recomeçar" onClick={restartRecording} />
+          )}
+          <KeyButton
+            icon="check"
+            label="Concluir e enviar"
+            variant="primary"
+            onClick={finishAndSubmit}
+          />
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (recorderState === "submitting") {
+      return (
+        <>
+          <DeckNote>Transcrevendo e avaliando sua resposta…</DeckNote>
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    if (recorderState === "feedback") {
+      return (
+        <>
+          {awaitingFeedbackSpeech ? (
+            <DeckNote>Aguarde a IA terminar de falar o feedback…</DeckNote>
+          ) : (
+            <KeyButton icon="play" label="Continuar" variant="primary" onClick={goToNextStep} />
+          )}
+          <DeckSpacer />
+          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        </>
+      );
+    }
+
+    // waiting_ai
+    return (
+      <>
+        <DeckNote>Aguarde a IA terminar de falar…</DeckNote>
+        <DeckSpacer />
+        <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+      </>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <audio ref={audioRef} />
 
-      {micError && (
-        <div className="note note-danger">{micError}</div>
-      )}
+      {micError && <div className="note note-danger">{micError}</div>}
 
       {audioBlocked && (
         <div className="note note-caution flex items-center justify-between gap-3">
@@ -506,11 +676,8 @@ export function InterviewRunner({
         </div>
       )}
 
-      <div className="section-head">
-        <p className="data text-sm text-muted">
-          Parte {part.replace("part", "")} · item {itemIndex + 1}
-        </p>
-        {mode === "practice" && (
+      {mode === "practice" && (
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={pauseAttempt}
@@ -518,166 +685,75 @@ export function InterviewRunner({
           >
             Pausar simulado
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="card p-6">
-        {part === "part4" && currentPrompt.imageUrl && (
-          // Visível durante todo o item da Parte 4 (observação, descrição e a
-          // história) — o candidato precisa poder olhar pra imagem de novo ao
-          // contar a história, não só durante a observação inicial.
-          // eslint-disable-next-line @next/next/no-img-element
+      {part === "part4" && currentPrompt.imageUrl && (
+        // Conteúdo do exame (não decoração): visível durante todo o item da
+        // Parte 4 — o candidato precisa olhar pra imagem de novo ao contar a
+        // história, não só na observação inicial.
+        <div className="card p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={currentPrompt.imageUrl}
             alt="Imagem para descrição e história"
-            className="mb-4 max-h-96 w-full rounded-md object-contain"
+            className="max-h-96 w-full rounded-md object-contain"
           />
+        </div>
+      )}
+
+      <div className="iv">
+        <InterviewStrip
+          mode={mode}
+          part={part}
+          itemIndex={itemIndex}
+          elapsedLabel={formatElapsed(elapsed)}
+        />
+
+        <div className="iv-stage">
+          <RecLight active={isRecording} />
+          <div className="iv-orb-wrap">
+            <AudioOrb state={orbState} analyser={micAnalyser} />
+          </div>
+          <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
+
+          {currentStep.kind === "silent" && ttsEnded && (
+            <SilentTimer
+              key={stepKey(part, itemIndex, stepIndex)}
+              seconds={currentStep.durationSeconds ?? 15}
+              onExpire={goToNextStep}
+            />
+          )}
+
+          {currentStep.kind === "response" &&
+            recorderState === "ready" &&
+            mode === "official" &&
+            !speaking && (
+              <ResponseStartTimer
+                key={stepKey(part, itemIndex, stepIndex)}
+                seconds={5}
+                onExpire={startRecording}
+              />
+            )}
+
+          {repetitionCount >= 1 && recorderState === "ready" && (
+            <p className="iv-sub text-caution">
+              Pedir a pergunta de novo pesa no critério Compreensão — o relatório final sinaliza
+              isso.
+            </p>
+          )}
+        </div>
+
+        <KeyDeck>{renderDeck()}</KeyDeck>
+
+        {captionsOn && currentStep.kind !== "silent" && (
+          <CaptionsPanel text={currentStep.text} />
         )}
 
-        {speaking && (
-          <p className="text-sm font-medium text-brand">A IA está falando…</p>
-        )}
-
-        {currentStep.kind === "silent" && ttsEnded && (
-          <SilentTimer
-            key={stepKey(part, itemIndex, stepIndex)}
-            seconds={currentStep.durationSeconds ?? 15}
-            onExpire={goToNextStep}
-          />
-        )}
-
-        {currentStep.kind === "response" && (
-          <div className="space-y-4">
-            {recorderState === "waiting_ai" && (
-              <p className="text-sm text-muted">Aguarde a IA terminar de falar…</p>
-            )}
-
-            {recorderState === "ready" && mode === "official" && (
-              // Fiel ao exame real: sem botão "Falar" manual — a gravação começa
-              // sozinha depois da pausa de 5s.
-              <div className="space-y-2">
-                {/* Some enquanto o áudio da pergunta toca (inclusive ao repetir) — o
-                    componente desmonta (limpando o setTimeout interno) e remonta com
-                    5s cheios de novo assim que a fala termina, via o `speaking`
-                    global já usado pro indicador "IA está falando". */}
-                {!speaking && (
-                  <ResponseStartTimer
-                    key={stepKey(part, itemIndex, stepIndex)}
-                    seconds={5}
-                    onExpire={startRecording}
-                  />
-                )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={replayAudio}
-                    className={`btn btn-secondary ${
-                      repetitionCount === 0
-                        ? "!border-success/50 !text-success"
-                        : "!border-caution/50 !text-caution"
-                    }`}
-                  >
-                    Repetir pergunta
-                  </button>
-                  {repetitionCount >= 1 && (
-                    <p className="w-full text-xs text-caution">
-                      Pedir a pergunta de novo mais de uma vez pode reduzir o critério Compreensão no
-                      relatório final.
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {recorderState === "ready" && mode === "practice" && (
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={startRecording}
-                  className="btn btn-primary"
-                >
-                  Falar
-                </button>
-                <button
-                  type="button"
-                  onClick={replayAudio}
-                  className="btn btn-secondary"
-                >
-                  Repetir pergunta
-                </button>
-                {repetitionCount >= 1 && (
-                  <p className="w-full text-xs text-caution">
-                    No exame real, pedir a pergunta de novo pesa no critério Compreensão — o relatório
-                    final vai sinalizar isso.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {(recorderState === "recording" || recorderState === "paused") && (
-              <div className="flex flex-wrap gap-2">
-                {recorderState === "recording" ? (
-                  <button
-                    type="button"
-                    onClick={pauseRecording}
-                    className="btn btn-secondary"
-                  >
-                    Pausar
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={resumeRecording}
-                    className="btn btn-secondary"
-                  >
-                    Continuar falando
-                  </button>
-                )}
-                {mode === "practice" && (
-                  // Official é fiel ao exame real: sem segunda chance, então sem
-                  // "Recomeçar" — só practice mantém esse botão.
-                  <button
-                    type="button"
-                    onClick={restartRecording}
-                    className="btn btn-secondary"
-                  >
-                    Recomeçar
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={finishAndSubmit}
-                  className="btn btn-primary"
-                >
-                  Concluir e enviar
-                </button>
-              </div>
-            )}
-
-            {recorderState === "submitting" && (
-              <p className="text-sm text-muted">
-                Transcrevendo e avaliando sua resposta…
-              </p>
-            )}
-
-            {recorderState === "feedback" && (
-              <div className="space-y-3">
-                <p className="note">{feedback}</p>
-                {awaitingFeedbackSpeech ? (
-                  <p className="text-sm text-muted">
-                    Aguarde a IA terminar de falar o feedback…
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={goToNextStep}
-                    className="btn btn-primary"
-                  >
-                    Continuar
-                  </button>
-                )}
-              </div>
-            )}
+        {recorderState === "feedback" && feedback && (
+          <div className="iv-cc">
+            <span className="iv-who">Feedback</span>
+            {feedback}
           </div>
         )}
       </div>

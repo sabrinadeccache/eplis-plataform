@@ -76,6 +76,45 @@ de piloto roda como `fixed_wing`; Fase 1/2 usam o conteúdo de `APP`. Contas de 
 pilotos/controladores reais: ver a tabela em "Atualização (2026-09-07) — Teste manual do
 SDEA…".
 
+## Atualização (2026-09-07) — IHM da entrevista (visualizador de áudio no lugar de avatar)
+
+A pedido da Sabrina, a tela da entrevista (Fase 2 **e** SDEA) ganhou uma interface mais
+"profissional" no lugar da tela quase vazia com só a voz da IA. Decisão fechada com ela a
+partir de mockups iterados: **sem avatar / sem rosto** (afastaria da condição real do
+exame, que é só voz) e **sem cenário de aviação ao lado** — só a interação.
+
+O que entrou:
+
+- **`src/components/interview/audio-orb.tsx`** — visualizador em canvas (esfera de vidro
+  com brilho/anéis de pulso). Envoltória sintética quando a IA fala; na vez do candidato,
+  reage ao **nível real do microfone** via `AnalyserNode` (helper `createMicAnalyser` em
+  `interview-ui.tsx` — liga um analyser ao stream de gravação, **sem** conectar ao destino,
+  pra não dar retorno de áudio; devolve `null` e cai na envoltória sintética se a Web Audio
+  API não existir, ex.: jsdom nos testes). Degrada a quadro estático se `getContext("2d")`
+  falhar. Respeita `prefers-reduced-motion`.
+- **`src/components/interview/interview-ui.tsx`** — peças visuais compartilhadas pelos dois
+  runners: faixa de progresso estilo strip de voo (`InterviewStrip` — parte 1–4 + item +
+  cronômetro decorrido), `RecLight`, `StatusLine`, teclas com relevo (`KeyButton` com
+  ícones SVG inline; `aria-label` preservado = nomes dos botões antigos, os testes não
+  quebram), `CaptionsToggle`/`CaptionsPanel` (legenda opcional da fala da IA, desligada
+  por padrão).
+- **`src/app/globals.css`** — bloco `.iv-*` em `@layer components`. Paleta **adaptada ao
+  sistema atual** (carta de aproximação): azul (`--brand`) = IA falando; magenta
+  (`--accent`, o "aqui/agora" do sistema) = sua vez / gravando; âmbar = avisos. Sem fonte
+  nova.
+- **`interview-runner.tsx` (Fase 2) e `pilot-interview-runner.tsx` (SDEA)** — só a camada
+  de apresentação do `return` foi trocada + wiring do mic analyser/cronômetro/legendas.
+  **Toda** a lógica de gravação/TTS/timers/travas de concorrência ficou intacta. Os
+  `SilentTimer`/`ResponseStartTimer` agora renderizam a pílula `.iv-countdown`.
+
+Imagem de conteúdo (foto da Parte 4 / foto de complicação da Parte 2 no SDEA) **continua
+aparecendo** — é conteúdo do exame, não decoração —, agora num `card` acima do painel da
+IHM.
+
+`tsc`/`lint`/`test` (78/78)/`build` limpos. Ainda **não testado com microfone real** (só a
+Sabrina) — o headless não grava áudio, então o caminho do `AnalyserNode` real nunca roda
+nos testes.
+
 ## Retomada — 2026-09-07 (fim da sessão de redesign)
 
 Grande rodada de UX/produto — **commit `574b7aa` em `main`, já em produção**
