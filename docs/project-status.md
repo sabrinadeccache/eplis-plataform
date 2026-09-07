@@ -97,7 +97,8 @@ O que entrou:
   cronômetro decorrido), `RecLight`, `StatusLine`, teclas com relevo (`KeyButton` com
   ícones SVG inline; `aria-label` preservado = nomes dos botões antigos, os testes não
   quebram), `CaptionsToggle`/`CaptionsPanel` (legenda opcional da fala da IA, desligada
-  por padrão).
+  por padrão, **só no modo practice** — no `official` nem aparece, igual à ausência de
+  apoio de leitura no exame real).
 - **`src/app/globals.css`** — bloco `.iv-*` em `@layer components`. Paleta **adaptada ao
   sistema atual** (carta de aproximação): azul (`--brand`) = IA falando; magenta
   (`--accent`, o "aqui/agora" do sistema) = sua vez / gravando; âmbar = avisos. Sem fonte

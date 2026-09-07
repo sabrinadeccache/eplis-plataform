@@ -604,13 +604,20 @@ export function PilotInterviewRunner({
     return { tone: "idle", title: "Aguarde", sub: undefined };
   })();
 
+  // Legendas só no practice — no modo oficial não há apoio de leitura, igual ao
+  // exame real.
+  const captionsControl =
+    mode === "official" ? null : (
+      <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+    );
+
   function renderDeck() {
     if (currentStep.kind !== "response") {
       return (
         <>
           <DeckNote>Aguarde a IA terminar de falar…</DeckNote>
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -621,7 +628,7 @@ export function PilotInterviewRunner({
           <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
           <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -631,7 +638,7 @@ export function PilotInterviewRunner({
         <>
           <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -659,7 +666,7 @@ export function PilotInterviewRunner({
             onClick={finishAndSubmit}
           />
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -669,7 +676,7 @@ export function PilotInterviewRunner({
         <>
           <DeckNote>Transcrevendo e avaliando sua resposta…</DeckNote>
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -683,7 +690,7 @@ export function PilotInterviewRunner({
             <KeyButton icon="play" label="Continuar" variant="primary" onClick={goToNextStep} />
           )}
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -795,7 +802,7 @@ export function PilotInterviewRunner({
 
         <KeyDeck>{renderDeck()}</KeyDeck>
 
-        {captionsOn && currentStep.kind === "response" && currentStep.text && (
+        {captionsOn && mode !== "official" && currentStep.kind === "response" && currentStep.text && (
           <CaptionsPanel text={currentStep.text} />
         )}
 

@@ -558,6 +558,13 @@ export function InterviewRunner({
     return { tone: "idle", title: "Aguarde", sub: undefined };
   })();
 
+  // Legendas só no practice — no modo oficial não há apoio de leitura, igual ao
+  // exame real.
+  const captionsControl =
+    mode === "official" ? null : (
+      <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+    );
+
   function renderDeck() {
     if (currentStep.kind === "silent") {
       return (
@@ -566,7 +573,7 @@ export function InterviewRunner({
             <b>Estágio cronometrado.</b> A tela avança sozinha ao fim do tempo.
           </DeckNote>
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -577,7 +584,7 @@ export function InterviewRunner({
           <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
           <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -587,7 +594,7 @@ export function InterviewRunner({
         <>
           <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -615,7 +622,7 @@ export function InterviewRunner({
             onClick={finishAndSubmit}
           />
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -625,7 +632,7 @@ export function InterviewRunner({
         <>
           <DeckNote>Transcrevendo e avaliando sua resposta…</DeckNote>
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -639,7 +646,7 @@ export function InterviewRunner({
             <KeyButton icon="play" label="Continuar" variant="primary" onClick={goToNextStep} />
           )}
           <DeckSpacer />
-          <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+          {captionsControl}
         </>
       );
     }
@@ -746,7 +753,7 @@ export function InterviewRunner({
 
         <KeyDeck>{renderDeck()}</KeyDeck>
 
-        {captionsOn && currentStep.kind !== "silent" && (
+        {captionsOn && mode !== "official" && currentStep.kind !== "silent" && (
           <CaptionsPanel text={currentStep.text} />
         )}
 
