@@ -78,9 +78,9 @@ SDEA…".
 
 ## Retomada — 2026-09-07 (fim da sessão de redesign)
 
-Grande rodada de UX/produto, **toda em `main` a partir deste commit** (deploy automático).
-`tsc`/`lint`/`test` (78/78)/`build` limpos. Três frentes, detalhadas nas seções datadas
-logo abaixo:
+Grande rodada de UX/produto — **commit `574b7aa` em `main`, já em produção**
+(https://eplis-trainer.vercel.app, deploy automático confirmado). `tsc`/`lint`/`test`
+(78/78)/`build` limpos. Três frentes, detalhadas nas seções datadas logo abaixo:
 
 1. **Identidade visual** — a plataforma saiu do scaffold do Next.js. Sistema de design em
    `src/app/globals.css` (tokens + `@layer components`), fontes IBM Plex Sans/Mono, tema
