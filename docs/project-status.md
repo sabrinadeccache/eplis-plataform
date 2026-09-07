@@ -77,6 +77,41 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   (`pg`, `SUPABASE_DB_URL` do Session pooler) continuam válidas e são o caminho dos
   scripts em `scripts/`.
 
+## Atualização (2026-09-07) — Bugs da Parte 2 do SDEA (teste manual da Sabrina) + loop de login
+
+**Ponto de retomada (2026-09-07)** — teste manual da Sabrina em produção: Partes 1,
+3 e 4 OK; Parte 2 itens sem foto OK; Parte 2 itens com foto tinham 2 bugs, mais um
+loop de redirecionamento no login. Tudo corrigido nesta rodada.
+
+1. **`fix(auth)` — "too many redirects" no login** (`src/lib/supabase/proxy.ts`): os
+   redirects do proxy (`/login`↔`/dashboard`) não repassavam os cookies de sessão
+   que o `@supabase/ssr` acabava de renovar no `supabaseResponse`. Com token velho no
+   browser, proxy e página divergiam sobre haver sessão e ficavam se empurrando.
+   Agora todo redirect do proxy leva `supabaseResponse.cookies` junto. Quem já estava
+   com cookie quebrado precisa de 1 login limpo (janela privada / limpar dados do site).
+
+2. **Parte 2 — o examinador não falava o setup da situação**
+   (`src/components/sdea/pilot-interview-runner.tsx`): `buildSteps` da Parte 2 ia
+   direto pro readback (áudio do ATC), sem nunca narrar o `prompt_text` ("You are
+   climbing after departure… Listen to Departure Control and read back."). Adicionado
+   um passo `intro`/`auto` no começo de cada item da Parte 2 que narra o `prompt_text`
+   via TTS. Valia pra todos os itens; mais visível nos com foto.
+
+3. **Parte 2 (itens com foto) — TTS lia a rubrica de palco**: o `complication_text`
+   dos 27 itens com foto trazia, no meio, `(apresenta a imagem: fixed-wing-weather.png)`
+   — anotação em português pro examinador humano, que o TTS lia em voz alta (e ainda
+   soletrava o nome do arquivo). Removido: (a) no banco de produção via `UPDATE` com
+   `regexp_replace`; (b) no `scripts/pilot-content-part234.mjs` (re-seed fica limpo);
+   (c) defesa em runtime — `stripStageCue` em `src/services/simulations/pilot/queries.ts`
+   (`toPrompt`). Nenhum script parseava a rubrica (o mapa imagem→situação é por
+   `order_index` hardcoded em `upload-pilot-part2-images.mjs`), então remover é seguro.
+
+`tsc`/`lint`/`test` (70/70, +3)/`build` limpos. Migrations: nenhuma — só um `UPDATE`
+de dados aplicado direto em produção (idempotente).
+
+Segue em aberto pro SDEA: re-teste manual da Parte 2 com foto pela Sabrina depois
+deste deploy.
+
 ## Atualização (2026-09-04) — Testes automatizados do engine de IA (EPLIS + SDEA)
 
 **Ponto de retomada (2026-09-04)** — fechada a lacuna antiga de cobertura de

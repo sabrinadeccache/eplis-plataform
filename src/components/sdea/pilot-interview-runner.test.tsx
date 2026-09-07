@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { PilotInterviewRunner } from "./pilot-interview-runner";
-import { advanceState } from "@/services/simulations/pilot/actions";
+import { advanceState, generateSpeech } from "@/services/simulations/pilot/actions";
 import type { PilotSequence } from "@/services/simulations/pilot/queries";
 
 vi.mock("@/services/simulations/pilot/actions", () => ({
@@ -18,9 +18,9 @@ vi.mock("next/navigation", () => ({
 // usa esse tamanho fixo, não o length do array) — mesmo padrão do teste
 // equivalente do controlador (interview-runner.test.tsx).
 function makeSequence(): PilotSequence {
-  const prompt = (id: string) => ({
+  const prompt = (id: string, part: "part1" | "part2" = "part1") => ({
     id,
-    part: "part1" as const,
+    part,
     promptText: `Prompt ${id}`,
     atcAudioText: null,
     atcAudioUrl: null,
@@ -40,7 +40,7 @@ function makeSequence(): PilotSequence {
   });
   return {
     part1: [prompt("p1-a"), prompt("p1-b"), prompt("p1-c")],
-    part2: [],
+    part2: [prompt("p2-a", "part2"), prompt("p2-b", "part2")],
     part3: [],
     part4: [],
   };
@@ -131,6 +131,25 @@ describe("PilotInterviewRunner — trava de concorrência no avanço de item", (
 
     await waitFor(() => expect(advanceState).toHaveBeenCalled());
     expect(advanceState).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PilotInterviewRunner — Parte 2", () => {
+  it("fala o setup da situação (prompt_text) antes da chamada do ATC", async () => {
+    render(
+      <PilotInterviewRunner
+        attemptId="attempt-1"
+        mode="practice"
+        sequence={makeSequence()}
+        initialPart="part2"
+        initialItemIndex={1}
+      />,
+    );
+
+    // primeiro passo do item de Parte 2 é um "auto" que narra o prompt_text
+    await waitFor(() =>
+      expect(generateSpeech).toHaveBeenCalledWith("attempt-1", "Prompt p2-b"),
+    );
   });
 });
 

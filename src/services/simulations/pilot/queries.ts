@@ -67,6 +67,16 @@ type PromptRow = {
   order_index: number | null;
 };
 
+// O material da Parte 2 traz, no meio do texto do imprevisto, uma rubrica de
+// palco em português: "(apresenta a imagem: fixed-wing-weather.png)". Isso é só
+// uma anotação pro examinador humano — não deve ser falado pelo TTS nem entrar
+// no contexto da IA. A imagem em si já vem por complication_image_url. Removido
+// aqui (defesa) além de estar limpo no banco/seed.
+export function stripStageCue(text: string | null): string | null {
+  if (text == null) return text;
+  return text.replace(/\s*\(apresenta[^)]*\)\s*/gi, " ").replace(/\s{2,}/g, " ").trim();
+}
+
 function toPrompt(row: PromptRow): PilotPrompt {
   return {
     id: row.id,
@@ -75,7 +85,7 @@ function toPrompt(row: PromptRow): PilotPrompt {
     atcAudioText: row.atc_audio_text,
     atcAudioUrl: row.atc_audio_url,
     expectedReadback: row.expected_readback,
-    complicationText: row.complication_text,
+    complicationText: stripStageCue(row.complication_text),
     complicationImageUrl: row.complication_image_url,
     expectedReaction: row.expected_reaction,
     atcFollowupAudioText: row.atc_followup_audio_text,

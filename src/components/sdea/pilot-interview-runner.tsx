@@ -48,6 +48,12 @@ function buildSteps(part: Part, itemIndex: number, prompt: PilotPrompt): Step[] 
   }
 
   if (part === "part2") {
+    // Setup da situação (prompt_text) — o examinador fala isto antes de tocar
+    // a primeira chamada do controlador ("You are at Guarulhos Airport, ready
+    // to taxi... Listen to Ground Control and read back."). Sem este passo, o
+    // candidato ouvia a chamada do ATC sem nenhum contexto de onde está / o
+    // que está fazendo.
+    steps.push({ stage: "intro", kind: "auto", durationSeconds: 3, text: prompt.promptText });
     steps.push({
       stage: "readback",
       kind: "response",

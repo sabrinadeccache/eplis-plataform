@@ -1,5 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Part } from "@/types/database";
+import { stripStageCue } from "./queries";
+
+describe("stripStageCue", () => {
+  it("remove a rubrica '(apresenta a imagem: ...)' do meio do texto", () => {
+    expect(
+      stripStageCue(
+        "Now, this is what you see on your weather radar. (apresenta a imagem: fixed-wing-weather.png) Call Departure Control.",
+      ),
+    ).toBe("Now, this is what you see on your weather radar. Call Departure Control.");
+  });
+
+  it("não mexe em texto sem rubrica e propaga null", () => {
+    expect(stripStageCue("Now, the runway is blocked.")).toBe("Now, the runway is blocked.");
+    expect(stripStageCue(null)).toBeNull();
+  });
+});
 
 type FakeRow = {
   id: string;
