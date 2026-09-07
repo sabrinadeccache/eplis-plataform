@@ -116,30 +116,37 @@ IHM.
 Sabrina) — o headless não grava áudio, então o caminho do `AnalyserNode` real nunca roda
 nos testes.
 
-## Retomada — 2026-09-07 (fim da sessão de redesign)
+## Retomada — 2026-09-07 (fim da sessão da IHM da entrevista)
 
-Grande rodada de UX/produto — **commit `574b7aa` em `main`, já em produção**
-(https://eplis-trainer.vercel.app, deploy automático confirmado). `tsc`/`lint`/`test`
-(78/78)/`build` limpos. Três frentes, detalhadas nas seções datadas logo abaixo:
+**Último commit em `main`: `36c153a`** — já em produção (https://eplis-trainer.vercel.app,
+deploy automático a cada push). `lint` / `tsc` / `test` (78/78) / `build` limpos, verificado
+pela Sabrina. Duas rodadas nesta sessão:
 
-1. **Identidade visual** — a plataforma saiu do scaffold do Next.js. Sistema de design em
-   `src/app/globals.css` (tokens + `@layer components`), fontes IBM Plex Sans/Mono, tema
-   claro+escuro automático, hero no dashboard, ícones, hover nos links. **Todas** as telas
-   passaram. Ver "Identidade visual da plataforma" + suas 5 passadas.
-2. **Perfil estendido** — cadastro agora coleta local de trabalho, cidade/UF (cascata
-   IBGE), telefone, nível OACI + validade, data da prova, objetivo. Migration
-   `20260907000000` **aplicada em produção**. Profissão/perfil operacional viraram
-   só-admin. Ver "Modo practice da Fase 1" (topo) e "Identidade visual" → passadas 2 e 5.
-3. **Modo practice da Fase 1** — split practice/official com transcrição do áudio pós-
-   resposta (treino de ouvido). Ver seção logo abaixo.
+1. **IHM da entrevista (`781415d`)** — a tela da entrevista (Fase 2 **e** SDEA) trocou a
+   tela quase vazia por um visualizador de áudio em canvas (esfera de vidro que pulsa com a
+   voz da IA e reage ao microfone real na vez do candidato), faixa de progresso estilo strip
+   de voo, teclas com relevo e legenda opcional. **Sem avatar e sem cenário** — decisão
+   fechada com a Sabrina (fidelidade ao exame, que é só voz). Novos:
+   `src/components/interview/audio-orb.tsx` e `.../interview-ui.tsx`; bloco `.iv-*` em
+   `globals.css`. Ver "Atualização (2026-09-07) — IHM da entrevista" logo acima.
+2. **Legendas só no practice (`36c153a`)** — no modo `official` o toggle e o painel de
+   legenda não aparecem.
+
+Antes disso, a grande rodada de redesign (commit `574b7aa`), detalhada nas seções datadas
+abaixo: **identidade visual** (design system em `globals.css`, IBM Plex, tema claro/escuro,
+todas as telas), **perfil estendido** (cadastro com local de trabalho, cidade/UF via IBGE,
+OACI, data da prova; migration `20260907000000` aplicada; profissão/perfil operacional
+viraram só-admin) e o **modo practice da Fase 1** (transcrição pós-resposta).
 
 **Estado das trilhas**: EPLIS (controlador) e SDEA (piloto) tecnicamente prontos. Falta a
-decisão de negócio de abrir o cadastro público (Roadmap → Fase 7) e o teste com microfone
-real da entrevista (só a Sabrina).
+decisão de negócio de abrir o cadastro público (Roadmap → Fase 7) e o **teste com microfone
+real** da entrevista (só a Sabrina) — que agora também cobre a reação do visualizador de
+áudio à voz do candidato (o caminho do `AnalyserNode` real nunca roda nos testes headless).
 
-**Aberto / próximos passos possíveis**: favicon próprio (segue o `.ico` do Next); review
-visual fina no mobile; ampliar o conteúdo dos pools; a revisão de inglês pendente citada
-nas seções antigas.
+**Aberto / próximos passos possíveis**: teste real da IHM nova com microfone (reação do
+visualizador, legendas, teclas); favicon próprio (segue o `.ico` do Next); review visual
+fina no mobile — inclusive a IHM nova; ampliar o conteúdo dos pools; a revisão de inglês
+pendente citada nas seções antigas.
 
 ## Ferramentas indisponíveis nesta máquina (checar de novo em nova sessão)
 
