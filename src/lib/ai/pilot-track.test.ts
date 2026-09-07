@@ -105,6 +105,12 @@ describe("generatePilotFinalReport", () => {
     expect(out.general_feedback).toContain("suporte");
   });
 
+  it("lista de transcrições vazia devolve o fallback sem chamar a IA", async () => {
+    const out = await generatePilotFinalReport([], "practice");
+    expect(out.overall).toBe("moderate");
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("modo official adiciona o adendo de modo oficial ao system", async () => {
     reply(strictJson);
     await generatePilotFinalReport(transcripts, "official");

@@ -103,6 +103,12 @@ describe("generateFinalReport", () => {
     expect(system).toContain("QUALQUER pedido de repetição");
   });
 
+  it("lista de transcrições vazia devolve o fallback sem chamar a IA", async () => {
+    const out = await generateFinalReport([], "practice");
+    expect(out.overall).toBe("moderate");
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("official aplica a regra de repetição oficial", async () => {
     reply(strictJson);
     await generateFinalReport(transcripts, "official");

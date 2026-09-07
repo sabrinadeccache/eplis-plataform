@@ -235,6 +235,11 @@ export async function generatePilotFinalReport(
     )
     .join("\n\n");
 
+  // Sem nenhuma resposta transcrita (ex.: candidato pulou tudo, ou todas as
+  // gravações falharam) não há o que avaliar — chamar a IA com content vazio
+  // dá 400 ("user messages must have non-empty content").
+  if (body.trim() === "") return FALLBACK_REPORT;
+
   const system =
     (mode === "official"
       ? `${PILOT_FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}`

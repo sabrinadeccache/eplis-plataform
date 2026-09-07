@@ -274,6 +274,10 @@ export async function generateFinalReport(
     )
     .join("\n\n");
 
+  // Sem nenhuma resposta transcrita não há o que avaliar — chamar a IA com
+  // content vazio dá 400 ("user messages must have non-empty content").
+  if (body.trim() === "") return FALLBACK_REPORT;
+
   const system =
     (mode === "official" ? `${FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}` : FINAL_REPORT_SYSTEM) +
     repetitionRuleFor(mode);
