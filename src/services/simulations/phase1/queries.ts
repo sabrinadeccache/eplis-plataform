@@ -13,8 +13,11 @@ const MAX_QUESTIONS = 30;
 
 // Correct_option is intentionally excluded from the select — grading happens
 // server-side in recordAnswer, never trusting a client-supplied answer against
-// a client-visible key.
-export async function getRandomQuizQuestions(): Promise<Phase1QuizItem[]> {
+// a client-visible key. `limit` deixa o modo practice sortear menos questões
+// (10/20/30); o official sempre usa MAX_QUESTIONS.
+export async function getRandomQuizQuestions(
+  limit: number = MAX_QUESTIONS,
+): Promise<Phase1QuizItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("phase1_questions")
@@ -43,5 +46,6 @@ export async function getRandomQuizQuestions(): Promise<Phase1QuizItem[]> {
     [items[i], items[j]] = [items[j], items[i]];
   }
 
-  return items.slice(0, MAX_QUESTIONS);
+  const take = Math.max(1, Math.min(Math.trunc(limit) || MAX_QUESTIONS, MAX_QUESTIONS));
+  return items.slice(0, take);
 }

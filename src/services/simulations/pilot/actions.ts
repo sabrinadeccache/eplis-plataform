@@ -60,7 +60,7 @@ export async function startAttempt(mode: SimulationMode) {
 }
 
 // Mesmo padrão de abandonAndRestartAttempt do controlador — usada pelo botão
-// "Abandonar e começar novo" quando existe uma tentativa `practice` pausada.
+// "Começar novo simulado" quando existe uma tentativa `practice` pausada.
 export async function abandonAndRestartAttempt(attemptId: string) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();

@@ -16,17 +16,40 @@ export default function GlobalError({
 
   return (
     <html lang="pt-BR">
-      <body className="flex min-h-screen flex-col items-center justify-center gap-4 bg-zinc-50 px-4 text-center dark:bg-black">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Algo deu errado.
-        </h1>
-        <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+      <body
+        style={{
+          minHeight: "100vh",
+          margin: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "1rem",
+          padding: "1rem",
+          textAlign: "center",
+          background: "#eef1f4",
+          color: "#152230",
+          fontFamily: "ui-sans-serif, system-ui, sans-serif",
+        }}
+      >
+        <div style={{ height: 2, width: 48, background: "#1668b3" }} />
+        <h1 style={{ fontSize: "1.25rem", fontWeight: 600, margin: 0 }}>Algo deu errado</h1>
+        <p style={{ maxWidth: "26rem", fontSize: "0.875rem", color: "#5c6b7a", margin: 0 }}>
           O erro já foi registrado. Tente novamente em alguns instantes.
         </p>
         <button
           type="button"
           onClick={() => reset()}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          style={{
+            border: "none",
+            borderRadius: 8,
+            background: "#1668b3",
+            color: "#fff",
+            padding: "0.5rem 1rem",
+            fontSize: "0.875rem",
+            fontWeight: 500,
+            cursor: "pointer",
+          }}
         >
           Tentar novamente
         </button>

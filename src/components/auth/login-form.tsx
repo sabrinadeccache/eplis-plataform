@@ -7,25 +7,42 @@ import { SubmitButton } from "@/components/auth/submit-button";
 
 const initialState: AuthFormState = { error: null };
 
-export function LoginForm({ justReset }: { justReset: boolean }) {
+export function LoginForm({
+  justReset,
+  justSignedUp,
+  accountGone,
+}: {
+  justReset: boolean;
+  justSignedUp?: boolean;
+  accountGone?: boolean;
+}) {
   const [state, formAction] = useActionState(signIn, initialState);
 
   return (
-    <div className="w-full max-w-sm space-y-6 rounded-lg border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="space-y-1 text-center">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">EPLIS Trainer</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">Entrar na sua conta</p>
-      </div>
+    <div className="space-y-5">
+      {accountGone && (
+        <p role="status" className="note note-caution">
+          Sua sessão foi encerrada porque esta conta não está mais ativa. Entre novamente
+          ou crie uma nova conta.
+        </p>
+      )}
 
       {justReset && (
-        <p role="status" className="text-center text-sm text-emerald-600 dark:text-emerald-400">
+        <p role="status" className="note note-success">
           Senha redefinida. Entre com a nova senha.
         </p>
       )}
 
+      {justSignedUp && (
+        <p role="status" className="note note-success">
+          Cadastro criado. Confirme seu e-mail pelo link que enviamos e entre com sua
+          senha.
+        </p>
+      )}
+
       <form action={formAction} className="space-y-4">
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="field-label">
             E-mail
           </label>
           <input
@@ -34,19 +51,16 @@ export function LoginForm({ justReset }: { justReset: boolean }) {
             type="email"
             required
             autoComplete="email"
-            className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
+            className="field-input"
           />
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label htmlFor="password" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="password" className="field-label">
               Senha
             </label>
-            <Link
-              href="/esqueci-senha"
-              className="text-xs text-zinc-500 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-            >
+            <Link href="/esqueci-senha" className="link text-xs">
               Esqueceu a senha?
             </Link>
           </div>
@@ -56,25 +70,18 @@ export function LoginForm({ justReset }: { justReset: boolean }) {
             type="password"
             required
             autoComplete="current-password"
-            className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
+            className="field-input"
           />
         </div>
 
         {state.error && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="text-sm text-danger">
             {state.error}
           </p>
         )}
 
         <SubmitButton>Entrar</SubmitButton>
       </form>
-
-      <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-        Ainda não tem conta?{" "}
-        <Link href="/cadastro" className="font-medium text-zinc-900 underline dark:text-zinc-50">
-          Cadastre-se
-        </Link>
-      </p>
     </div>
   );
 }

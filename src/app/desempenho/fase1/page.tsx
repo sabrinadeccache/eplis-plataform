@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
@@ -9,6 +8,8 @@ import {
   Fase1ProgressChart,
   type Fase1ChartPoint,
 } from "@/components/desempenho/fase1-progress-chart";
+import { HistoryRow } from "@/components/desempenho/history-row";
+import { BackLink } from "@/components/layout/back-link";
 
 export default async function DesempenhoFase1Page() {
   const user = await getCurrentUser();
@@ -17,11 +18,13 @@ export default async function DesempenhoFase1Page() {
 
   const supabase = await createClient();
 
+  // Só o modo official conta como "prova" — o practice é treino livre.
   const { data: attempts } = await supabase
     .from("simulation_attempts")
     .select("id, score, started_at, finished_at")
     .eq("user_id", user.id)
     .eq("phase", "phase1")
+    .eq("mode", "official")
     .eq("status", "completed")
     .order("finished_at", { ascending: false });
 
@@ -67,47 +70,32 @@ export default async function DesempenhoFase1Page() {
 
   return (
     <AppShell user={user}>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Desempenho — Fase 1
-        </h1>
-        <Link
-          href="/desempenho"
-          className="text-sm text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-        >
-          Voltar
-        </Link>
-      </div>
+      <BackLink href="/desempenho">Desempenho</BackLink>
+      <h1 className="page-title">Desempenho — Fase 1</h1>
 
       {rows.length === 0 ? (
-        <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-          Você ainda não concluiu nenhum simulado da Fase 1.
-        </p>
+        <p className="page-intro">Você ainda não concluiu nenhum simulado da Fase 1.</p>
       ) : (
         <>
-          <Fase1ProgressChart points={chartPoints} />
+          <div className="mt-6">
+            <Fase1ProgressChart points={chartPoints} />
+          </div>
 
           <div className="mt-6 space-y-2">
             {rows.map((row) => (
-              <Link
+              <HistoryRow
                 key={row.id}
                 href={`/fase1/resultado/${row.id}`}
-                className="flex items-center justify-between rounded-md border border-zinc-200 p-4 text-sm transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
-              >
-                <span className="text-zinc-900 dark:text-zinc-50">
-                  Simulado {row.date} — {row.score} acertos
-                  {row.total > 0 ? ` de ${row.total}` : ""}
-                </span>
-                <span
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    row.approved
-                      ? "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400"
-                      : "border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
-                  }`}
-                >
-                  {row.approved ? "APROVADO" : "REPROVADO"}
-                </span>
-              </Link>
+                label={`Simulado ${row.date} — ${row.score} acertos${
+                  row.total > 0 ? ` de ${row.total}` : ""
+                }`}
+                badgeText={row.approved ? "Aprovado" : "Reprovado"}
+                badgeClass={
+                  row.approved
+                    ? "border-success/40 bg-success/10 text-success"
+                    : "border-danger/40 bg-danger/10 text-danger"
+                }
+              />
             ))}
           </div>
         </>

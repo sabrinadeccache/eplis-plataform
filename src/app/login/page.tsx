@@ -1,15 +1,32 @@
+import Link from "next/link";
 import { LoginForm } from "@/components/auth/login-form";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string }>;
+  searchParams: Promise<{ reset?: string; cadastro?: string; erro?: string }>;
 }) {
   const params = await searchParams;
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 dark:bg-black">
-      <LoginForm justReset={params.reset === "1"} />
-    </div>
+    <AuthShell
+      title="Entrar na sua conta"
+      subtitle="Use o e-mail e a senha do seu cadastro."
+      footer={
+        <>
+          Ainda não tem conta?{" "}
+          <Link href="/cadastro" className="link font-medium">
+            Cadastre-se
+          </Link>
+        </>
+      }
+    >
+      <LoginForm
+        justReset={params.reset === "1"}
+        justSignedUp={params.cadastro === "1"}
+        accountGone={params.erro === "conta"}
+      />
+    </AuthShell>
   );
 }

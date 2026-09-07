@@ -60,7 +60,7 @@ export function AvatarUpload({
           className="h-16 w-16 rounded-full object-cover"
         />
       ) : (
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-200 text-lg font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sunken text-lg font-medium text-muted">
           {initials || "?"}
         </div>
       )}
@@ -70,7 +70,7 @@ export function AvatarUpload({
           type="button"
           disabled={uploading}
           onClick={() => inputRef.current?.click()}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300"
+          className="btn btn-secondary !px-3 !py-1.5"
         >
           {uploading ? "Enviando…" : "Alterar foto"}
         </button>
@@ -82,7 +82,7 @@ export function AvatarUpload({
           className="hidden"
         />
         {error && (
-          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+          <p role="alert" className="text-xs text-danger">
             {error}
           </p>
         )}

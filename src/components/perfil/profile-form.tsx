@@ -1,46 +1,41 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { updateProfile, type AuthFormState } from "@/lib/auth/actions";
 import { SubmitButton } from "@/components/auth/submit-button";
-import type { OperationalProfile, Role, UserRow } from "@/types/database";
+import { ProfileDetailsFields } from "@/components/perfil/profile-details-fields";
+import type { UserRow } from "@/types/database";
 
 const initialState: AuthFormState = { error: null };
 
-const ATC_PROFILES = [
-  { value: "", label: "Ainda não sei" },
-  { value: "TWR", label: "TWR" },
-  { value: "APP", label: "APP" },
-  { value: "ACC", label: "ACC" },
-  { value: "COpM", label: "COpM" },
-];
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Administrador",
+  pilot: "Piloto",
+  air_traffic_controller: "Controlador de tráfego aéreo",
+};
 
-const PILOT_PROFILES = [
-  { value: "", label: "Ainda não sei" },
-  { value: "fixed_wing", label: "Asa fixa" },
-  { value: "rotary_wing", label: "Asa rotativa" },
-];
-
-// Se a conta for admin (papel sem opção neste form), mantém o valor salvo
-// como piloto só pra escolher a lista de perfis certa na tela — o server
-// action já preserva o role real de admin, não deixa rebaixar.
-function initialRole(role: Role): "pilot" | "air_traffic_controller" {
-  return role === "air_traffic_controller" ? "air_traffic_controller" : "pilot";
-}
+const PROFILE_LABELS: Record<string, string> = {
+  fixed_wing: "Asa fixa",
+  rotary_wing: "Asa rotativa",
+  general: "Geral",
+  TWR: "TWR",
+  APP: "APP",
+  ACC: "ACC",
+  COpM: "COpM",
+};
 
 export function ProfileForm({ user }: { user: UserRow }) {
   const [state, formAction] = useActionState(updateProfile, initialState);
-  const [role, setRole] = useState<"pilot" | "air_traffic_controller">(initialRole(user.role));
-  const [operationalProfile, setOperationalProfile] = useState<OperationalProfile | "">(
-    user.operational_profile ?? "",
-  );
 
-  const profileOptions = role === "pilot" ? PILOT_PROFILES : ATC_PROFILES;
+  const roleLabel = ROLE_LABELS[user.role] ?? user.role;
+  const profileLabel = user.operational_profile
+    ? (PROFILE_LABELS[user.operational_profile] ?? user.operational_profile)
+    : "não definido";
 
   return (
     <form action={formAction} className="space-y-4">
-      <div className="space-y-1">
-        <label htmlFor="name" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+      <div className="space-y-1.5">
+        <label htmlFor="name" className="field-label">
           Nome
         </label>
         <input
@@ -50,12 +45,12 @@ export function ProfileForm({ user }: { user: UserRow }) {
           required
           autoComplete="name"
           defaultValue={user.name}
-          className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
+          className="field-input"
         />
       </div>
 
-      <div className="space-y-1">
-        <label htmlFor="email" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+      <div className="space-y-1.5">
+        <label htmlFor="email" className="field-label">
           E-mail
         </label>
         <input
@@ -63,58 +58,47 @@ export function ProfileForm({ user }: { user: UserRow }) {
           type="email"
           disabled
           value={user.email}
-          className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-500 outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-500"
+          className="field-input cursor-not-allowed bg-sunken text-muted"
         />
       </div>
 
-      <div className="space-y-1">
-        <label htmlFor="role" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Profissão
-        </label>
-        <select
-          id="role"
-          name="role"
-          value={role}
-          onChange={(e) => {
-            setRole(e.target.value as "pilot" | "air_traffic_controller");
-            setOperationalProfile("");
-          }}
-          className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
-        >
-          <option value="pilot">Piloto</option>
-          <option value="air_traffic_controller">Controlador de tráfego aéreo</option>
-        </select>
-      </div>
+      {/* Profissão e perfil operacional são geridos pelo administrador. */}
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line">
+        <div className="bg-surface px-3 py-2.5">
+          <dt className="text-xs text-muted">Profissão</dt>
+          <dd className="mt-0.5 text-sm text-ink">{roleLabel}</dd>
+        </div>
+        <div className="bg-surface px-3 py-2.5">
+          <dt className="text-xs text-muted">Perfil operacional</dt>
+          <dd className="mt-0.5 text-sm text-ink">{profileLabel}</dd>
+        </div>
+      </dl>
+      <p className="text-xs leading-relaxed text-muted">
+        Para alterar sua profissão ou perfil operacional, entre em contato com o
+        administrador.
+      </p>
 
-      <div className="space-y-1">
-        <label
-          htmlFor="operational_profile"
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Perfil operacional atual
-        </label>
-        <select
-          id="operational_profile"
-          name="operational_profile"
-          value={operationalProfile}
-          onChange={(e) => setOperationalProfile(e.target.value as OperationalProfile)}
-          className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
-        >
-          {profileOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <ProfileDetailsFields
+        role={user.role === "air_traffic_controller" ? "air_traffic_controller" : "pilot"}
+        defaults={{
+          work_location: user.work_location,
+          home_state: user.home_state,
+          home_city: user.home_city,
+          phone: user.phone,
+          current_icao_level: user.current_icao_level,
+          icao_level_valid_until: user.icao_level_valid_until,
+          exam_target_date: user.exam_target_date,
+          training_goal: user.training_goal,
+        }}
+      />
 
       {state.error && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-danger">
           {state.error}
         </p>
       )}
       {state.info && (
-        <p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">
+        <p role="status" className="text-sm text-success">
           {state.info}
         </p>
       )}

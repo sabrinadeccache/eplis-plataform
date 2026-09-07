@@ -34,7 +34,23 @@ controlador (EPLIS); `pilot_*` são exclusivas do piloto (SDEA) — ver seção 
 | target_exam | text | derivado do `role` no cadastro, não escolhido pelo usuário: `air_traffic_controller` → `EPLIS`; `pilot` → `Santos Dumont English Assessment` (ver `src/lib/auth/actions.ts`, `targetExamForRole`) |
 | operational_profile | enum, nullable | `TWR`, `APP`, `ACC`, `COpM` (controladores) — confirmado pelo Manual do Examinando (item 1.2.2) como o critério real de versionamento da Fase 2. **[2026-08-19]** `fixed_wing`, `rotary_wing` (pilotos) adicionados ao mesmo enum — migration `20260819000000_pilot_operational_profiles_and_avatar.sql`. **[2026-08-24]** trilha do piloto (SDEA) implementada — esses dois valores agora também filtram o conteúdo de `pilot_prompts` (ver seção 9), reaproveitando o mesmo enum/coluna que já existia pro cadastro. Nullable porque `admin` não precisa e o candidato pode se cadastrar sem saber ainda ("Ainda não sei") — nesse caso a tela `/sdea` pede pra completar o perfil antes de liberar o simulado. **[2026-08-10]** Enum restrito de 8 pra 5 valores nessa data — `AFIS`, `FIS` e `ab_initio` saíram por não fazerem parte do escopo real de conteúdo daquela rodada; ver migration `20260810000000_narrow_operational_profile.sql`. |
 | avatar_url | text, nullable | **[NOVO, 2026-08-19]** foto de perfil, bucket de Storage `avatars` (público, path `{userId}/avatar.<ext>`, upsert) — ver `src/app/api/profile/avatar/route.ts` |
+| work_location | text, nullable | **[NOVO, 2026-09-07]** texto livre — órgão/base onde trabalha (ex.: `TWR-SBGL`, `LATAM`). Coletado no cadastro, editável em `/perfil`. |
+| home_state | text, nullable | **[NOVO, 2026-09-07]** UF de residência (2 letras). Validada contra `UF_SIGLAS` em `src/lib/profile-fields.ts`. |
+| home_city | text, nullable | **[NOVO, 2026-09-07]** município de residência (nome IBGE). O `<select>` em cascata usa `src/data/br-locations.ts` (gerado da API do IBGE, carregado por import dinâmico). |
+| phone | text, nullable | **[NOVO, 2026-09-07]** telefone/WhatsApp de contato. |
+| current_icao_level | smallint, nullable | **[NOVO, 2026-09-07]** nível OACI atual (1..6, `check` constraint `users_current_icao_level_range`). |
+| icao_level_valid_until | date, nullable | **[NOVO, 2026-09-07]** validade do nível OACI atual. Dashboard mostra "Nível X · vence mmm/aaaa". |
+| exam_target_date | date, nullable | **[NOVO, 2026-09-07]** data prevista para o exame. Dashboard mostra contagem regressiva ("Prova em N dias"). |
+| training_goal | text, nullable | **[NOVO, 2026-09-07]** objetivo no treinamento — valores fechados em `TRAINING_GOALS` (`src/lib/profile-fields.ts`). |
 | created_at | timestamp | |
+
+**[2026-09-07]** As 8 colunas acima entram no `raw_user_meta_data` do `signUp` e são
+copiadas pro `public.users` pelo trigger `handle_new_user()` (migration
+`20260907000000_user_profile_extended_fields.sql` — reescreve o trigger, sem GRANT novo:
+o `grant ... on public.users` é a nível de tabela e já cobre colunas futuras; a policy
+`users update own row` também). `updateProfile` (`src/lib/auth/actions.ts`) persiste as 8
+(fora `role`/`operational_profile`, que continuam só-admin). Sanitização compartilhada:
+`readProfileExtraFields` / `profileExtraFieldsToMetadata`.
 
 Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 

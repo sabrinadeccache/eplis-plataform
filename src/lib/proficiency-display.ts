@@ -11,20 +11,29 @@ export const PROFICIENCY_LABEL: Record<ProficiencyLevel, string> = {
   excellent: "Excelente",
 };
 
-// Classes de badge (borda + texto) usadas nas telas de resultado e desempenho.
+// Código da Escala OACI equivalente, pra exibição como dado (mono).
+export const PROFICIENCY_ICAO: Record<ProficiencyLevel, string> = {
+  weak: "N1–N3",
+  moderate: "N4",
+  good: "N5",
+  excellent: "N6",
+};
+
+// Classe de pílula (borda + texto + fundo suave) usada nas telas de
+// resultado e desempenho. Cores derivadas dos tokens semânticos.
 export const PROFICIENCY_BADGE_CLASS: Record<ProficiencyLevel, string> = {
-  weak: "border-red-300 text-red-700 dark:border-red-800 dark:text-red-400",
-  moderate: "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400",
-  good: "border-sky-300 text-sky-700 dark:border-sky-800 dark:text-sky-400",
-  excellent: "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400",
+  weak: "border-danger/40 bg-danger/10 text-danger",
+  moderate: "border-caution/40 bg-caution/10 text-caution",
+  good: "border-brand/40 bg-brand/10 text-brand",
+  excellent: "border-success/40 bg-success/10 text-success",
 };
 
 // Hex pros gráficos de progresso (SVG).
 export const PROFICIENCY_COLOR: Record<ProficiencyLevel, string> = {
-  weak: "#ef4444",
-  moderate: "#f59e0b",
-  good: "#3b82f6",
-  excellent: "#10b981",
+  weak: "#b4231e",
+  moderate: "#c98a00",
+  good: "#1668b3",
+  excellent: "#1c7c54",
 };
 
 // Ordem crescente + posição no eixo Y (0 = pior). Reexporta a ordem canônica.

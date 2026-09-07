@@ -1,55 +1,68 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { AppShell } from "@/components/layout/app-shell";
+import { BackLink } from "@/components/layout/back-link";
+import { TrendIcon } from "@/components/layout/section-icons";
+import { canUseControllerTrack, canUsePilotTrack } from "@/lib/auth/roles";
 
 export default async function DesempenhoPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const isPilot = user.role === "pilot";
 
+  const cards = [
+    ...(canUseControllerTrack(user.role)
+      ? [
+          {
+            href: "/desempenho/fase1",
+            title: "Fase 1",
+            description:
+              "Simulados de compreensão auditiva, aprovação e evolução do percentual de acertos.",
+          },
+          {
+            href: "/desempenho/fase2",
+            title: "Fase 2",
+            description:
+              "Entrevistas simuladas, nível geral obtido e evolução por simulado.",
+          },
+        ]
+      : []),
+    ...(canUsePilotTrack(user.role)
+      ? [
+          {
+            href: "/desempenho/sdea",
+            title: "SDEA",
+            description:
+              "Simulados do Santos Dumont English Assessment, nível geral obtido e evolução por simulado.",
+          },
+        ]
+      : []),
+  ];
+
   return (
     <AppShell user={user}>
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Desempenho</h1>
-      <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+      <BackLink />
+      <h1 className="page-title">Desempenho</h1>
+      <p className="page-intro">
         {isPilot
           ? "Veja seus simulados anteriores do SDEA e sua evolução."
           : "Escolha uma fase para ver seus simulados anteriores e sua evolução."}
       </p>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        {isPilot ? (
-          <a
-            href="/desempenho/sdea"
-            className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
-          >
-            <h2 className="font-medium text-zinc-900 dark:text-zinc-50">SDEA</h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Simulados do Santos Dumont English Assessment, nível geral obtido e evolução por
-              simulado.
-            </p>
+      <div className="mt-8 grid gap-3 sm:grid-cols-2">
+        {cards.map((card) => (
+          <a key={card.href} href={card.href} className="card-link flex gap-4 p-5">
+            <span className="icon-chip shrink-0">
+              <TrendIcon />
+            </span>
+            <span className="block">
+              <span className="block font-medium text-ink">{card.title}</span>
+              <span className="mt-1 block text-sm leading-relaxed text-muted">
+                {card.description}
+              </span>
+            </span>
           </a>
-        ) : (
-          <>
-            <a
-              href="/desempenho/fase1"
-              className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
-            >
-              <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Fase 1</h2>
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Simulados de compreensão auditiva, aprovação e evolução do percentual de acertos.
-              </p>
-            </a>
-            <a
-              href="/desempenho/fase2"
-              className="rounded-lg border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
-            >
-              <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Fase 2</h2>
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Entrevistas simuladas, nível geral obtido e evolução por simulado.
-              </p>
-            </a>
-          </>
-        )}
+        ))}
       </div>
     </AppShell>
   );

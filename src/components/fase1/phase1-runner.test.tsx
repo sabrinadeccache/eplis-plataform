@@ -53,7 +53,7 @@ describe("Phase1Runner — trava de concorrência no avanço", () => {
     fireEvent.click(advanceButton);
     fireEvent.click(advanceButton);
 
-    await waitFor(() => expect(screen.getByText("Questão 2 de 2")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("2/2")).toBeInTheDocument());
 
     expect(recordAnswer).toHaveBeenCalledTimes(1);
   });

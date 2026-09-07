@@ -70,6 +70,14 @@ export type UserRow = {
   target_exam: string | null;
   operational_profile: OperationalProfile | null;
   avatar_url: string | null;
+  work_location: string | null;
+  home_state: string | null;
+  home_city: string | null;
+  phone: string | null;
+  current_icao_level: number | null;
+  icao_level_valid_until: string | null;
+  exam_target_date: string | null;
+  training_goal: string | null;
   created_at: string;
 };
 

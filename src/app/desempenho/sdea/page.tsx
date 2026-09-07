@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
+import { BackLink } from "@/components/layout/back-link";
+import { canUsePilotTrack } from "@/lib/auth/roles";
 import { SdeaProgressChart, type SdeaChartPoint } from "@/components/desempenho/sdea-progress-chart";
 import type { ProficiencyLevel } from "@/types/database";
+import { HistoryRow } from "@/components/desempenho/history-row";
 import {
   PROFICIENCY_LABEL as LEVEL_LABEL,
   PROFICIENCY_BADGE_CLASS as LEVEL_CLASS,
@@ -14,7 +16,7 @@ import { formatDate } from "@/lib/format-date";
 export default async function DesempenhoSdeaPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "pilot") redirect("/dashboard");
+  if (!canUsePilotTrack(user.role)) redirect("/dashboard");
 
   const supabase = await createClient();
 
@@ -55,44 +57,28 @@ export default async function DesempenhoSdeaPage() {
 
   return (
     <AppShell user={user}>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Desempenho — SDEA
-        </h1>
-        <Link
-          href="/desempenho"
-          className="text-sm text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-        >
-          Voltar
-        </Link>
-      </div>
+      <BackLink href="/desempenho">Desempenho</BackLink>
+      <h1 className="page-title">Desempenho — SDEA</h1>
 
       {rows.length === 0 ? (
-        <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-          Você ainda não concluiu nenhum simulado do SDEA.
-        </p>
+        <p className="page-intro">Você ainda não concluiu nenhum simulado do SDEA.</p>
       ) : (
         <>
-          <SdeaProgressChart points={chartPoints} />
+          <div className="mt-6">
+            <SdeaProgressChart points={chartPoints} />
+          </div>
 
           <div className="mt-6 space-y-2">
             {rows.map((row) => (
-              <Link
+              <HistoryRow
                 key={row.id}
                 href={`/sdea/resultado/${row.id}`}
-                className="flex items-center justify-between rounded-md border border-zinc-200 p-4 text-sm transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
-              >
-                <span className="text-zinc-900 dark:text-zinc-50">Simulado {row.date}</span>
-                <span
-                  className={`rounded-md border px-2 py-1 text-xs font-semibold ${
-                    row.level
-                      ? LEVEL_CLASS[row.level]
-                      : "border-zinc-300 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
-                  }`}
-                >
-                  {row.level ? `NÍVEL ${LEVEL_LABEL[row.level].toUpperCase()}` : "SEM RELATÓRIO"}
-                </span>
-              </Link>
+                label={`Simulado ${row.date}`}
+                badgeText={row.level ? `Nível ${LEVEL_LABEL[row.level]}` : "Sem relatório"}
+                badgeClass={
+                  row.level ? LEVEL_CLASS[row.level] : "border-line bg-sunken text-muted"
+                }
+              />
             ))}
           </div>
         </>

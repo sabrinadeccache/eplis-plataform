@@ -67,6 +67,40 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
 /auth/v1/admin/users/{id}` com o mesmo campo pra um usuário já existente) usando a
 `SUPABASE_SERVICE_ROLE_KEY`.
 
+**Conta da Sabrina** (`sdeccache@gmail.com`): recadastrada em 2026-09-07 como
+`air_traffic_controller`/`APP` e promovida a **`role='admin'`** (`operational_profile`
+mantido `APP`). Com o código atual, `admin` enxerga e usa **as duas trilhas** (EPLIS +
+SDEA) — nav, dashboard, desempenho e guards de rota usam `src/lib/auth/roles.ts`
+(`canUsePilotTrack`/`canUseControllerTrack`/`sdeaAircraftType`). SDEA de admin sem perfil
+de piloto roda como `fixed_wing`; Fase 1/2 usam o conteúdo de `APP`. Contas de teste pra
+pilotos/controladores reais: ver a tabela em "Atualização (2026-09-07) — Teste manual do
+SDEA…".
+
+## Retomada — 2026-09-07 (fim da sessão de redesign)
+
+Grande rodada de UX/produto, **toda em `main` a partir deste commit** (deploy automático).
+`tsc`/`lint`/`test` (78/78)/`build` limpos. Três frentes, detalhadas nas seções datadas
+logo abaixo:
+
+1. **Identidade visual** — a plataforma saiu do scaffold do Next.js. Sistema de design em
+   `src/app/globals.css` (tokens + `@layer components`), fontes IBM Plex Sans/Mono, tema
+   claro+escuro automático, hero no dashboard, ícones, hover nos links. **Todas** as telas
+   passaram. Ver "Identidade visual da plataforma" + suas 5 passadas.
+2. **Perfil estendido** — cadastro agora coleta local de trabalho, cidade/UF (cascata
+   IBGE), telefone, nível OACI + validade, data da prova, objetivo. Migration
+   `20260907000000` **aplicada em produção**. Profissão/perfil operacional viraram
+   só-admin. Ver "Modo practice da Fase 1" (topo) e "Identidade visual" → passadas 2 e 5.
+3. **Modo practice da Fase 1** — split practice/official com transcrição do áudio pós-
+   resposta (treino de ouvido). Ver seção logo abaixo.
+
+**Estado das trilhas**: EPLIS (controlador) e SDEA (piloto) tecnicamente prontos. Falta a
+decisão de negócio de abrir o cadastro público (Roadmap → Fase 7) e o teste com microfone
+real da entrevista (só a Sabrina).
+
+**Aberto / próximos passos possíveis**: favicon próprio (segue o `.ico` do Next); review
+visual fina no mobile; ampliar o conteúdo dos pools; a revisão de inglês pendente citada
+nas seções antigas.
+
 ## Ferramentas indisponíveis nesta máquina (checar de novo em nova sessão)
 
 - `gh` (GitHub CLI) — não instalado. Push feito via `git push` com credenciais já
@@ -76,6 +110,214 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   `apply_migration` funcionam direto. As migrations/seeds via conexão Postgres direta
   (`pg`, `SUPABASE_DB_URL` do Session pooler) continuam válidas e são o caminho dos
   scripts em `scripts/`.
+
+## Atualização (2026-09-07) — Modo practice da Fase 1 (treino de ouvido com transcrição)
+
+**Ponto de retomada.** A Fase 1 (compreensão auditiva) ganhou split **practice / official**,
+igual Fase 2/SDEA. Ideia da Sabrina: treinar o ouvido ouvindo → respondendo → relendo a
+transcrição enquanto reescuta. Os 43 áudios já tinham transcrição no banco (100%).
+`tsc`/`lint`/`test` (78/78, +2)/`build` limpos. **Sem migration** (o `mode` já existia em
+`simulation_attempts`; a contagem practice vai por query param `?n=`).
+
+Decisões da Sabrina: transcrição **só depois de responder**; practice **fora do
+Desempenho** (só official conta); tamanho practice **10 / 20 / 30** (seletor na tela de
+início).
+
+- **`/fase1`**: era um botão único; agora dois cartões (mesmo padrão do `ModeChooser`):
+  - **Practice** — `<select name="count">` 10/20/30 + "Iniciar practice". Sem cronômetro,
+    replay livre; depois de responder cada questão revela resposta certa + transcrição +
+    "Ouvir de novo". Redireciona pra `/fase1/simulado/<id>?n=<count>`.
+  - **Official** — 30 questões, cronômetros (comportamento antigo, intacto), conta no
+    Desempenho.
+- **`startAttempt(mode, formData?)`** (`services/simulations/phase1/actions.ts`): recebe o
+  modo; practice lê `count` do form (10/20/30, senão 10) e vai com `?n=`.
+  `getRandomQuizQuestions(limit)` ganhou o parâmetro. `recordAnswer` agora devolve
+  `{ isCorrect, correctOption?, transcript? }` — os dois últimos **só no modo practice** e
+  só depois da resposta gravada (server-side, nunca antecipa o gabarito). `assertOwnAttemptInProgress`
+  passou a retornar o `mode`.
+- **Runner**: `Phase1Runner` (official) **inalterado** — seus testes seguem passando.
+  Novo **`Phase1PracticeRunner`** (`src/components/fase1/phase1-practice-runner.tsx`):
+  player + progresso, "Responder" só habilita depois de ouvir o áudio 1×, painel de
+  revelação (certo/errado, gabarito, transcrição em `.note` com "Ouvir de novo"),
+  "Próxima questão"/"Ver resultado". `phase1-practice-runner.test.tsx` novo (2 testes).
+  `/fase1/simulado/[attemptId]` escolhe o runner por `attempt.mode` e passa `n` do
+  searchParam (clamp 10/20/30, senão 30).
+- **`/fase1/resultado/[attemptId]`**: modo practice → título "· practice", sem selo
+  Aprovado/Reprovado, nota "Treino livre — não entra no Desempenho".
+- **`/desempenho/fase1`**: query de attempts ganhou `.eq("mode", "official")`.
+- **DB**: não havia nenhum attempt de `phase1` concluído (só 1 `in_progress` órfão da
+  Sabrina, apagado). Nada pra migrar.
+
+## Atualização (2026-09-07) — Identidade visual da plataforma (design system + todas as telas)
+
+**Ponto de retomada.** A plataforma saiu do visual padrão do Next.js (cinza zinc, fonte
+Geist) e ganhou uma identidade própria. Direção fechada com a Sabrina: "carta de
+aproximação por instrumentos" — papel frio, tinta azul-ardósia, **uma** cor de acento
+(magenta de carta, `--accent`) reservada pro estado "aqui/agora/seu resultado". Suporte a
+tema claro e escuro via `prefers-color-scheme` (sem toggle). Nenhuma mudança de
+comportamento/lógica — só apresentação. `tsc`/`lint`/`test` (72/72)/`build` limpos.
+
+- **`src/app/globals.css`** — reescrito. Tokens CSS (`--paper`, `--surface`, `--sunken`,
+  `--ink`, `--muted`, `--line`, `--brand`, `--brand-strong`, `--accent`, `--success`,
+  `--caution`, `--danger`) em `:root` + override no `@media (prefers-color-scheme: dark)`.
+  Mapeados pra utilitários Tailwind v4 via `@theme inline` (`bg-surface`, `text-ink`,
+  `border-line`, `text-muted`, `text-brand`, `text-accent`, `bg-paper`, `text-caution`
+  etc.). Classes de componente em `@layer components`: `.card`, `.card-link`, `.panel`,
+  `.btn`/`.btn-primary`/`.btn-secondary`/`.btn-danger`, `.field-label`/`.field-input`/
+  `.field-select`, `.link`, `.data` (mono — só pra dado aeronáutico: indicativos, códigos
+  N1–N6, cronômetros, contadores de item), `.note`/`.note-caution`/`.note-danger`/
+  `.note-success`, `.page-title`, `.page-intro`, `.section-head` (título + régua fina).
+  **Toda a base de cor mora aqui** — não há mais `dark:` espalhado pelos componentes; os
+  utilitários de token já trocam sozinhos no dark.
+- **Fontes** (`src/app/layout.tsx`): Geist → **IBM Plex Sans** (400/500/600, `--font-plex-sans`)
+  + **IBM Plex Mono** (400/500, `--font-plex-mono`). `lang` do `<html>` corrigido `en` → `pt-BR`.
+- **Componentes novos**: `src/components/auth/auth-shell.tsx` (moldura das telas de
+  login/cadastro/senha — coluna de marca sobre azul + form à esquerda);
+  `src/components/simulations/mode-chooser.tsx` (seletor practice/official compartilhado
+  por Fase 2 e SDEA — recebe as server actions já `.bind`adas);
+  `src/components/simulations/proficiency-scale.tsx` (`ProficiencyScale` — a Escala OACI
+  como faixa contínua de 4 bandas com a obtida acesa, elemento central das telas de
+  resultado — e `CriteriaGrid` pros 6 critérios); `src/components/desempenho/history-row.tsx`.
+- **`src/lib/proficiency-display.ts`**: cores dos gráficos e classes de pílula (`PROFICIENCY_BADGE_CLASS`)
+  passaram a derivar dos tokens semânticos; adicionado `PROFICIENCY_ICAO` (N1–N3/N4/N5/N6).
+- **Telas atualizadas** (todas): login, cadastro, esqueci-senha, redefinir-senha, dashboard
+  (ganhou uma faixa de identificação estilo strip de voo), Fase 1/Fase 2/SDEA (entrada +
+  entrevista/runner), Fase 1 simulado runner, desempenho + 3 subpáginas + 3 gráficos,
+  perfil + 3 forms, telas de resultado (Fase 1/Fase 2/SDEA), `global-error` (inline styles,
+  fora do RootLayout). Rótulos de badge deixaram de ser `MAIÚSCULAS` (`APROVADO` → `Aprovado`,
+  `NÍVEL ÓTIMO` → `Nível Ótimo`).
+- **Teste ajustado**: `phase1-runner.test.tsx` — o contador "Questão 2 de 2" virou `2/2`
+  (mono, no `section-head` do runner).
+
+**Não feito na 1ª passada** (resolvido nas passadas seguintes / ainda aberto): a Sabrina
+revisou no localhost e pediu ajustes (passadas 2 e 5). Favicon próprio segue pendente
+(usa o `.ico` padrão do Next).
+
+### 2ª passada (mesmo dia) — pedidos da Sabrina após ver no localhost
+
+A Sabrina aprovou a base ("lindo") mas achou "apagado" — queria cara de escola de
+treinamento. Ajustes:
+
+- **Menos apagado**: paleta com mais contraste (`--line` mais forte, `--brand`/`--accent`
+  mais saturados), `--shadow-card` (sombra sutil) em `.card`/`.card-link`, raio 10→12px.
+  **Hero** no dashboard: bloco `bg-brand-strong` com a malha de carta + saudação (só
+  primeiro nome) + chips de função/perfil/exame. **Selos de ícone** (`.icon-chip` +
+  `src/components/layout/section-icons.tsx` — headset/mic/torre-de-rádio/tendência) nos
+  cartões de dashboard e desempenho. Traço de acento sob todo `.page-title`
+  (`::after`, o "gesto único").
+- **Hover / sinal de clique**: `.link` ganhou sublinhado tênue que acende + desce no
+  hover (seguro em quebra de linha); `.nav-link` (novo) tem barra de acento que cresce da
+  esquerda no hover e no estado ativo (`aria-current`); `cursor: pointer` explícito em
+  tudo clicável (`.link`, `.card-link`, `.btn`, botões da nav).
+- **Nav**: "Dashboard" → **"Página inicial"**; o nome do usuário no canto virou **"Meu
+  perfil"** (mantém o avatar como thumb). Rótulos em caixa normal, pra casar com o resto
+  da interface (a Sabrina escreveu em CAIXA ALTA, interpretei como ênfase).
+- **Botão "Página inicial"** (`src/components/layout/back-link.tsx`, chevron + label) no
+  topo das abas principais: Fase 1, Fase 2, Desempenho **e SDEA** (equivalente do piloto).
+  As subpáginas de Desempenho agora usam o mesmo componente ("‹ Desempenho") em vez do
+  link "Voltar" solto.
+- **Cadastro**:
+  - E-mail já cadastrado → erro explícito ("Este e-mail já está cadastrado. Faça login ou
+    recupere sua senha."). Detecção por `error.message` "already registered" **e** (caso
+    de produção, com confirmação de e-mail ligada, onde o Supabase não devolve erro) por
+    `data.user.identities.length === 0`.
+  - Após cadastrar, **redireciona pra `/login?cadastro=1`** (antes só mostrava mensagem
+    inline) — a tela de login exibe um aviso verde pedindo pra confirmar o e-mail.
+- **Perfil**: profissão e perfil operacional viraram **somente leitura** (exibidos numa
+  `dl`, com aviso "entre em contato com o administrador"). `updateProfile` foi reduzido a
+  atualizar **só o nome** — ignora `role`/`operational_profile` no corpo da requisição de
+  propósito. A tela `/sdea` de perfil incompleto também troca "Completar perfil" por
+  "contate o administrador".
+
+`tsc`/`lint`/`test` (72/72)/`build` limpos nas duas passadas.
+
+### 3ª passada — expansão do perfil (cadastro + /perfil)
+
+Decisões da Sabrina: cidade/estado por `<select>` em cascata (base do IBGE embutida);
+campos extras = **nível OACI atual + validade, data prevista da prova, telefone/WhatsApp,
+objetivo**; **tudo no cadastro** (opcional, não trava o cadastro).
+
+- **Migration `20260907000000_user_profile_extended_fields.sql`** — 8 colunas nullable em
+  `public.users` (`work_location`, `home_state`, `home_city`, `phone`,
+  `current_icao_level` smallint 1–6, `icao_level_valid_until` date, `exam_target_date`
+  date, `training_goal`) + reescrita do trigger `handle_new_user()` pra ler os novos
+  metadados. **NÃO aplicada ainda** — precisa rodar antes de o código funcionar / antes
+  de qualquer deploy. Rollback: `alter table public.users drop column ...` (aditiva) +
+  restaurar o corpo antigo do trigger (está na migration `20260727010000`).
+- **`src/data/br-locations.ts`** (novo, ~91 KB, gerado da API do IBGE
+  `/localidades/municipios`): `BR_STATES` (27) + `BR_CITIES_BY_UF` (5.571). Carregado por
+  **import dinâmico** só quando o form monta — fica em chunk separado, fora do bundle
+  principal.
+- **`src/lib/profile-fields.ts`** (novo): `readProfileExtraFields` (sanitiza FormData →
+  valida UF, nível 1–6, datas `YYYY-MM-DD`, objetivo por whitelist),
+  `profileExtraFieldsToMetadata` (→ strings pro `raw_user_meta_data`). Testado
+  (`profile-fields.test.ts`, +4 testes → 76/76).
+- **`src/components/perfil/profile-details-fields.tsx`** (novo, client): fieldset "Sobre
+  você" compartilhado por cadastro e `/perfil`. UF+cidade em cascata, nível OACI + data
+  de validade, data da prova, objetivo, local de trabalho (label/placeholder adaptam ao
+  `role` — ATC "Órgão onde trabalha / TWR-SBGL", piloto "Empresa ou base / LATAM").
+- **`signUp`**: novos campos → `options.data`. **`updateProfile`**: passou a persistir os
+  8 campos (além do nome); `role`/`operational_profile` seguem ignorados.
+- **Dashboard**: hero ganhou chip do nível OACI atual ("Nível 4 · vence set 2026") e um
+  chip de acento com a contagem regressiva da prova ("Prova prevista · em 40 dias").
+- `tsc`/`lint`/`test` (76/76)/`build` limpos.
+
+A migration `20260907000000` foi aplicada em produção (via MCP, verificada — 8 colunas +
+constraint + trigger) **antes** deste commit. A Sabrina revisou no localhost e aprovou.
+Tudo commitado e em `main` (deploy automático).
+
+### 4ª passada — loop de redirect quando a sessão de auth não tem linha em `public.users`
+
+A Sabrina apagou a linha dela em `public.users` de propósito e o login entrou em **"too
+many redirects"**: `auth.users` continuava lá, então `/login` mandava pro `/dashboard`,
+`getCurrentUser` não achava o perfil → `redirect("/login")` → o proxy via sessão válida e
+mandava pro `/dashboard` de novo.
+
+- **`src/lib/supabase/proxy.ts`**: no branch `data.user && isPublicPath`, antes de
+  redirecionar pro `/dashboard`, consulta `public.users` pelo id da sessão. Se **não
+  existir** linha (e a consulta não deu erro de rede) → `supabase.auth.signOut()` +
+  `redirect("/login?erro=conta")`. Cobre conta removida **e** o caso de o trigger
+  `handle_new_user` falhar no cadastro (auth criado, perfil não).
+- **`/login?erro=conta`**: `LoginForm` mostra aviso âmbar ("Sua sessão foi encerrada
+  porque esta conta não está mais ativa…").
+- **Conta da Sabrina**: apaguei o `auth.users` órfão (`delete from auth.users where
+  email='sdeccache@gmail.com'`) — ela vai **recadastrar** pela tela nova. 0 attempts no
+  banco (tudo já tinha sido limpo / cascateou), nada perdido.
+- `tsc`/`lint`/`test` (76/76)/`build` limpos.
+
+### 5ª passada — ajustes finos + role `admin` = acesso às duas trilhas
+
+A Sabrina recadastrou como `air_traffic_controller`/`APP` (os campos novos gravaram
+certo: SP/Sorocaba, TWR-SDCO, nível 5, prova 2027-09-10, "Renovar meu nível atual" — trigger
+validado ponta a ponta). Pedidos:
+
+- **Boas-vindas no 1º acesso**: dashboard consulta a contagem de `simulation_attempts` do
+  usuário; se **0** → "Seja bem-vindo… por onde **começar**.", senão → "Bem-vindo de volta…
+  por onde **continuar**."
+- **Botões dos modos** (EPLIS e SDEA), em `ModeChooser`:
+  - Sem tentativa pausada: cartões Practice / Official viraram `flex flex-col` + botão em
+    `mt-auto` (`w-full`, tipo barra) — alinhados embaixo mesmo com textos de tamanhos
+    diferentes.
+  - Com tentativa `practice` pausada: **dois cartões** (como antes) — "Practice — pausado"
+    (agora um `.card` com borda esquerda âmbar, mesmo `p-5`/`flex flex-col` do Official, e
+    não mais `.note` com padding diferente — era isso que desalinhava as barras) + o
+    cartão Official ao lado. O cartão pausado tem 2 botões num `grid grid-cols-2`
+    ("Continuar simulado" / "Começar novo simulado"), em `mt-auto`, alinhados com a barra
+    do Official.
+  - **"Abandonar e começar novo" → "Começar novo simulado"** (só o rótulo; a action
+    `abandonAndRestartAttempt` é a mesma).
+- **`role='admin'` agora enxerga e usa EPLIS + SDEA.** Conta da Sabrina promovida a
+  `admin` (mantido `operational_profile='APP'` pro conteúdo do EPLIS). Novo helper
+  `src/lib/auth/roles.ts`: `canUsePilotTrack` / `canUseControllerTrack` (ambos true pra
+  admin), `isPilotProfile`, `sdeaAircraftType` (admin sem perfil de piloto roda SDEA como
+  `fixed_wing`). Guards trocados de `role !== "pilot"` / `role === "pilot"` pra os helpers
+  em: `app-nav` (nav do admin tem Fase 1 + Fase 2 + SDEA + Desempenho), `dashboard` e
+  `desempenho` (cartões das duas trilhas), `/sdea`, `/sdea/entrevista`, `/sdea/resultado`,
+  `/desempenho/sdea`. As rotas do controlador (`/fase*`) já barravam só `role === "pilot"`,
+  então admin passa sem mudança. Nenhuma checagem de role nos server actions/limits —
+  eram só nos componentes de página.
+- `tsc`/`lint`/`build` limpos. Migration `20260907000000` já aplicada;
+  `update users set role='admin'` aplicado direto no banco.
 
 ## Atualização (2026-09-07) — Teste manual do SDEA, correções da Parte 2, loop de login, contas de teste
 

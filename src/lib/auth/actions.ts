@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { evaluatePasswordStrength } from "@/lib/auth/password";
+import {
+  readProfileExtraFields,
+  profileExtraFieldsToMetadata,
+} from "@/lib/profile-fields";
 import type { OperationalProfile, Role } from "@/types/database";
 
 export type AuthFormState = {
@@ -67,6 +71,8 @@ export async function signUp(
     ? (operationalProfileRaw as OperationalProfile)
     : null;
 
+  const extra = readProfileExtraFields(formData);
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -77,22 +83,31 @@ export async function signUp(
         role,
         target_exam: targetExamForRole(role),
         operational_profile: operationalProfile,
+        ...profileExtraFieldsToMetadata(extra),
       },
     },
   });
 
   if (error) {
+    // Supabase devolve "User already registered" quando as confirmações de
+    // e-mail estão desligadas; com elas ligadas, o erro não vem e a detecção
+    // é pelo `identities` vazio abaixo.
+    if (/already registered/i.test(error.message)) {
+      return { error: "Este e-mail já está cadastrado. Faça login ou recupere sua senha." };
+    }
     return { error: error.message };
   }
 
-  if (!data.session) {
-    return {
-      error: null,
-      info: "Cadastro criado. Confirme seu e-mail antes de entrar.",
-    };
+  // Com confirmação de e-mail ligada (caso de produção), tentar cadastrar um
+  // e-mail que já existe NÃO retorna erro — o Supabase devolve um usuário
+  // "fake" com a lista de `identities` vazia, pra não permitir enumerar contas.
+  // Tratamos isso como e-mail já cadastrado.
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return { error: "Este e-mail já está cadastrado. Faça login ou recupere sua senha." };
   }
 
-  redirect("/dashboard");
+  // Cadastro sempre volta pro login — o usuário confirma o e-mail e entra.
+  redirect("/login?cadastro=1");
 }
 
 export async function signIn(
@@ -151,22 +166,10 @@ export async function updateProfile(
   formData: FormData,
 ): Promise<AuthFormState> {
   const name = String(formData.get("name") ?? "").trim();
-  const role = String(formData.get("role") ?? "") as Role;
-  const operationalProfileRaw = String(formData.get("operational_profile") ?? "");
 
   if (!name) {
     return { error: "O nome não pode ficar em branco." };
   }
-  if (role !== "pilot" && role !== "air_traffic_controller") {
-    return { error: "Perfil inválido." };
-  }
-
-  const allowedProfiles = allowedProfilesForRole(role);
-  const operationalProfile = allowedProfiles.includes(
-    operationalProfileRaw as OperationalProfile,
-  )
-    ? (operationalProfileRaw as OperationalProfile)
-    : null;
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -174,19 +177,14 @@ export async function updateProfile(
     return { error: "Sessão expirada. Entre novamente." };
   }
 
-  // O formulário de perfil só oferece piloto/controlador — se a conta for
-  // admin (papel que não passa por este formulário), o `role` não é tocado
-  // pra não rebaixar a conta sem querer.
-  const { data: current } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", auth.user.id)
-    .single();
-  const nextRole = current?.role === "admin" ? "admin" : role;
-
+  // Profissão e perfil operacional definem a trilha do exame e não são
+  // autoatendimento — só o administrador altera (a pedido, via contato). Este
+  // action toca nome + os campos pessoais; qualquer `role`/`operational_profile`
+  // no corpo da requisição é ignorado de propósito.
+  const extra = readProfileExtraFields(formData);
   const { error } = await supabase
     .from("users")
-    .update({ name, role: nextRole, operational_profile: operationalProfile })
+    .update({ name, ...extra })
     .eq("id", auth.user.id);
 
   if (error) {

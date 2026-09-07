@@ -3,11 +3,11 @@
 import { evaluatePasswordStrength } from "@/lib/auth/password";
 
 const BAR_COLORS = [
-  "bg-red-500",
-  "bg-red-500",
-  "bg-amber-500",
-  "bg-emerald-500",
-  "bg-emerald-600",
+  "bg-danger",
+  "bg-danger",
+  "bg-caution",
+  "bg-success",
+  "bg-success",
 ];
 
 export function PasswordStrengthMeter({ password }: { password: string }) {
@@ -22,14 +22,14 @@ export function PasswordStrengthMeter({ password }: { password: string }) {
           <div
             key={i}
             className={`h-1 flex-1 rounded-full transition-colors ${
-              i <= score - 1 ? BAR_COLORS[score] : "bg-zinc-200 dark:bg-zinc-800"
+              i <= score - 1 ? BAR_COLORS[score] : "bg-line"
             }`}
           />
         ))}
       </div>
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Força da senha: <span className="font-medium">{label}</span> — use ao menos 8
-        caracteres com letras maiúsculas, minúsculas, números ou símbolos.
+      <p className="text-xs text-muted">
+        Força da senha: <span className="font-medium text-ink">{label}</span> — use ao
+        menos 8 caracteres com letras maiúsculas, minúsculas, números ou símbolos.
       </p>
     </div>
   );

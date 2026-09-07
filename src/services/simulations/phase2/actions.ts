@@ -50,7 +50,7 @@ export async function startAttempt(mode: SimulationMode) {
   redirect(`/fase2/entrevista/${data.id}`);
 }
 
-// Usada pela tela `/fase2` no botão "Abandonar e começar novo", pra quem tem
+// Usada pela tela `/fase2` no botão "Começar novo simulado", pra quem tem
 // uma tentativa `practice` pausada mas prefere recomeçar do zero em vez de
 // continuar — marca a antiga como `abandoned` (sem isso ficaria `in_progress`
 // pra sempre, nunca aparecendo em Desempenho, que só lista `completed`) e já

@@ -31,8 +31,8 @@ export default async function Fase2EntrevistaPage({
   if (!sequenceHasEnoughItems(sequence)) {
     return (
       <AppShell user={user}>
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Fase 2</h1>
-        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+        <h1 className="page-title">Fase 2</h1>
+        <p className="page-intro">
           Ainda não há conteúdo suficiente cadastrado para o seu perfil operacional. Tente
           novamente mais tarde.
         </p>

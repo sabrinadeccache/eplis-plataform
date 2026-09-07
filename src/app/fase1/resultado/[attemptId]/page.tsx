@@ -17,12 +17,14 @@ export default async function Fase1ResultadoPage({
   const supabase = await createClient();
   const { data: attempt } = await supabase
     .from("simulation_attempts")
-    .select("id, user_id, status, score, started_at, finished_at")
+    .select("id, user_id, status, score, mode, started_at, finished_at")
     .eq("id", attemptId)
     .single();
 
   if (!attempt || attempt.user_id !== user.id) notFound();
   if (attempt.status === "in_progress") redirect(`/fase1/simulado/${attemptId}`);
+
+  const isPractice = attempt.mode === "practice";
 
   const { data: answers } = await supabase
     .from("phase1_answers")
@@ -38,25 +40,29 @@ export default async function Fase1ResultadoPage({
 
   return (
     <AppShell user={user}>
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        Resultado — Fase 1
-      </h1>
-      <div className="mt-1 flex flex-wrap items-center gap-3">
-        <p className="text-lg text-zinc-700 dark:text-zinc-300">
-          {score} acertos, {errors} erros — de {total} questões
+      <h1 className="page-title">Resultado — Fase 1{isPractice ? " · practice" : ""}</h1>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <p className="text-lg text-ink">
+          <span className="data">{score}</span> acertos,{" "}
+          <span className="data">{errors}</span> erros — de{" "}
+          <span className="data">{total}</span> questões
         </p>
-        <span
-          className={`rounded-md border px-3 py-1 text-sm font-semibold ${
-            approved
-              ? "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400"
-              : "border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
-          }`}
-        >
-          {approved ? "APROVADO" : "REPROVADO"}
-        </span>
+        {!isPractice && (
+          <span
+            className={`rounded-full border px-3 py-0.5 text-sm font-medium ${
+              approved
+                ? "border-success/40 bg-success/10 text-success"
+                : "border-danger/40 bg-danger/10 text-danger"
+            }`}
+          >
+            {approved ? "Aprovado" : "Reprovado"}
+          </span>
+        )}
       </div>
-      <p className="mt-1 text-xs text-zinc-400">
-        Aprovação exige pelo menos 70% de acertos.
+      <p className="mt-1 text-xs text-muted">
+        {isPractice
+          ? "Treino livre — não entra no Desempenho."
+          : "Aprovação exige pelo menos 70% de acertos."}
       </p>
 
       <div className="mt-6 space-y-3">
@@ -77,10 +83,7 @@ export default async function Fase1ResultadoPage({
           // finalizar o simulado da Fase 1).
           if (!question) {
             return (
-              <div
-                key={i}
-                className="rounded-md border border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400"
-              >
+              <div key={i} className="card p-4 text-sm text-muted">
                 Questão não disponível mais para exibição (foi removida do banco após esta tentativa).
               </div>
             );
@@ -96,18 +99,16 @@ export default async function Fase1ResultadoPage({
           return (
             <div
               key={i}
-              className={`rounded-md border p-4 text-sm ${
-                isCorrect
-                  ? "border-emerald-300 dark:border-emerald-800"
-                  : "border-red-300 dark:border-red-800"
+              className={`card border-l-2 p-4 text-sm ${
+                isCorrect ? "border-l-success" : "border-l-danger"
               }`}
             >
-              <p className="font-medium text-zinc-900 dark:text-zinc-50">{question.prompt}</p>
-              <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+              <p className="font-medium text-ink">{question.prompt}</p>
+              <p className="mt-1 text-muted">
                 Sua resposta: {optionLabel[answer.selected_option as string]}
               </p>
               {!isCorrect && (
-                <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+                <p className="mt-1 text-muted">
                   Resposta correta: {optionLabel[question.correct_option]}
                 </p>
               )}
@@ -116,10 +117,7 @@ export default async function Fase1ResultadoPage({
         })}
       </div>
 
-      <Link
-        href="/fase1"
-        className="mt-8 inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-50"
-      >
+      <Link href="/fase1" className="btn btn-primary mt-8">
         Fazer novo simulado
       </Link>
     </AppShell>

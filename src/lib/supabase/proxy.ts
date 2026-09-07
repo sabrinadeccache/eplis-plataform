@@ -59,6 +59,23 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (data.user && isPublicPath) {
+    // Sessão de auth válida mas sem linha em `public.users` (conta removida, ou
+    // o trigger `handle_new_user` falhou no cadastro): sem tratar, /login
+    // redireciona pro /dashboard, que não acha o perfil (`getCurrentUser` →
+    // null) e volta pro /login — loop "too many redirects". Encerra a sessão e
+    // deixa o /login renderizar. Só sai da rota pública se o perfil existir de
+    // fato (erro de rede na consulta não desloga ninguém).
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (!profileError && !profile) {
+      await supabase.auth.signOut();
+      return redirectTo("/login?erro=conta");
+    }
+
     return redirectTo("/dashboard");
   }
 

@@ -172,8 +172,8 @@ function ResponseStartTimer({ seconds, onExpire }: { seconds: number; onExpire: 
   }, [remaining, onExpire]);
 
   return (
-    <p className="text-sm text-amber-600 dark:text-amber-400">
-      A gravação começa automaticamente em {remaining}s…
+    <p className="text-sm text-caution">
+      A gravação começa automaticamente em <span className="data">{remaining}s</span>…
     </p>
   );
 }
@@ -536,14 +536,10 @@ export function PilotInterviewRunner({
     <div className="space-y-6">
       <audio ref={audioRef} />
 
-      {micError && (
-        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-          {micError}
-        </div>
-      )}
+      {micError && <div className="note note-danger">{micError}</div>}
 
       {audioBlocked && (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <div className="note note-caution flex items-center justify-between gap-3">
           <span>
             O navegador bloqueou o áudio automático da IA (comum ao abrir o simulado direto por um
             link, sem nenhum clique antes). Clique para ativar.
@@ -551,32 +547,32 @@ export function PilotInterviewRunner({
           <button
             type="button"
             onClick={unlockAudio}
-            className="shrink-0 rounded-md bg-amber-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-amber-200 dark:text-amber-950"
+            className="btn btn-secondary shrink-0 !px-3 !py-1.5 !text-xs"
           >
             🔊 Ativar áudio
           </button>
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Parte {part.replace("part", "")} — item {itemIndex + 1}
+      <div className="section-head">
+        <p className="data text-sm text-muted">
+          Parte {part.replace("part", "")} · item {itemIndex + 1}
         </p>
         <div className="flex shrink-0 items-center gap-2">
           {canSkip && (
             <button
               type="button"
               onClick={skipStep}
-              className="rounded-md border border-dashed border-fuchsia-400 px-3 py-1.5 text-xs font-medium text-fuchsia-700 dark:border-fuchsia-600 dark:text-fuchsia-400"
+              className="btn btn-secondary !border-dashed !border-accent/60 !px-3 !py-1.5 !text-xs !text-accent"
             >
-              Pular (teste) →
+              Pular (teste)
             </button>
           )}
           {mode === "practice" && (
             <button
               type="button"
               onClick={pauseAttempt}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+              className="btn btn-secondary !px-3 !py-1.5 !text-xs"
             >
               Pausar simulado
             </button>
@@ -584,7 +580,7 @@ export function PilotInterviewRunner({
         </div>
       </div>
 
-      <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="card p-6">
         {showPart4Image && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -603,13 +599,13 @@ export function PilotInterviewRunner({
         )}
 
         {speaking && (
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">🔊 A IA está falando…</p>
+          <p className="text-sm font-medium text-brand">A IA está falando…</p>
         )}
 
         {currentStep.kind === "response" && (
           <div className="space-y-4">
             {recorderState === "waiting_ai" && (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Aguarde a IA terminar de falar…</p>
+              <p className="text-sm text-muted">Aguarde a IA terminar de falar…</p>
             )}
 
             {recorderState === "ready" && mode === "official" && (
@@ -625,16 +621,16 @@ export function PilotInterviewRunner({
                   <button
                     type="button"
                     onClick={replayAudio}
-                    className={`rounded-md border px-4 py-2 text-sm font-medium ${
+                    className={`btn btn-secondary ${
                       repetitionCount === 0
-                        ? "border-emerald-400 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"
-                        : "border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-400"
+                        ? "!border-success/50 !text-success"
+                        : "!border-caution/50 !text-caution"
                     }`}
                   >
                     Repetir pergunta
                   </button>
                   {repetitionCount >= 1 && (
-                    <p className="w-full text-xs text-amber-700 dark:text-amber-500">
+                    <p className="w-full text-xs text-caution">
                       Pedir a pergunta de novo mais de uma vez pode reduzir o critério Compreensão no
                       relatório final.
                     </p>
@@ -648,19 +644,19 @@ export function PilotInterviewRunner({
                 <button
                   type="button"
                   onClick={startRecording}
-                  className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  className="btn btn-primary"
                 >
                   Falar
                 </button>
                 <button
                   type="button"
                   onClick={replayAudio}
-                  className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
+                  className="btn btn-secondary"
                 >
                   Repetir pergunta
                 </button>
                 {repetitionCount >= 1 && (
-                  <p className="w-full text-xs text-amber-700 dark:text-amber-500">
+                  <p className="w-full text-xs text-caution">
                     No exame real, pedir a pergunta de novo pesa no critério Compreensão — o relatório
                     final vai sinalizar isso.
                   </p>
@@ -674,7 +670,7 @@ export function PilotInterviewRunner({
                   <button
                     type="button"
                     onClick={pauseRecording}
-                    className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
+                    className="btn btn-secondary"
                   >
                     Pausar
                   </button>
@@ -682,7 +678,7 @@ export function PilotInterviewRunner({
                   <button
                     type="button"
                     onClick={resumeRecording}
-                    className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
+                    className="btn btn-secondary"
                   >
                     Continuar falando
                   </button>
@@ -691,7 +687,7 @@ export function PilotInterviewRunner({
                   <button
                     type="button"
                     onClick={restartRecording}
-                    className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
+                    className="btn btn-secondary"
                   >
                     Recomeçar
                   </button>
@@ -699,7 +695,7 @@ export function PilotInterviewRunner({
                 <button
                   type="button"
                   onClick={finishAndSubmit}
-                  className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  className="btn btn-primary"
                 >
                   Concluir e enviar
                 </button>
@@ -707,25 +703,23 @@ export function PilotInterviewRunner({
             )}
 
             {recorderState === "submitting" && (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              <p className="text-sm text-muted">
                 Transcrevendo e avaliando sua resposta…
               </p>
             )}
 
             {recorderState === "feedback" && (
               <div className="space-y-3">
-                <p className="rounded-md bg-zinc-100 p-3 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                  {feedback}
-                </p>
+                <p className="note">{feedback}</p>
                 {awaitingFeedbackSpeech ? (
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="text-sm text-muted">
                     Aguarde a IA terminar de falar o feedback…
                   </p>
                 ) : (
                   <button
                     type="button"
                     onClick={goToNextStep}
-                    className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    className="btn btn-primary"
                   >
                     Continuar
                   </button>

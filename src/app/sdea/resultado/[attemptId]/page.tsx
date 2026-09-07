@@ -4,18 +4,20 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import type { ProficiencyLevel, SimulationFeedbackRow } from "@/types/database";
+import { PROFICIENCY_LABEL as LEVEL_LABEL } from "@/lib/proficiency-display";
+import { canUsePilotTrack } from "@/lib/auth/roles";
 import {
-  PROFICIENCY_LABEL as LEVEL_LABEL,
-  PROFICIENCY_BADGE_CLASS as LEVEL_CLASS,
-} from "@/lib/proficiency-display";
+  ProficiencyScale,
+  CriteriaGrid,
+} from "@/components/simulations/proficiency-scale";
 
-const CRITERIA: { key: keyof SimulationFeedbackRow; label: string }[] = [
-  { key: "pronunciation_score", label: "Pronúncia" },
-  { key: "structure_score", label: "Estrutura" },
-  { key: "vocabulary_score", label: "Vocabulário" },
-  { key: "fluency_score", label: "Fluência" },
-  { key: "comprehension_score", label: "Compreensão" },
-  { key: "interaction_score", label: "Interações" },
+const CRITERIA_KEYS: (keyof SimulationFeedbackRow)[] = [
+  "pronunciation_score",
+  "structure_score",
+  "vocabulary_score",
+  "fluency_score",
+  "comprehension_score",
+  "interaction_score",
 ];
 
 export default async function SdeaResultadoPage({
@@ -26,7 +28,7 @@ export default async function SdeaResultadoPage({
   const { attemptId } = await params;
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "pilot") redirect("/dashboard");
+  if (!canUsePilotTrack(user.role)) redirect("/dashboard");
 
   const supabase = await createClient();
   const { data: attempt } = await supabase
@@ -54,77 +56,64 @@ export default async function SdeaResultadoPage({
 
   return (
     <AppShell user={user}>
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        Resultado — SDEA
-      </h1>
+      <h1 className="page-title">Resultado — SDEA</h1>
 
       {!feedback ? (
-        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-          O relatório ainda não foi gerado.
-        </p>
+        <p className="page-intro">O relatório ainda não foi gerado.</p>
       ) : (
         <>
-          <div className="mt-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Nível geral</p>
-            <p
-              className={`mt-1 inline-block rounded-md border px-3 py-1 text-lg font-semibold ${
-                overall ? LEVEL_CLASS[overall] : ""
-              }`}
-            >
-              {overall ? LEVEL_LABEL[overall] : feedback.overall_score}
-            </p>
-            <p className="mt-2 text-xs text-zinc-400">
-              O nível geral é sempre igual ao critério mais fraco entre os seis abaixo — nunca uma
-              média — por segurança operacional (Escala OACI).
+          <div className="card mt-5 p-5">
+            <div className="section-head">
+              <p className="text-sm font-medium text-ink">Nível geral</p>
+              <p className="text-lg font-semibold text-ink">
+                {overall ? LEVEL_LABEL[overall] : feedback.overall_score}
+              </p>
+            </div>
+            <div className="mt-5">
+              <ProficiencyScale level={overall ?? null} />
+            </div>
+            <p className="mt-4 text-xs leading-relaxed text-muted">
+              O nível geral é sempre igual ao critério mais fraco entre os seis abaixo —
+              nunca uma média — por segurança operacional (Escala OACI).
             </p>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {CRITERIA.map(({ key, label }) => {
-              const level = feedback[key] as ProficiencyLevel | null;
-              return (
-                <div
-                  key={key}
-                  className={`rounded-md border p-3 text-sm ${level ? LEVEL_CLASS[level] : "border-zinc-200 dark:border-zinc-800"}`}
-                >
-                  <p className="font-medium">{label}</p>
-                  <p>{level ? LEVEL_LABEL[level] : "—"}</p>
-                </div>
-              );
-            })}
+          <div className="mt-4">
+            <CriteriaGrid
+              criteria={CRITERIA_KEYS.map((key) => ({
+                key,
+                level: feedback[key] as ProficiencyLevel | null,
+              }))}
+            />
           </div>
 
           {feedback.general_feedback && (
-            <div className="mt-4 rounded-lg border border-zinc-200 p-4 text-sm text-zinc-700 dark:border-zinc-800 dark:text-zinc-300">
-              {feedback.general_feedback}
-            </div>
+            <div className="note mt-4">{feedback.general_feedback}</div>
           )}
         </>
       )}
 
-      <h2 className="mt-8 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-        Respostas individuais
-      </h2>
-      <div className="mt-3 space-y-3">
+      <div className="section-head mt-10">
+        <h2 className="text-sm font-medium text-ink">Respostas individuais</h2>
+      </div>
+      <div className="mt-4 space-y-3">
         {(responses ?? []).map((r: Record<string, unknown>, i: number) => {
           const prompt = r.pilot_prompts as { part: string; prompt_text: string } | null;
           return (
-            <div key={i} className="rounded-md border border-zinc-200 p-4 text-sm dark:border-zinc-800">
-              <p className="text-xs text-zinc-400">
+            <div key={i} className="card p-4 text-sm">
+              <p className="data text-xs text-muted">
                 {prompt?.part} · {r.response_stage as string}
               </p>
-              <p className="mt-1 font-medium text-zinc-900 dark:text-zinc-50">
-                {prompt?.prompt_text}
-              </p>
+              <p className="mt-1 font-medium text-ink">{prompt?.prompt_text}</p>
               {r.transcript ? (
-                <p className="mt-2 text-zinc-700 dark:text-zinc-300">
-                  <span className="text-xs font-medium text-zinc-400">Answer: </span>
+                <p className="mt-2 text-ink">
+                  <span className="text-xs font-medium text-muted">Answer: </span>
                   {r.transcript as string}
                 </p>
               ) : null}
               {r.ai_feedback ? (
-                <p className="mt-1 text-zinc-600 dark:text-zinc-400">
-                  <span className="text-xs font-medium text-zinc-400">Feedback: </span>
+                <p className="mt-1 text-muted">
+                  <span className="text-xs font-medium text-muted">Feedback: </span>
                   {r.ai_feedback as string}
                 </p>
               ) : null}
@@ -133,10 +122,7 @@ export default async function SdeaResultadoPage({
         })}
       </div>
 
-      <Link
-        href="/sdea"
-        className="mt-8 inline-block text-sm font-medium text-zinc-900 underline dark:text-zinc-50"
-      >
+      <Link href="/sdea" className="btn btn-primary mt-8">
         Fazer novo simulado
       </Link>
     </AppShell>

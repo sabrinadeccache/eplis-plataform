@@ -18,9 +18,9 @@ const PADDING_TOP = 12;
 const PLOT_HEIGHT = HEIGHT - PADDING_TOP - PADDING_BOTTOM;
 const PLOT_WIDTH = WIDTH - PADDING_LEFT - 8;
 
-const APPROVED_FILL = "#10b981";
-const REJECTED_FILL = "#ef4444";
-const THRESHOLD_STROKE = "#a1a1aa";
+const APPROVED_FILL = "#1c7c54";
+const REJECTED_FILL = "#b4231e";
+const THRESHOLD_STROKE = "#94a3b8";
 
 export function Fase1ProgressChart({ points }: { points: Fase1ChartPoint[] }) {
   const [hovered, setHovered] = useState<number | null>(null);
@@ -34,12 +34,10 @@ export function Fase1ProgressChart({ points }: { points: Fase1ChartPoint[] }) {
   const hoveredPoint = hovered !== null ? chronological[hovered] : null;
 
   return (
-    <div className="mt-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-          Progresso — % de acertos por simulado
-        </p>
-        <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+    <div className="card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium text-ink">Progresso — % de acertos por simulado</p>
+        <div className="flex items-center gap-4 text-xs text-muted">
           <span className="flex items-center gap-1.5">
             <span
               className="inline-block h-2.5 w-2.5 rounded-sm"
@@ -74,7 +72,7 @@ export function Fase1ProgressChart({ points }: { points: Fase1ChartPoint[] }) {
                   y1={y}
                   y2={y}
                   stroke="currentColor"
-                  className="text-zinc-200 dark:text-zinc-800"
+                  className="text-line"
                   strokeWidth={1}
                 />
                 <text
@@ -82,7 +80,7 @@ export function Fase1ProgressChart({ points }: { points: Fase1ChartPoint[] }) {
                   y={y + 3}
                   textAnchor="end"
                   fontSize={10}
-                  className="fill-zinc-400 dark:fill-zinc-500"
+                  className="fill-muted"
                 >
                   {tick}%
                 </text>
@@ -104,7 +102,7 @@ export function Fase1ProgressChart({ points }: { points: Fase1ChartPoint[] }) {
             y={thresholdY - 4}
             textAnchor="end"
             fontSize={10}
-            className="fill-zinc-400 dark:fill-zinc-500"
+            className="fill-muted"
           >
             corte de aprovação (70%)
           </text>
@@ -134,7 +132,7 @@ export function Fase1ProgressChart({ points }: { points: Fase1ChartPoint[] }) {
                   y={HEIGHT - PADDING_BOTTOM + 14}
                   textAnchor="middle"
                   fontSize={10}
-                  className="fill-zinc-400 dark:fill-zinc-500"
+                  className="fill-muted"
                 >
                   {point.date}
                 </text>
@@ -145,14 +143,14 @@ export function Fase1ProgressChart({ points }: { points: Fase1ChartPoint[] }) {
 
         {hoveredPoint && hovered !== null && (
           <div
-            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs shadow-md dark:border-zinc-700 dark:bg-zinc-900"
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full card px-2.5 py-1.5 text-xs shadow-md"
             style={{
               left: `${((PADDING_LEFT + barSlot * hovered + barSlot / 2) / WIDTH) * 100}%`,
               top: `${((PADDING_TOP + PLOT_HEIGHT * (1 - hoveredPoint.percent / 100)) / HEIGHT) * 100}%`,
             }}
           >
-            <p className="font-medium text-zinc-900 dark:text-zinc-50">{hoveredPoint.date}</p>
-            <p className="text-zinc-500 dark:text-zinc-400">
+            <p className="font-medium text-ink">{hoveredPoint.date}</p>
+            <p className="text-muted">
               {Math.round(hoveredPoint.percent)}% de acertos —{" "}
               {hoveredPoint.approved ? "Aprovado" : "Reprovado"}
             </p>

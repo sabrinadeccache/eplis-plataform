@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { evaluatePasswordStrength } from "@/lib/auth/password";
 import { PasswordStrengthMeter } from "@/components/auth/password-strength-meter";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 type Status = "checking" | "ready" | "invalid" | "submitting" | "done";
 
@@ -72,84 +73,71 @@ export default function RedefinirSenhaPage() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 dark:bg-black">
-      <div className="w-full max-w-sm space-y-6 rounded-lg border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="space-y-1 text-center">
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-            Redefinir senha
-          </h1>
-        </div>
+    <AuthShell title="Redefinir senha">
+      {status === "checking" && (
+        <p className="text-sm text-muted">Verificando o link…</p>
+      )}
 
-        {status === "checking" && (
-          <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-            Verificando o link…
-          </p>
-        )}
+      {status === "invalid" && (
+        <p role="alert" className="note note-danger">
+          Link inválido ou expirado. Peça um novo link em{" "}
+          <a href="/esqueci-senha" className="link">
+            esqueci minha senha
+          </a>
+          .
+        </p>
+      )}
 
-        {status === "invalid" && (
-          <p role="alert" className="text-center text-sm text-red-600 dark:text-red-400">
-            Link inválido ou expirado. Peça um novo link em{" "}
-            <a href="/esqueci-senha" className="underline">
-              esqueci minha senha
-            </a>
-            .
-          </p>
-        )}
+      {(status === "ready" || status === "submitting" || status === "done") && (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="field-label">
+              Nova senha
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="field-input"
+            />
+            <PasswordStrengthMeter password={password} />
+          </div>
 
-        {(status === "ready" || status === "submitting" || status === "done") && (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1">
-              <label htmlFor="password" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Nova senha
-              </label>
-              <input
-                id="password"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
-              />
-              <PasswordStrengthMeter password={password} />
-            </div>
+          <div className="space-y-1.5">
+            <label htmlFor="confirm_password" className="field-label">
+              Confirmar nova senha
+            </label>
+            <input
+              id="confirm_password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="field-input"
+            />
+          </div>
 
-            <div className="space-y-1">
-              <label
-                htmlFor="confirm_password"
-                className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                Confirmar nova senha
-              </label>
-              <input
-                id="confirm_password"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
-              />
-            </div>
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
 
-            {error && (
-              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={status === "submitting" || status === "done"}
-              className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-            >
-              {status === "submitting" ? "Salvando…" : "Redefinir senha"}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
+          <button
+            type="submit"
+            disabled={status === "submitting" || status === "done"}
+            className="btn btn-primary w-full"
+          >
+            {status === "submitting" ? "Salvando…" : "Redefinir senha"}
+          </button>
+        </form>
+      )}
+    </AuthShell>
   );
 }

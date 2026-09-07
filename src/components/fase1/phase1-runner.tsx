@@ -71,7 +71,7 @@ function AudioPlayerButton({
         onClick={onPlay}
         disabled={isPlaying}
         aria-label={label}
-        className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-80 dark:bg-zinc-100 dark:text-zinc-900"
+        className="flex h-16 w-16 items-center justify-center rounded-full bg-brand text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-80"
       >
         {isPlaying ? (
           <SoundBarsIcon className="h-6 w-6" />
@@ -79,7 +79,7 @@ function AudioPlayerButton({
           <PlayIcon className="h-6 w-6 translate-x-0.5" />
         )}
       </button>
-      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
+      <p className="text-xs font-medium text-muted">{label}</p>
     </div>
   );
 }
@@ -160,9 +160,18 @@ export function Phase1Runner({
 
   return (
     <div className="space-y-6">
-      <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-        Questão {index + 1} de {questions.length}
-      </p>
+      <div>
+        <div className="section-head">
+          <h1 className="text-sm font-medium text-ink">Fase 1 — compreensão auditiva</h1>
+          <span className="data text-sm text-muted">{`${index + 1}/${questions.length}`}</span>
+        </div>
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-line">
+          <div
+            className="h-full bg-accent transition-[width] duration-300"
+            style={{ width: `${((index + 1) / questions.length) * 100}%` }}
+          />
+        </div>
+      </div>
 
       <AudioPlayerButton
         phase={phase}
@@ -191,8 +200,8 @@ export function Phase1Runner({
 
       <audio ref={audioRef} src={current.audioUrl} onEnded={() => setPhase("answering")} />
 
-      <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-        <p className="text-lg font-medium text-zinc-900 dark:text-zinc-50">{current.prompt}</p>
+      <div className="card p-6">
+        <p className="text-lg font-medium text-ink">{current.prompt}</p>
 
         <div className="mt-4 space-y-2">
           {([
@@ -204,8 +213,8 @@ export function Phase1Runner({
               key={value}
               className={`flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${
                 selected === value
-                  ? "border-zinc-900 dark:border-zinc-100"
-                  : "border-zinc-200 dark:border-zinc-800"
+                  ? "border-brand bg-brand/5 text-ink"
+                  : "border-line text-ink"
               } ${phase !== "answering" ? "opacity-50" : ""}`}
             >
               <input
@@ -221,27 +230,23 @@ export function Phase1Runner({
           ))}
         </div>
 
-        <div className="mt-6 flex items-center justify-between">
+        <div className="mt-6 flex items-center justify-between gap-3">
           {phase === "reading" && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              Leitura da pergunta — {secondsLeft}s
+            <p className="text-sm text-muted">
+              Leitura da pergunta — <span className="data">{secondsLeft}s</span>
             </p>
           )}
 
           {phase === "playing" && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Reproduzindo áudio…</p>
+            <p className="text-sm text-muted">Reproduzindo áudio…</p>
           )}
 
           {phase === "answering" && (
             <>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Tempo para responder — {secondsLeft}s
+              <p className="text-sm text-muted">
+                Tempo para responder — <span className="data">{secondsLeft}s</span>
               </p>
-              <button
-                type="button"
-                onClick={advance}
-                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-              >
+              <button type="button" onClick={advance} className="btn btn-primary">
                 {isLast ? "Finalizar simulado" : "Confirmar e avançar"}
               </button>
             </>
