@@ -77,40 +77,77 @@ teste manual, dá pra confirmar um usuário direto via API admin do Supabase
   (`pg`, `SUPABASE_DB_URL` do Session pooler) continuam válidas e são o caminho dos
   scripts em `scripts/`.
 
-## Atualização (2026-09-07) — Bugs da Parte 2 do SDEA (teste manual da Sabrina) + loop de login
+## Atualização (2026-09-07) — Teste manual do SDEA, correções da Parte 2, loop de login, contas de teste
 
-**Ponto de retomada (2026-09-07)** — teste manual da Sabrina em produção: Partes 1,
-3 e 4 OK; Parte 2 itens sem foto OK; Parte 2 itens com foto tinham 2 bugs, mais um
-loop de redirecionamento no login. Tudo corrigido nesta rodada.
+**Ponto de retomada (2026-09-07, fim da sessão).** A Sabrina rodou o SDEA inteiro
+em produção e **um simulado completo foi concluído e gravado corretamente na tela de
+Desempenho**. Achados corrigidos nesta rodada (5 commits em `main`, todos já em
+produção — deploy automático):
 
-1. **`fix(auth)` — "too many redirects" no login** (`src/lib/supabase/proxy.ts`): os
-   redirects do proxy (`/login`↔`/dashboard`) não repassavam os cookies de sessão
-   que o `@supabase/ssr` acabava de renovar no `supabaseResponse`. Com token velho no
-   browser, proxy e página divergiam sobre haver sessão e ficavam se empurrando.
-   Agora todo redirect do proxy leva `supabaseResponse.cookies` junto. Quem já estava
-   com cookie quebrado precisa de 1 login limpo (janela privada / limpar dados do site).
+- `2027865` — **`feat(sdea)`: botão "Pular (teste)"** no runner do piloto pra QA
+  manual. Só aparece pra e-mails em `src/lib/auth/dev-testers.ts` (hoje só
+  `sdeccache@gmail.com`) — invisível pro candidato real. Interrompe gravação/áudio e
+  avança passo/item/parte sem enviar resposta. Vale nos dois modos.
+- `b65905d` — **`fix(auth)`: "too many redirects" no login** (`src/lib/supabase/proxy.ts`).
+  Os redirects do proxy (`/login`↔`/dashboard`) não repassavam os cookies de sessão
+  que o `@supabase/ssr` acabava de renovar no `supabaseResponse`. Com token velho no
+  browser, proxy e página divergiam sobre haver sessão e ficavam se empurrando. Agora
+  todo redirect do proxy leva `supabaseResponse.cookies` junto. **Quem já estava com
+  cookie quebrado precisa de 1 login limpo** (janela privada / limpar dados do site) —
+  a correção evita loops novos, não conserta cookie já corrompido.
+- `80d9ecb` — **`fix(sdea)`: Parte 2** — dois bugs dos itens com foto:
+  1. O examinador não falava o setup da situação: `buildSteps` da Parte 2 ia direto
+     pro readback (áudio do ATC) sem nunca narrar o `prompt_text` ("You are climbing
+     after departure… Listen to Departure Control and read back."). Adicionado um passo
+     `intro`/`auto` no começo de **cada** item da Parte 2 que narra o `prompt_text` via
+     TTS (valia pra todos, mais visível nos com foto).
+  2. O TTS lia a rubrica de palco: o `complication_text` dos 27 itens com foto trazia,
+     no meio, `(apresenta a imagem: fixed-wing-weather.png)` — anotação em português
+     pro examinador humano, que o TTS lia em voz alta soletrando o nome do arquivo.
+     Removido em 3 lugares: (a) banco de produção via `UPDATE`/`regexp_replace`;
+     (b) `scripts/pilot-content-part234.mjs` (re-seed fica limpo); (c) defesa em runtime
+     — `stripStageCue` em `src/services/simulations/pilot/queries.ts` (`toPrompt`).
+     Nenhum script parseava a rubrica (o mapa imagem→situação é por `order_index`
+     hardcoded em `upload-pilot-part2-images.mjs`), então remover é seguro.
+- `cf44bbc` — **`fix(ai)`: relatório final com zero respostas** → `FALLBACK_REPORT` em
+  vez de bater na Anthropic com content vazio (400 "user messages must have non-empty
+  content"). Efeito colateral do botão "Pular (teste)" (pulou tudo → nenhuma resposta
+  transcrita). `generatePilotFinalReport` e `generateFinalReport` agora retornam o
+  fallback direto quando o corpo fica vazio.
 
-2. **Parte 2 — o examinador não falava o setup da situação**
-   (`src/components/sdea/pilot-interview-runner.tsx`): `buildSteps` da Parte 2 ia
-   direto pro readback (áudio do ATC), sem nunca narrar o `prompt_text` ("You are
-   climbing after departure… Listen to Departure Control and read back."). Adicionado
-   um passo `intro`/`auto` no começo de cada item da Parte 2 que narra o `prompt_text`
-   via TTS. Valia pra todos os itens; mais visível nos com foto.
+`tsc`/`lint`/`test` (72/72, +5 nesta rodada)/`build` limpos em cada commit. **Nenhuma
+migration** — só um `UPDATE` de dados (limpeza das rubricas) aplicado direto em
+produção, idempotente.
 
-3. **Parte 2 (itens com foto) — TTS lia a rubrica de palco**: o `complication_text`
-   dos 27 itens com foto trazia, no meio, `(apresenta a imagem: fixed-wing-weather.png)`
-   — anotação em português pro examinador humano, que o TTS lia em voz alta (e ainda
-   soletrava o nome do arquivo). Removido: (a) no banco de produção via `UPDATE` com
-   `regexp_replace`; (b) no `scripts/pilot-content-part234.mjs` (re-seed fica limpo);
-   (c) defesa em runtime — `stripStageCue` em `src/services/simulations/pilot/queries.ts`
-   (`toPrompt`). Nenhum script parseava a rubrica (o mapa imagem→situação é por
-   `order_index` hardcoded em `upload-pilot-part2-images.mjs`), então remover é seguro.
+**Conta de produção da Sabrina** (`sdeccache@gmail.com`) foi trocada de
+`air_traffic_controller`/`ACC` para **`role=pilot` / `operational_profile=fixed_wing`**
+pra ela testar o SDEA (a rota `/sdea` redireciona quem não é `pilot`). Dados do EPLIS
+dela seguem salvos, só a UI do controlador fica escondida. Reverter:
+`update public.users set role='air_traffic_controller', operational_profile='ACC' where email='sdeccache@gmail.com'`
+(reload de página basta, `getCurrentUser` lê fresh). Trocar `operational_profile` pra
+`rotary_wing` pra testar o outro perfil de piloto.
 
-`tsc`/`lint`/`test` (70/70, +3)/`build` limpos. Migrations: nenhuma — só um `UPDATE`
-de dados aplicado direto em produção (idempotente).
+**Contas de teste pra usuários reais** (criadas em produção, e-mail já confirmado —
+login direto, sem precisar confirmar nada; limite de 5 simulados/dia é POR conta;
+botão "Pular (teste)" NÃO aparece pra elas):
 
-Segue em aberto pro SDEA: re-teste manual da Parte 2 com foto pela Sabrina depois
-deste deploy.
+| Trilha | Perfil | E-mail | Senha |
+|---|---|---|---|
+| SDEA (piloto) | asa fixa (`fixed_wing`) | `brucewayne@teste.com` | `Batwing2026!` |
+| SDEA (piloto) | asa rotativa (`rotary_wing`) | `peterparker@teste.com` | `WebSlinger2026!` |
+| EPLIS (controlador) | ACC | `gryffindor@teste.com` | `Gryffindor2026!` |
+| EPLIS (controlador) | APP | `ravenclaw@teste.com` | `Ravenclaw2026!` |
+| EPLIS (controlador) | TWR | `hufflepuff@teste.com` | `Hufflepuff2026!` |
+| EPLIS (controlador) | COpM | `slytherin@teste.com` | `Slytherin2026!` |
+
+Piloto criado via `scripts/dev-create-pilot-test-user.mjs`; controlador via admin API
+(`/auth/v1/admin/users`, `email_confirm:true`) + `update` de `role`/`operational_profile`/`name`.
+
+**Ainda em aberto pro SDEA:** teste com microfone real da entrevista do piloto — só a
+Sabrina (o headless não grava áudio de verdade). Feedback dos pilotos/controladores
+reais que receberem as contas de teste. A trilha do **controlador (EPLIS)** segue
+tecnicamente pronta pra lançar — falta só a decisão de negócio de abrir o cadastro
+público (ver Roadmap → Fase 7).
 
 ## Atualização (2026-09-04) — Testes automatizados do engine de IA (EPLIS + SDEA)
 
