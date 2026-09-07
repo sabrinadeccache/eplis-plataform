@@ -41,14 +41,25 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 
+  // Qualquer resposta que NÃO seja o `supabaseResponse` precisa levar junto os
+  // cookies que o cliente Supabase acabou de escrever nele (token renovado, ou
+  // cookies de sessão limpos quando o refresh token é inválido). Sem isso, um
+  // redirect do proxy descarta a sessão renovada: o browser volta com o token
+  // velho, o proxy manda pro /login, o /login vê a sessão (via getUser, que
+  // renova de novo) e manda pro /dashboard, e assim por diante — "too many
+  // redirects". Ver docs do @supabase/ssr (Next.js middleware).
+  function redirectTo(path: string) {
+    const res = NextResponse.redirect(new URL(path, request.url));
+    supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c));
+    return res;
+  }
+
   if (!data.user && !isPublicPath && pathname !== "/") {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    return redirectTo("/login");
   }
 
   if (data.user && isPublicPath) {
-    const dashboardUrl = new URL("/dashboard", request.url);
-    return NextResponse.redirect(dashboardUrl);
+    return redirectTo("/dashboard");
   }
 
   return supabaseResponse;
