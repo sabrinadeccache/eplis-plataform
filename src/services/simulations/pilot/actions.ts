@@ -90,7 +90,7 @@ export async function generateSpeech(
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Não autenticado.");
+  if (!auth.user) redirect("/login?erro=sessao");
   await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
 
   const { buffer, mimeType } = await generateSpeechAudio(text);
@@ -117,7 +117,7 @@ type ResponseWithPrompt = {
 export async function advanceState(attemptId: string): Promise<{ finished: boolean }> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Não autenticado.");
+  if (!auth.user) redirect("/login?erro=sessao");
 
   const attempt = await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
   const currentPart = attempt.current_part as Part;

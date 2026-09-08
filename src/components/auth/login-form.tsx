@@ -11,15 +11,24 @@ export function LoginForm({
   justReset,
   justSignedUp,
   accountGone,
+  sessionExpired,
 }: {
   justReset: boolean;
   justSignedUp?: boolean;
   accountGone?: boolean;
+  sessionExpired?: boolean;
 }) {
   const [state, formAction] = useActionState(signIn, initialState);
 
   return (
     <div className="space-y-5">
+      {sessionExpired && (
+        <p role="status" className="note note-caution">
+          Sua sessão expirou. Entre novamente para continuar de onde parou — seu
+          progresso no simulado foi salvo.
+        </p>
+      )}
+
       {accountGone && (
         <p role="status" className="note note-caution">
           Sua sessão foi encerrada porque esta conta não está mais ativa. Entre novamente

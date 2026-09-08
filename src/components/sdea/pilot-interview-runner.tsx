@@ -16,6 +16,8 @@ import {
   KeyButton,
   DeckSpacer,
   DeckNote,
+  CaptionsToggle,
+  CaptionsPanel,
   formatElapsed,
   createMicAnalyser,
 } from "@/components/interview/interview-ui";
@@ -201,6 +203,28 @@ function isAutoplayBlocked(err: unknown): boolean {
   return err instanceof DOMException && err.name === "NotAllowedError";
 }
 
+// A geração de TTS (OpenAI) falha de vez em quando por causa transitória (rede,
+// rate limit momentâneo). Sem retry, a pergunta seguinte simplesmente não era
+// falada e o candidato caía num estado "sua vez" mudo, sem saber o que
+// responder (achado real no teste da Parte 4). Tenta de novo antes de desistir;
+// se desistir, o runner mostra um botão "Ouvir a pergunta".
+async function generateSpeechWithRetry(
+  attemptId: string,
+  text: string,
+  attempts = 3,
+): Promise<{ audioBase64: string; mimeType: string }> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await generateSpeech(attemptId, text);
+    } catch (err) {
+      lastErr = err;
+      await new Promise((resolve) => setTimeout(resolve, 400 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export function PilotInterviewRunner({
   attemptId,
   mode,
@@ -230,8 +254,14 @@ export function PilotInterviewRunner({
   const [micError, setMicError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
+  const [stepSpeechFailed, setStepSpeechFailed] = useState(false);
+  const [speechNonce, setSpeechNonce] = useState(0);
+  // Legenda opcional da fala da IA — só no practice (decisão da Sabrina; no
+  // official não existe apoio de leitura, igual ao exame real).
+  const [captionsOn, setCaptionsOn] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const feedbackAudioRef = useRef<HTMLAudioElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const advancingItemRef = useRef(false);
@@ -325,6 +355,7 @@ export function PilotInterviewRunner({
     if (!audioMaybe) return;
     const audio = audioMaybe;
 
+    setStepSpeechFailed(false);
     const step = stepAt(sequence, part, itemIndex, stepIndex);
     // Gravação da Parte 3 (áudio pré-gerado, step "auto"): o exame real toca
     // cada situação duas vezes (doc "Modelo SDEA com anotações", pág. 5).
@@ -373,10 +404,14 @@ export function PilotInterviewRunner({
     if (step.audioUrl) {
       playSrc(step.audioUrl);
     } else {
-      generateSpeech(attemptId, step.text)
+      generateSpeechWithRetry(attemptId, step.text)
         .then(({ audioBase64, mimeType }) => playSrc(`data:${mimeType};base64,${audioBase64}`))
         .catch(() => {
-          if (!cancelled) finish();
+          if (cancelled) return;
+          // Não conseguiu gerar a fala da pergunta — libera o turno do
+          // candidato mesmo assim, mas sinaliza pra ele poder pedir a pergunta.
+          if (step.kind === "response") setStepSpeechFailed(true);
+          finish();
         });
     }
 
@@ -386,7 +421,7 @@ export function PilotInterviewRunner({
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", finish);
     };
-  }, [part, itemIndex, stepIndex, sequence, attemptId]);
+  }, [part, itemIndex, stepIndex, sequence, attemptId, speechNonce]);
 
   function unlockAudio() {
     const audio = audioRef.current;
@@ -400,6 +435,13 @@ export function PilotInterviewRunner({
   function replayAudio() {
     const audio = audioRef.current;
     if (!audio) return;
+    // Sem áudio carregado (a geração da fala falhou) — tenta gerar de novo em
+    // vez de "repetir" um elemento vazio.
+    if (!audio.src || stepSpeechFailed) {
+      setSpeechNonce((n) => n + 1);
+      setRepetitionCount((c) => c + 1);
+      return;
+    }
     audio.currentTime = 0;
     audio.play().catch(() => {});
     setRepetitionCount((c) => c + 1);
@@ -502,6 +544,10 @@ export function PilotInterviewRunner({
         formData.append("audio", blob, `audio.${blob.type.includes("mp4") ? "mp4" : "webm"}`);
 
         const res = await fetch("/api/sdea/submit-response", { method: "POST", body: formData });
+        if (res.status === 401) {
+          window.location.href = "/login?erro=sessao";
+          return;
+        }
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error ?? "Não foi possível enviar a resposta.");
@@ -519,8 +565,13 @@ export function PilotInterviewRunner({
         if (result.feedback) {
           setAwaitingFeedbackSpeech(true);
           try {
-            const speech = await generateSpeech(attemptId, result.feedback);
-            const audio = audioRef.current;
+            const speech = await generateSpeechWithRetry(attemptId, result.feedback);
+            // Elemento de áudio DEDICADO ao feedback — separado do <audio> dos
+            // steps. Compartilhar o mesmo elemento fazia os listeners "ended"
+            // do step atual dispararem quando o feedback terminava, derrubando
+            // o estado "feedback" (some o botão Continuar) — achado real na
+            // Parte 4.
+            const audio = feedbackAudioRef.current;
             if (!audio) {
               setAwaitingFeedbackSpeech(false);
               return;
@@ -581,6 +632,11 @@ export function PilotInterviewRunner({
     return { tone: "idle", title: "Aguarde", sub: undefined };
   })();
 
+  const captionsControl =
+    mode === "practice" ? (
+      <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+    ) : null;
+
   function renderDeck() {
     if (currentStep.kind !== "response") {
       return (
@@ -595,7 +651,8 @@ export function PilotInterviewRunner({
       return (
         <>
           <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
-          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <KeyButton icon="replay" label={stepSpeechFailed ? "Ouvir a pergunta" : "Repetir pergunta"} onClick={replayAudio} />
+          {captionsControl}
           <DeckSpacer />
         </>
       );
@@ -604,7 +661,7 @@ export function PilotInterviewRunner({
     if (recorderState === "ready" && mode === "official") {
       return (
         <>
-          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <KeyButton icon="replay" label={stepSpeechFailed ? "Ouvir a pergunta" : "Repetir pergunta"} onClick={replayAudio} />
           <DeckSpacer />
         </>
       );
@@ -632,6 +689,7 @@ export function PilotInterviewRunner({
             variant="primary"
             onClick={finishAndSubmit}
           />
+          {captionsControl}
           <DeckSpacer />
         </>
       );
@@ -676,8 +734,16 @@ export function PilotInterviewRunner({
   return (
     <div className="space-y-4">
       <audio ref={audioRef} />
+      <audio ref={feedbackAudioRef} />
 
       {micError && <div className="note note-danger">{micError}</div>}
+
+      {stepSpeechFailed && currentStep.kind === "response" && recorderState === "ready" && (
+        <div className="note note-caution">
+          Não foi possível reproduzir a pergunta do examinador. Use “Ouvir a pergunta” para
+          tentar de novo.
+        </div>
+      )}
 
       {audioBlocked && (
         <div className="note note-caution flex items-center justify-between gap-3">
@@ -704,17 +770,6 @@ export function PilotInterviewRunner({
           >
             Pausar simulado
           </button>
-        </div>
-      )}
-
-      {contextImage && (
-        <div className="card p-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={contextImage.src}
-            alt={contextImage.alt}
-            className="max-h-96 w-full rounded-md object-contain"
-          />
         </div>
       )}
 
@@ -754,6 +809,10 @@ export function PilotInterviewRunner({
 
         <KeyDeck>{renderDeck()}</KeyDeck>
 
+        {captionsOn && mode === "practice" && currentStep.kind === "response" && (
+          <CaptionsPanel text={currentStep.text} />
+        )}
+
         {recorderState === "feedback" && feedback && (
           <div className="iv-cc">
             <span className="iv-who">Feedback</span>
@@ -761,6 +820,20 @@ export function PilotInterviewRunner({
           </div>
         )}
       </div>
+
+      {contextImage && (
+        // Conteúdo do exame (não decoração). Fica ABAIXO do painel da IHM — em
+        // cima encavalava o visualizador de áudio e competia com a descrição
+        // (achado da Sabrina no teste).
+        <div className="card p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={contextImage.src}
+            alt={contextImage.alt}
+            className="mx-auto max-h-[28rem] w-full rounded-md object-contain"
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -64,7 +64,7 @@ export async function recordAnswer(
 ): Promise<RecordAnswerResult> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Não autenticado.");
+  if (!auth.user) redirect("/login?erro=sessao");
 
   const mode = await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
 
@@ -104,7 +104,7 @@ export async function recordAnswer(
 export async function finishAttempt(attemptId: string) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Não autenticado.");
+  if (!auth.user) redirect("/login?erro=sessao");
 
   await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
 

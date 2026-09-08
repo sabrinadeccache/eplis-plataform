@@ -153,6 +153,27 @@ function isAutoplayBlocked(err: unknown): boolean {
   return err instanceof DOMException && err.name === "NotAllowedError";
 }
 
+// TTS (OpenAI) falha esporadicamente por causa transitória (rede, rate limit).
+// Sem retry, a pergunta seguinte não era falada e o candidato caía num "sua
+// vez" mudo (achado real na Parte 4 do SDEA — mesmo padrão aqui). Ver
+// pilot-interview-runner.tsx.
+async function generateSpeechWithRetry(
+  attemptId: string,
+  text: string,
+  attempts = 3,
+): Promise<{ audioBase64: string; mimeType: string }> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await generateSpeech(attemptId, text);
+    } catch (err) {
+      lastErr = err;
+      await new Promise((resolve) => setTimeout(resolve, 400 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export function InterviewRunner({
   attemptId,
   mode,
@@ -184,8 +205,11 @@ export function InterviewRunner({
   const [captionsOn, setCaptionsOn] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
+  const [stepSpeechFailed, setStepSpeechFailed] = useState(false);
+  const [speechNonce, setSpeechNonce] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const feedbackAudioRef = useRef<HTMLAudioElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const advancingItemRef = useRef(false);
@@ -294,6 +318,7 @@ export function InterviewRunner({
     const audio = audioRef.current;
     if (!audio) return;
 
+    setStepSpeechFailed(false);
     const step = stepAt(sequence, part, itemIndex, stepIndex);
     let finished = false;
     let advanceTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -314,7 +339,7 @@ export function InterviewRunner({
     audio.addEventListener("error", onFinished);
 
     let cancelled = false;
-    generateSpeech(attemptId, step.text)
+    generateSpeechWithRetry(attemptId, step.text)
       .then(({ audioBase64, mimeType }) => {
         if (cancelled) return;
         audio.src = `data:${mimeType};base64,${audioBase64}`;
@@ -325,7 +350,9 @@ export function InterviewRunner({
         });
       })
       .catch(() => {
-        if (!cancelled) onFinished();
+        if (cancelled) return;
+        if (step.kind === "response") setStepSpeechFailed(true);
+        onFinished();
       });
 
     return () => {
@@ -334,7 +361,7 @@ export function InterviewRunner({
       audio.removeEventListener("ended", onFinished);
       audio.removeEventListener("error", onFinished);
     };
-  }, [part, itemIndex, stepIndex, sequence, attemptId]);
+  }, [part, itemIndex, stepIndex, sequence, attemptId, speechNonce]);
 
   // Clique real do usuário — o navegador aceita isso como gesto válido pra
   // desbloquear autoplay no elemento de áudio daqui em diante, mesmo que o
@@ -351,6 +378,11 @@ export function InterviewRunner({
   function replayAudio() {
     const audio = audioRef.current;
     if (!audio) return;
+    if (!audio.src || stepSpeechFailed) {
+      setSpeechNonce((n) => n + 1);
+      setRepetitionCount((c) => c + 1);
+      return;
+    }
     audio.currentTime = 0;
     audio.play().catch(() => {});
     setRepetitionCount((c) => c + 1);
@@ -498,8 +530,11 @@ export function InterviewRunner({
         if (result.feedback) {
           setAwaitingFeedbackSpeech(true);
           try {
-            const speech = await generateSpeech(attemptId, result.feedback);
-            const audio = audioRef.current;
+            const speech = await generateSpeechWithRetry(attemptId, result.feedback);
+            // Elemento de áudio dedicado ao feedback — separado do <audio> dos
+            // steps, senão os listeners "ended" do step atual disparavam ao
+            // fim do feedback e derrubavam o estado (ver pilot runner).
+            const audio = feedbackAudioRef.current;
             if (!audio) {
               setAwaitingFeedbackSpeech(false);
               return;
@@ -582,7 +617,7 @@ export function InterviewRunner({
       return (
         <>
           <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
-          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <KeyButton icon="replay" label={stepSpeechFailed ? "Ouvir a pergunta" : "Repetir pergunta"} onClick={replayAudio} />
           <DeckSpacer />
           {captionsControl}
         </>
@@ -592,7 +627,7 @@ export function InterviewRunner({
     if (recorderState === "ready" && mode === "official") {
       return (
         <>
-          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <KeyButton icon="replay" label={stepSpeechFailed ? "Ouvir a pergunta" : "Repetir pergunta"} onClick={replayAudio} />
           <DeckSpacer />
           {captionsControl}
         </>
@@ -664,8 +699,15 @@ export function InterviewRunner({
   return (
     <div className="space-y-4">
       <audio ref={audioRef} />
+      <audio ref={feedbackAudioRef} />
 
       {micError && <div className="note note-danger">{micError}</div>}
+
+      {stepSpeechFailed && currentStep.kind === "response" && recorderState === "ready" && (
+        <div className="note note-caution">
+          Não foi possível reproduzir a fala da IA. Use “Ouvir a pergunta” para tentar de novo.
+        </div>
+      )}
 
       {audioBlocked && (
         <div className="note note-caution flex items-center justify-between gap-3">
@@ -692,20 +734,6 @@ export function InterviewRunner({
           >
             Pausar simulado
           </button>
-        </div>
-      )}
-
-      {part === "part4" && currentPrompt.imageUrl && (
-        // Conteúdo do exame (não decoração): visível durante todo o item da
-        // Parte 4 — o candidato precisa olhar pra imagem de novo ao contar a
-        // história, não só na observação inicial.
-        <div className="card p-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={currentPrompt.imageUrl}
-            alt="Imagem para descrição e história"
-            className="max-h-96 w-full rounded-md object-contain"
-          />
         </div>
       )}
 
@@ -764,6 +792,20 @@ export function InterviewRunner({
           </div>
         )}
       </div>
+
+      {part === "part4" && currentPrompt.imageUrl && (
+        // Conteúdo do exame (não decoração): visível durante todo o item da
+        // Parte 4. Fica ABAIXO do painel da IHM — em cima encavalava o
+        // visualizador de áudio e competia com a descrição (achado da Sabrina).
+        <div className="card p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={currentPrompt.imageUrl}
+            alt="Imagem para descrição e história"
+            className="mx-auto max-h-[28rem] w-full rounded-md object-contain"
+          />
+        </div>
+      )}
     </div>
   );
 }

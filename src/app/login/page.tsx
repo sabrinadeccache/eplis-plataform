@@ -26,6 +26,7 @@ export default async function LoginPage({
         justReset={params.reset === "1"}
         justSignedUp={params.cadastro === "1"}
         accountGone={params.erro === "conta"}
+        sessionExpired={params.erro === "sessao"}
       />
     </AuthShell>
   );
