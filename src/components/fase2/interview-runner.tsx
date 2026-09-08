@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { generateSpeech, advanceState } from "@/services/simulations/phase2/actions";
+import { recordElapsedSeconds } from "@/services/simulations/elapsed";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
 import type { Phase2Sequence, Phase2Prompt } from "@/services/simulations/phase2/queries";
 import type { Part, ResponseStage, SimulationMode } from "@/types/database";
@@ -180,12 +181,14 @@ export function InterviewRunner({
   sequence,
   initialPart,
   initialItemIndex,
+  initialElapsedSeconds,
 }: {
   attemptId: string;
   mode: SimulationMode;
   sequence: Phase2Sequence;
   initialPart: Part;
   initialItemIndex: number;
+  initialElapsedSeconds: number;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -203,7 +206,7 @@ export function InterviewRunner({
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [captionsOn, setCaptionsOn] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
   const [stepSpeechFailed, setStepSpeechFailed] = useState(false);
   const [speechNonce, setSpeechNonce] = useState(0);
@@ -221,11 +224,25 @@ export function InterviewRunner({
     setMicAnalyser(null);
   }, []);
 
-  // Cronômetro da faixa de progresso — decorrido desde que a tela abriu.
+  // Cronômetro da faixa de progresso — acumulado e persistido: pausa ao sair
+  // da tela, retoma de `initialElapsedSeconds` ao reabrir.
+  const elapsedRef = useRef(elapsed);
   useEffect(() => {
-    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
+    elapsedRef.current = elapsed;
+  }, [elapsed]);
+  const saveElapsed = useCallback(() => {
+    void recordElapsedSeconds(attemptId, elapsedRef.current);
+  }, [attemptId]);
+
+  useEffect(() => {
+    const tick = setInterval(() => setElapsed((e) => e + 1), 1000);
+    const save = setInterval(saveElapsed, 20000);
+    return () => {
+      clearInterval(tick);
+      clearInterval(save);
+      saveElapsed();
+    };
+  }, [saveElapsed]);
 
   useEffect(() => teardownMic, [teardownMic]);
 
@@ -247,6 +264,7 @@ export function InterviewRunner({
       try {
         const result = await advanceState(attemptId);
         if (result.finished) {
+          await recordElapsedSeconds(attemptId, elapsedRef.current);
           router.push(`/fase2/resultado/${attemptId}`);
           return;
         }
@@ -476,6 +494,7 @@ export function InterviewRunner({
       recorder.stream.getTracks().forEach((t) => t.stop());
     }
     teardownMic();
+    await recordElapsedSeconds(attemptId, elapsedRef.current);
     if (recorderState === "feedback" && stepIndex + 1 >= steps.length) {
       const result = await advanceState(attemptId);
       if (result.finished) {

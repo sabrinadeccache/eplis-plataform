@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { generateSpeech, advanceState } from "@/services/simulations/pilot/actions";
+import { recordElapsedSeconds } from "@/services/simulations/elapsed";
 import { computeNextPosition, PART_SIZES } from "@/services/simulations/pilot/state-machine";
 import {
   PART4_DISCUSSION_1,
@@ -222,12 +223,14 @@ export function PilotInterviewRunner({
   sequence,
   initialPart,
   initialItemIndex,
+  initialElapsedSeconds,
 }: {
   attemptId: string;
   mode: SimulationMode;
   sequence: PilotSequence;
   initialPart: Part;
   initialItemIndex: number;
+  initialElapsedSeconds: number;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -243,7 +246,7 @@ export function PilotInterviewRunner({
   const [awaitingFeedbackSpeech, setAwaitingFeedbackSpeech] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
   const [stepSpeechFailed, setStepSpeechFailed] = useState(false);
   const [speechNonce, setSpeechNonce] = useState(0);
@@ -264,10 +267,25 @@ export function PilotInterviewRunner({
     setMicAnalyser(null);
   }, []);
 
+  const elapsedRef = useRef(elapsed);
   useEffect(() => {
-    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
+    elapsedRef.current = elapsed;
+  }, [elapsed]);
+  const saveElapsed = useCallback(() => {
+    void recordElapsedSeconds(attemptId, elapsedRef.current);
+  }, [attemptId]);
+
+  useEffect(() => {
+    const tick = setInterval(() => setElapsed((e) => e + 1), 1000);
+    // Autosave periódico + ao desmontar (sair da tela pausa o cronômetro; ao
+    // reabrir ele retoma de `initialElapsedSeconds`).
+    const save = setInterval(saveElapsed, 20000);
+    return () => {
+      clearInterval(tick);
+      clearInterval(save);
+      saveElapsed();
+    };
+  }, [saveElapsed]);
 
   useEffect(() => teardownMic, [teardownMic]);
 
@@ -286,6 +304,7 @@ export function PilotInterviewRunner({
       try {
         const result = await advanceState(attemptId);
         if (result.finished) {
+          await recordElapsedSeconds(attemptId, elapsedRef.current);
           router.push(`/sdea/resultado/${attemptId}`);
           return;
         }
@@ -512,6 +531,7 @@ export function PilotInterviewRunner({
       recorder.stream.getTracks().forEach((t) => t.stop());
     }
     teardownMic();
+    await recordElapsedSeconds(attemptId, elapsedRef.current);
     if (recorderState === "feedback" && stepIndex + 1 >= steps.length) {
       const result = await advanceState(attemptId);
       if (result.finished) {
