@@ -116,6 +116,49 @@ IHM.
 Sabrina) — o headless não grava áudio, então o caminho do `AnalyserNode` real nunca roda
 nos testes.
 
+## Retomada — 2026-09-08 (achados da 1ª rodada de teste com usuários — practice)
+
+A Sabrina rodou o practice inteiro (Fase 2 + SDEA) e mandou uma lista de achados.
+Corrigidos em 3 commits (branch `fix/testes-practice-feedback`, ainda **não** em `main` —
+revisar/mergear). `lint` / `tsc` / `test` (80/80) / `build` limpos.
+
+**Migration nova:** `20260908000000_simulation_attempts_elapsed_seconds.sql` — coluna
+`elapsed_seconds` em `simulation_attempts`. **Já aplicada em produção** via
+`scripts/apply-migration.mjs` (tabela existente, sem GRANT/policy nova).
+
+1. **Sessão expira no meio da entrevista** → as Server Actions faziam
+   `throw new Error("Não autenticado.")`, estourando pro Sentry (issue real recebida por
+   e-mail durante o teste) e quebrando a tela. Agora `redirect("/login?erro=sessao")` nas
+   actions de phase1/phase2/pilot (+ aviso próprio no `LoginForm`); o `submit-response`
+   trata 401 redirecionando pro login. Progresso do simulado não se perde.
+2. **TTS mudo** — falha transitória da OpenAI deixava a pergunta seguinte sem áudio e o
+   candidato num "sua vez" mudo (Parte 4 do SDEA). Adicionado `generateSpeechWithRetry`
+   (3 tentativas) nos dois runners + botão "Ouvir a pergunta" e aviso quando ainda falha.
+3. **Feedback derrubava o estado** — a fala do feedback dividia o mesmo `<audio>` dos
+   steps; ao terminar, o listener `"ended"` do step atual disparava e mudava
+   `recorderState` pra `ready` (sumia o "Continuar", aparecia "Falar/Repetir"). Agora o
+   feedback tem elemento de áudio dedicado (`feedbackAudioRef`) nos dois runners.
+4. **Parte 4 avaliava a descrição da imagem** em vez da resposta à pergunta — o contexto
+   mandado pra IA (e o rótulo nas telas de resultado) era sempre o `prompt_text` genérico
+   ("Please describe this picture to me." / "Describe what you see in this image.") em
+   todos os estágios. `pilotResponseContext` agora cobre `discussion_1`/`discussion_2` com
+   as perguntas fixas da Parte 4 (fonte única em `src/services/simulations/pilot/context.ts`,
+   importada pelo runner); criado `phase2ResponseQuestion` equivalente pra Fase 2
+   (`story_telling` → "Tell a short story…", `suggestion` → "Make a suggestion."). Isso
+   conserta o feedback curto, o relatório final e as "Respostas individuais" de uma vez.
+5. **Cronômetro acumulado** — o "tempo decorrido" da IHM zerava toda vez que a tela abria.
+   Agora é persistido (`elapsed_seconds`, Server Action `recordElapsedSeconds` monotônica),
+   salvo a cada 20s / ao desmontar / ao pausar / ao concluir, e retomado ao reabrir — então
+   "pausa" de verdade ao pausar o simulado practice.
+6. **IHM**: imagem da Parte 4 (EPLIS/SDEA) e de complicação da Parte 2 (SDEA) movida pra
+   **baixo** do painel da IHM (em cima encavalava o visualizador de áudio); **legenda
+   opcional de volta no practice do SDEA** (reverte parte do `6f74108` — decisão nova da
+   Sabrina); rótulo **N1–N6 removido** do cabeçalho das barras da escala de proficiência;
+   **relatório detalhado justificado** com quebras de linha preservadas.
+
+**Ainda aberto desta lista:** teste de verificação da Sabrina (mic real) das próprias
+correções, sobretudo o fluxo de feedback da Parte 4 do SDEA e o cronômetro pausando.
+
 ## Retomada — 2026-09-08 (ajustes finos da IHM do SDEA)
 
 **Último commit em `main`: ver `git log -1`** — deploy automático na Vercel a cada push.
