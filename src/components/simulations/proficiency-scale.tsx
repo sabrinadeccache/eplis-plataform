@@ -2,7 +2,6 @@ import type { ProficiencyLevel } from "@/types/database";
 import {
   PROFICIENCY_LEVELS,
   PROFICIENCY_LABEL,
-  PROFICIENCY_ICAO,
   PROFICIENCY_COLOR,
 } from "@/lib/proficiency-display";
 
@@ -30,13 +29,12 @@ export function ProficiencyScale({ level }: { level: ProficiencyLevel | null }) 
                     : "color-mix(in srgb, var(--muted) 22%, transparent)",
                 }}
               />
-              <div className="mt-2 flex items-baseline justify-between gap-1">
+              <div className="mt-2">
                 <span
                   className={active ? "text-xs font-medium text-ink" : "text-xs text-muted"}
                 >
                   {PROFICIENCY_LABEL[band]}
                 </span>
-                <span className="data text-[11px] text-muted">{PROFICIENCY_ICAO[band]}</span>
               </div>
             </div>
           );

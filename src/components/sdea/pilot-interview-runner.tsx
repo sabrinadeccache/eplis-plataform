@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { generateSpeech, advanceState } from "@/services/simulations/pilot/actions";
 import { computeNextPosition, PART_SIZES } from "@/services/simulations/pilot/state-machine";
+import {
+  PART4_DISCUSSION_1,
+  PART4_DISCUSSION_2,
+  PART4_NARRATIVE_AFTER,
+  PART4_NARRATIVE_BEFORE_VARIATIONS,
+} from "@/services/simulations/pilot/context";
 import { hashStringToSeed } from "@/lib/prng";
 import type { PilotSequence, PilotPrompt } from "@/services/simulations/pilot/queries";
 import type { Part, PilotResponseStage, SimulationMode } from "@/types/database";
@@ -126,12 +132,14 @@ function buildSteps(part: Part, itemIndex: number, prompt: PilotPrompt): Step[] 
   steps.push({
     stage: "narrative",
     kind: "response",
-    text: PART4_BEFORE_VARIATIONS[hashStringToSeed(prompt.id) % PART4_BEFORE_VARIATIONS.length],
+    text: PART4_NARRATIVE_BEFORE_VARIATIONS[
+      hashStringToSeed(prompt.id) % PART4_NARRATIVE_BEFORE_VARIATIONS.length
+    ],
   });
   steps.push({
     stage: "narrative",
     kind: "response",
-    text: "Now imagine that this picture has just been taken. What do you think will happen next?",
+    text: PART4_NARRATIVE_AFTER,
   });
   steps.push({ stage: "discussion_1", kind: "response", text: PART4_DISCUSSION_1 });
   steps.push({ stage: "discussion_2", kind: "response", text: PART4_DISCUSSION_2 });
@@ -144,23 +152,6 @@ function buildSteps(part: Part, itemIndex: number, prompt: PilotPrompt): Step[] 
   });
   return steps;
 }
-
-// Item 2 da Parte 4: 4 variações da pergunta de "antes", conforme o Modelo SDEA
-// — nunca aparecem juntas, uma é sorteada por prova (determinística pelo id da
-// foto, que já é sorteada por tentativa).
-const PART4_BEFORE_VARIATIONS = [
-  "What do you think happened before this picture was taken?",
-  "What do you think the people in this picture were doing before it was taken?",
-  "What do you think was happening just before this picture was taken?",
-  "Can you create a short story based on this picture? Use your imagination.",
-];
-
-// Itens 4 e 5 da Parte 4: perguntas de discussão fixas, aplicáveis a qualquer
-// foto (avaliar severidade, inferir consequências, comparar e prevenir).
-const PART4_DISCUSSION_1 =
-  "How serious do you think a situation like the one in this picture can be, and what makes it more or less dangerous?";
-const PART4_DISCUSSION_2 =
-  "What consequences can a situation like this have for other flights, for the airport, or for aviation in general, and how could it be prevented?";
 
 function pickPrompt(sequence: PilotSequence, part: Part, itemIndex: number): PilotPrompt {
   return sequence[part][itemIndex];
