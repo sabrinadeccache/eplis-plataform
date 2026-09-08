@@ -16,8 +16,6 @@ import {
   KeyButton,
   DeckSpacer,
   DeckNote,
-  CaptionsToggle,
-  CaptionsPanel,
   formatElapsed,
   createMicAnalyser,
 } from "@/components/interview/interview-ui";
@@ -209,16 +207,12 @@ export function PilotInterviewRunner({
   sequence,
   initialPart,
   initialItemIndex,
-  canSkip = false,
 }: {
   attemptId: string;
   mode: SimulationMode;
   sequence: PilotSequence;
   initialPart: Part;
   initialItemIndex: number;
-  // Atalho de QA manual (só contas em isDevTester) — pula o passo/parte atual
-  // sem gravar resposta. Ver src/lib/auth/dev-testers.ts.
-  canSkip?: boolean;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -234,7 +228,6 @@ export function PilotInterviewRunner({
   const [awaitingFeedbackSpeech, setAwaitingFeedbackSpeech] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const [captionsOn, setCaptionsOn] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
 
@@ -307,22 +300,6 @@ export function PilotInterviewRunner({
   useEffect(() => {
     goToNextStepRef.current = goToNextStep;
   }, [goToNextStep]);
-
-  // Só aparece pra contas de teste (canSkip). Interrompe qualquer gravação/áudio
-  // em andamento e avança pro próximo passo (ou próximo item/parte, ou fim) sem
-  // enviar resposta — o passo pulado simplesmente não gera linha em
-  // pilot_responses, e advanceState/o relatório final já ignoram passos sem
-  // transcrição.
-  const skipStep = useCallback(() => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.onstop = () => recorder.stream.getTracks().forEach((t) => t.stop());
-      recorder.stop();
-    }
-    teardownMic();
-    audioRef.current?.pause();
-    goToNextStep();
-  }, [goToNextStep, teardownMic]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -604,20 +581,12 @@ export function PilotInterviewRunner({
     return { tone: "idle", title: "Aguarde", sub: undefined };
   })();
 
-  // Legendas só no practice — no modo oficial não há apoio de leitura, igual ao
-  // exame real.
-  const captionsControl =
-    mode === "official" ? null : (
-      <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
-    );
-
   function renderDeck() {
     if (currentStep.kind !== "response") {
       return (
         <>
           <DeckNote>Aguarde a IA terminar de falar…</DeckNote>
           <DeckSpacer />
-          {captionsControl}
         </>
       );
     }
@@ -628,7 +597,6 @@ export function PilotInterviewRunner({
           <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
           <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
           <DeckSpacer />
-          {captionsControl}
         </>
       );
     }
@@ -638,7 +606,6 @@ export function PilotInterviewRunner({
         <>
           <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
           <DeckSpacer />
-          {captionsControl}
         </>
       );
     }
@@ -666,7 +633,6 @@ export function PilotInterviewRunner({
             onClick={finishAndSubmit}
           />
           <DeckSpacer />
-          {captionsControl}
         </>
       );
     }
@@ -676,7 +642,6 @@ export function PilotInterviewRunner({
         <>
           <DeckNote>Transcrevendo e avaliando sua resposta…</DeckNote>
           <DeckSpacer />
-          {captionsControl}
         </>
       );
     }
@@ -690,7 +655,6 @@ export function PilotInterviewRunner({
             <KeyButton icon="play" label="Continuar" variant="primary" onClick={goToNextStep} />
           )}
           <DeckSpacer />
-          {captionsControl}
         </>
       );
     }
@@ -699,7 +663,6 @@ export function PilotInterviewRunner({
       <>
         <DeckNote>Aguarde a IA terminar de falar…</DeckNote>
         <DeckSpacer />
-        <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
       </>
     );
   }
@@ -732,26 +695,15 @@ export function PilotInterviewRunner({
         </div>
       )}
 
-      {(canSkip || mode === "practice") && (
+      {mode === "practice" && (
         <div className="flex justify-end gap-2">
-          {canSkip && (
-            <button
-              type="button"
-              onClick={skipStep}
-              className="btn btn-secondary !border-dashed !border-accent/60 !px-3 !py-1.5 !text-xs !text-accent"
-            >
-              Pular (teste)
-            </button>
-          )}
-          {mode === "practice" && (
-            <button
-              type="button"
-              onClick={pauseAttempt}
-              className="btn btn-secondary !px-3 !py-1.5 !text-xs"
-            >
-              Pausar simulado
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={pauseAttempt}
+            className="btn btn-secondary !px-3 !py-1.5 !text-xs"
+          >
+            Pausar simulado
+          </button>
         </div>
       )}
 
@@ -801,10 +753,6 @@ export function PilotInterviewRunner({
         </div>
 
         <KeyDeck>{renderDeck()}</KeyDeck>
-
-        {captionsOn && mode !== "official" && currentStep.kind === "response" && currentStep.text && (
-          <CaptionsPanel text={currentStep.text} />
-        )}
 
         {recorderState === "feedback" && feedback && (
           <div className="iv-cc">

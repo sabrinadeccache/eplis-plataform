@@ -116,11 +116,26 @@ IHM.
 Sabrina) — o headless não grava áudio, então o caminho do `AnalyserNode` real nunca roda
 nos testes.
 
-## Retomada — 2026-09-07 (fim da sessão da IHM da entrevista)
+## Retomada — 2026-09-08 (ajustes finos da IHM do SDEA)
 
-**Último commit em `main`: `36c153a`** — já em produção (https://eplis-trainer.vercel.app,
-deploy automático a cada push). `lint` / `tsc` / `test` (78/78) / `build` limpos, verificado
-pela Sabrina. Duas rodadas nesta sessão:
+**Último commit em `main`: ver `git log -1`** — deploy automático na Vercel a cada push.
+`lint` / `tsc` / `test` (75/75) limpos. Nesta sessão, dois ajustes pequenos no SDEA
+(`src/components/sdea/pilot-interview-runner.tsx`), a pedido da Sabrina:
+
+1. **Botão "Pular (teste)" removido do SDEA** — prop `canSkip`, callback `skipStep` e o
+   bloco de UI saíram do runner; `src/app/sdea/entrevista/[attemptId]/page.tsx` não passa
+   mais `canSkip` nem importa `isDevTester`. Os 3 testes do botão de pular foram removidos
+   de `pilot-interview-runner.test.tsx`. (`isDevTester` / `src/lib/auth/dev-testers.ts`
+   continua existindo e é usado em outros lugares.)
+2. **Legendas somem do SDEA nos dois modos** — `CaptionsToggle`/`CaptionsPanel`, o estado
+   `captionsOn` e o `captionsControl` saíram do runner do SDEA. Decisão fechada: legenda
+   opcional existe **só no practice da Fase 2 (EPLIS)**. No `official` da Fase 2 o toggle já
+   não aparecia (`36c153a`); no SDEA agora não aparece em modo nenhum. `interview-ui.tsx`
+   ainda exporta `CaptionsToggle`/`CaptionsPanel` — usados pela Fase 2.
+
+### Sessão anterior — 2026-09-07 (IHM da entrevista)
+
+**Commit `36c153a`.** Duas rodadas:
 
 1. **IHM da entrevista (`781415d`)** — a tela da entrevista (Fase 2 **e** SDEA) trocou a
    tela quase vazia por um visualizador de áudio em canvas (esfera de vidro que pulsa com a
