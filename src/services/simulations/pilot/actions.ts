@@ -9,8 +9,9 @@ import {
   MODEL_VERSION,
   type PilotFeedbackStage,
 } from "@/lib/ai/pilot-track";
-import { computeNextPosition } from "@/services/simulations/pilot/state-machine";
+import { computeNextPosition, PART_INTRO_STATE } from "@/services/simulations/pilot/state-machine";
 import { pilotResponseContext } from "@/services/simulations/pilot/context";
+import { isDevTester } from "@/lib/auth/dev-testers";
 import { PILOT_DAILY_ATTEMPT_LIMIT, countAttemptsToday } from "@/services/simulations/pilot/limits";
 import {
   assertOwnAttemptInProgress as assertOwnAttemptInProgressShared,
@@ -26,7 +27,7 @@ export async function assertOwnAttemptInProgress(
   return assertOwnAttemptInProgressShared(supabase, attemptId, userId, "pilot_interview");
 }
 
-export async function startAttempt(mode: SimulationMode) {
+export async function startAttempt(mode: SimulationMode, startPart?: Part) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
@@ -38,6 +39,11 @@ export async function startAttempt(mode: SimulationMode) {
     );
   }
 
+  // Atalho de QA: começar numa parte específica (ex.: testar só a Parte 4).
+  // Só pra contas em dev-testers.ts — candidato real sempre começa na Parte 1.
+  const part: Part =
+    startPart && isDevTester(auth.user.email) ? startPart : "part1";
+
   const { data, error } = await supabase
     .from("simulation_attempts")
     .insert({
@@ -45,9 +51,9 @@ export async function startAttempt(mode: SimulationMode) {
       phase: "pilot_interview",
       mode,
       status: "in_progress",
-      current_part: "part1",
+      current_part: part,
       current_item_index: 0,
-      current_state: "PILOT_PART_1_INTRO",
+      current_state: PART_INTRO_STATE[part],
     })
     .select("id")
     .single();
