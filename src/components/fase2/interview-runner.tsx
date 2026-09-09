@@ -770,7 +770,11 @@ export function InterviewRunner({
           <div className="iv-stage-col">
             <RecLight active={isRecording} />
             <div className="iv-orb-wrap">
-              <AudioOrb state={orbState} analyser={micAnalyser} />
+              <AudioOrb
+                state={orbState}
+                analyser={micAnalyser}
+                size={part4Image ? 150 : 240}
+              />
             </div>
             <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
 

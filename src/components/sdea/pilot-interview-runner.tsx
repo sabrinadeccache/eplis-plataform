@@ -797,7 +797,11 @@ export function PilotInterviewRunner({
           <div className="iv-stage-col">
             <RecLight active={isRecording} />
             <div className="iv-orb-wrap">
-              <AudioOrb state={orbState} analyser={micAnalyser} />
+              <AudioOrb
+                state={orbState}
+                analyser={micAnalyser}
+                size={contextImage ? 150 : 240}
+              />
             </div>
             <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
 
