@@ -91,6 +91,7 @@ export type SimulationAttemptRow = {
   current_state: string | null;
   current_part: Part | null;
   current_item_index: number | null;
+  elapsed_seconds: number;
   started_at: string;
   finished_at: string | null;
 };

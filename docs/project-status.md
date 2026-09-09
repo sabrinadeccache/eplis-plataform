@@ -116,6 +116,67 @@ IHM.
 Sabrina) — o headless não grava áudio, então o caminho do `AnalyserNode` real nunca roda
 nos testes.
 
+## Retomada — 2026-09-09 (achados da 1ª rodada de teste com usuários — practice)
+
+**Estado: tudo revisado pela Sabrina, mergeado em `main` e em produção** (deploy automático
+Vercel). `lint` / `tsc` / `test` (81/81) / `build` limpos. A Sabrina rodou o practice
+inteiro (Fase 2 + SDEA) na branch `fix/testes-practice-feedback`, aprovou cada item e o
+merge foi feito nesta sessão.
+
+**Migration nova:** `20260908000000_simulation_attempts_elapsed_seconds.sql` — coluna
+`elapsed_seconds` em `simulation_attempts`. **Já aplicada em produção** via
+`scripts/apply-migration.mjs` (tabela existente, sem GRANT/policy nova).
+
+**Atalho de QA:** `startAttempt(mode, startPart?)` do SDEA aceita uma parte inicial e há um
+botão "▶ Practice direto na Parte 4 (teste)" em `/sdea` — **só pra e-mails em
+`src/lib/auth/dev-testers.ts`** (hoje só a Sabrina). Ignora o limite diário e abandona
+qualquer practice em andamento. Candidato real sempre começa na Parte 1.
+
+1. **Sessão expira no meio da entrevista** → as Server Actions faziam
+   `throw new Error("Não autenticado.")`, estourando pro Sentry (issue real recebida por
+   e-mail durante o teste) e quebrando a tela. Agora `redirect("/login?erro=sessao")` nas
+   actions de phase1/phase2/pilot (+ aviso próprio no `LoginForm`); o `submit-response`
+   trata 401 redirecionando pro login. Progresso do simulado não se perde.
+2. **Parte 4 do SDEA travava sem áudio** na pergunta de "hipótese de antes" —
+   `hashStringToSeed` é int32 com sinal e `%` em JS preserva o sinal, então ids de foto
+   com hash negativo davam índice negativo em `PART4_NARRATIVE_BEFORE_VARIATIONS`, `text`
+   virava `undefined` e o TTS falhava. Extraído `part4BeforeNarrative(promptId)` com módulo
+   não-negativo (+ teste, 500 ids). Como rede de segurança: `generateSpeechWithRetry`
+   (3 tentativas) nos dois runners, botão "Ouvir a pergunta"/aviso quando falha, e o step
+   effect não chama TTS com texto vazio.
+3. **Feedback derrubava o estado** — a fala do feedback dividia o mesmo `<audio>` dos
+   steps; ao terminar, o listener `"ended"` do step atual disparava e mudava
+   `recorderState` pra `ready` (sumia o "Continuar", aparecia "Falar/Repetir"). Agora o
+   feedback tem elemento de áudio dedicado (`feedbackAudioRef`) nos dois runners.
+4. **Parte 4 avaliava a descrição da imagem** em vez da resposta à pergunta — o contexto
+   mandado pra IA (e o rótulo nas telas de resultado) era sempre o `prompt_text` genérico
+   ("Please describe this picture to me." / "Describe what you see in this image.") em
+   todos os estágios. `pilotResponseContext` agora cobre `discussion_1`/`discussion_2` com
+   as perguntas fixas da Parte 4 (fonte única em `src/services/simulations/pilot/context.ts`,
+   importada pelo runner); criado `phase2ResponseQuestion` equivalente pra Fase 2
+   (`story_telling` → "Tell a short story…", `suggestion` → "Make a suggestion."). Isso
+   conserta o feedback curto, o relatório final e as "Respostas individuais" de uma vez.
+5. **Cronômetro acumulado** — o "tempo decorrido" da IHM zerava toda vez que a tela abria.
+   Agora é persistido (`elapsed_seconds`, Server Action `recordElapsedSeconds` monotônica),
+   salvo a cada 20s / ao desmontar / ao pausar / ao concluir, e retomado ao reabrir — então
+   "pausa" de verdade ao pausar o simulado practice.
+6. **Imagem no mesmo retângulo da IHM (desktop)** — a imagem da Parte 4 (EPLIS/SDEA) e a de
+   complicação da Parte 2 (SDEA) ficavam acima/abaixo do painel e o aluno tinha que rolar a
+   tela. Agora, a partir de `768px`, o palco (`.iv-stage--split` em `globals.css`) vira 2
+   colunas: o `AudioOrb` recebe `size=150` (era fixo em 240 — os anéis de pulso invadiam o
+   texto), encosta à esquerda numa coluna de 10.5rem, e a imagem cresce à direita (até
+   40rem). No mobile continua empilhado. `"Examinador falando"` menor no split; `REC`
+   ancorado no canto do painel.
+7. **Legendas** de volta no practice do SDEA (reverte parte do `6f74108` — decisão nova da
+   Sabrina; ver [[feedback_design_training_school]]).
+8. **Telas de resultado**: rótulo **N1–N6 removido** do cabeçalho das barras da escala de
+   proficiência (`proficiency-scale.tsx`); **relatório detalhado justificado**
+   (`whitespace-pre-line text-justify`).
+
+**Aberto:** nada bloqueante desta lista. A trilha do controlador (EPLIS) e a do piloto
+(SDEA) seguem tecnicamente prontas — falta só a decisão de negócio de abrir o cadastro
+público (Roadmap → Fase 7).
+
 ## Retomada — 2026-09-08 (ajustes finos da IHM do SDEA)
 
 **Último commit em `main`: ver `git log -1`** — deploy automático na Vercel a cada push.

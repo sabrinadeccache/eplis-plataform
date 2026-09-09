@@ -10,6 +10,8 @@ vi.mock("@/services/simulations/pilot/actions", () => ({
 }));
 
 const pushMock = vi.fn();
+vi.mock("@/services/simulations/elapsed", () => ({ recordElapsedSeconds: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
 }));
@@ -119,7 +121,7 @@ describe("PilotInterviewRunner — trava de concorrência no avanço de item", (
         mode="practice"
         sequence={makeSequence()}
         initialPart="part1"
-        initialItemIndex={1}
+        initialItemIndex={1} initialElapsedSeconds={0}
       />,
     );
 
@@ -142,7 +144,7 @@ describe("PilotInterviewRunner — Parte 2", () => {
         mode="practice"
         sequence={makeSequence()}
         initialPart="part2"
-        initialItemIndex={1}
+        initialItemIndex={1} initialElapsedSeconds={0}
       />,
     );
 

@@ -27,7 +27,7 @@ export default async function SdeaEntrevistaPage({
   const supabase = await createClient();
   const { data: attempt } = await supabase
     .from("simulation_attempts")
-    .select("id, user_id, phase, status, mode, current_part, current_item_index")
+    .select("id, user_id, phase, status, mode, current_part, current_item_index, elapsed_seconds")
     .eq("id", attemptId)
     .single();
 
@@ -56,6 +56,7 @@ export default async function SdeaEntrevistaPage({
         sequence={sequence}
         initialPart={(attempt.current_part ?? "part1") as Part}
         initialItemIndex={attempt.current_item_index ?? 0}
+        initialElapsedSeconds={attempt.elapsed_seconds ?? 0}
       />
     </AppShell>
   );

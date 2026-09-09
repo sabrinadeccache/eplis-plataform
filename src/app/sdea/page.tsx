@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { BackLink } from "@/components/layout/back-link";
 import { ModeChooser } from "@/components/simulations/mode-chooser";
 import { canUsePilotTrack } from "@/lib/auth/roles";
+import { isDevTester } from "@/lib/auth/dev-testers";
 import { startAttempt, abandonAndRestartAttempt } from "@/services/simulations/pilot/actions";
 import { countAttemptsToday, PILOT_DAILY_ATTEMPT_LIMIT } from "@/services/simulations/pilot/limits";
 import type { Part } from "@/types/database";
@@ -74,6 +75,17 @@ export default async function SdeaPage() {
         startPractice={startAttempt.bind(null, "practice")}
         startOfficial={startAttempt.bind(null, "official")}
       />
+
+      {isDevTester(user.email) && (
+        <form action={startAttempt.bind(null, "practice", "part4")} className="mt-4">
+          <button type="submit" className="btn btn-secondary !text-xs">
+            ▶ Practice direto na Parte 4 (teste)
+          </button>
+          <p className="mt-1 text-xs text-muted">
+            Só aparece para contas de teste. Ignora o limite diário e o simulado pausado.
+          </p>
+        </form>
+      )}
     </AppShell>
   );
 }

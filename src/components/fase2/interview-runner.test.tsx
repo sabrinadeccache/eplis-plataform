@@ -10,6 +10,8 @@ vi.mock("@/services/simulations/phase2/actions", () => ({
 }));
 
 const pushMock = vi.fn();
+vi.mock("@/services/simulations/elapsed", () => ({ recordElapsedSeconds: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
 }));
@@ -110,7 +112,7 @@ describe("InterviewRunner — trava de concorrência no avanço de item", () => 
         mode="practice"
         sequence={makeSequence()}
         initialPart="part1"
-        initialItemIndex={1}
+        initialItemIndex={1} initialElapsedSeconds={0}
       />,
     );
 

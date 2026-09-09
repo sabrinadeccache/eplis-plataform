@@ -7,6 +7,36 @@
 // (route handler) quanto pela montagem dos transcripts do relatório final
 // (actions.ts) — um só lugar pra essa regra.
 import type { PilotResponseStage } from "@/types/database";
+import { hashStringToSeed } from "@/lib/prng";
+
+// Perguntas fixas da Parte 4 (não vêm do banco — só a afirmação de
+// concordar/discordar é específica da foto). Fonte única: importadas pelo
+// runner (pilot-interview-runner.tsx) e usadas aqui pra dar o contexto certo
+// à IA e às telas de resultado/desempenho, que antes mostravam sempre o
+// texto genérico "Please describe this picture to me." em todos os estágios.
+export const PART4_DISCUSSION_1 =
+  "How serious do you think a situation like the one in this picture can be, and what makes it more or less dangerous?";
+export const PART4_DISCUSSION_2 =
+  "What consequences can a situation like this have for other flights, for the airport, or for aviation in general, and how could it be prevented?";
+export const PART4_NARRATIVE_BEFORE_VARIATIONS = [
+  "What do you think happened before this picture was taken?",
+  "What do you think the people in this picture were doing before it was taken?",
+  "What do you think was happening just before this picture was taken?",
+  "Can you create a short story based on this picture? Use your imagination.",
+];
+export const PART4_NARRATIVE_AFTER =
+  "Now imagine that this picture has just been taken. What do you think will happen next?";
+
+// Escolhe uma das 4 variações da pergunta de "hipótese de antes" da Parte 4,
+// determinística pelo id da foto. `hashStringToSeed` é um int32 com sinal, e
+// `%` em JS preserva o sinal — o `((x % n) + n) % n` garante índice válido
+// (sem ele, um id com hash negativo dava índice negativo -> `undefined` -> o
+// TTS da pergunta falhava e a Parte 4 travava sem áudio).
+export function part4BeforeNarrative(promptId: string): string {
+  const n = PART4_NARRATIVE_BEFORE_VARIATIONS.length;
+  const i = ((hashStringToSeed(promptId) % n) + n) % n;
+  return PART4_NARRATIVE_BEFORE_VARIATIONS[i];
+}
 
 export type PilotPromptContextFields = {
   prompt_text: string;
@@ -21,6 +51,8 @@ export type PilotPromptContextFields = {
 const STATIC_CONTEXT: Partial<Record<PilotResponseStage, string>> = {
   narrative:
     "Describe what you think happened before or after this picture was taken (free narrative, not a literal description).",
+  discussion_1: PART4_DISCUSSION_1,
+  discussion_2: PART4_DISCUSSION_2,
   comparison:
     "Compare the three situations heard in Part 3 in terms of severity, possible solutions and prevention, and say which one is hardest to deal with.",
 };
@@ -42,10 +74,6 @@ export function pilotResponseContext(
       return prompt.atc_followup_audio_text ?? prompt.prompt_text;
     case "question":
       return prompt.discussion_question ?? prompt.prompt_text;
-    case "discussion_1":
-      return prompt.discussion_question ?? prompt.prompt_text;
-    case "discussion_2":
-      return prompt.discussion_question_2 ?? prompt.prompt_text;
     case "agree_disagree":
       return prompt.agree_disagree_statement ?? prompt.prompt_text;
     default:

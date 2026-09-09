@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { generateSpeech, advanceState } from "@/services/simulations/phase2/actions";
+import { recordElapsedSeconds } from "@/services/simulations/elapsed";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
 import type { Phase2Sequence, Phase2Prompt } from "@/services/simulations/phase2/queries";
 import type { Part, ResponseStage, SimulationMode } from "@/types/database";
@@ -153,18 +154,41 @@ function isAutoplayBlocked(err: unknown): boolean {
   return err instanceof DOMException && err.name === "NotAllowedError";
 }
 
+// TTS (OpenAI) falha esporadicamente por causa transitória (rede, rate limit).
+// Sem retry, a pergunta seguinte não era falada e o candidato caía num "sua
+// vez" mudo (achado real na Parte 4 do SDEA — mesmo padrão aqui). Ver
+// pilot-interview-runner.tsx.
+async function generateSpeechWithRetry(
+  attemptId: string,
+  text: string,
+  attempts = 3,
+): Promise<{ audioBase64: string; mimeType: string }> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await generateSpeech(attemptId, text);
+    } catch (err) {
+      lastErr = err;
+      await new Promise((resolve) => setTimeout(resolve, 400 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export function InterviewRunner({
   attemptId,
   mode,
   sequence,
   initialPart,
   initialItemIndex,
+  initialElapsedSeconds,
 }: {
   attemptId: string;
   mode: SimulationMode;
   sequence: Phase2Sequence;
   initialPart: Part;
   initialItemIndex: number;
+  initialElapsedSeconds: number;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -182,10 +206,13 @@ export function InterviewRunner({
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [captionsOn, setCaptionsOn] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
+  const [stepSpeechFailed, setStepSpeechFailed] = useState(false);
+  const [speechNonce, setSpeechNonce] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const feedbackAudioRef = useRef<HTMLAudioElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const advancingItemRef = useRef(false);
@@ -197,11 +224,25 @@ export function InterviewRunner({
     setMicAnalyser(null);
   }, []);
 
-  // Cronômetro da faixa de progresso — decorrido desde que a tela abriu.
+  // Cronômetro da faixa de progresso — acumulado e persistido: pausa ao sair
+  // da tela, retoma de `initialElapsedSeconds` ao reabrir.
+  const elapsedRef = useRef(elapsed);
   useEffect(() => {
-    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
+    elapsedRef.current = elapsed;
+  }, [elapsed]);
+  const saveElapsed = useCallback(() => {
+    void recordElapsedSeconds(attemptId, elapsedRef.current);
+  }, [attemptId]);
+
+  useEffect(() => {
+    const tick = setInterval(() => setElapsed((e) => e + 1), 1000);
+    const save = setInterval(saveElapsed, 20000);
+    return () => {
+      clearInterval(tick);
+      clearInterval(save);
+      saveElapsed();
+    };
+  }, [saveElapsed]);
 
   useEffect(() => teardownMic, [teardownMic]);
 
@@ -223,6 +264,7 @@ export function InterviewRunner({
       try {
         const result = await advanceState(attemptId);
         if (result.finished) {
+          await recordElapsedSeconds(attemptId, elapsedRef.current);
           router.push(`/fase2/resultado/${attemptId}`);
           return;
         }
@@ -294,6 +336,7 @@ export function InterviewRunner({
     const audio = audioRef.current;
     if (!audio) return;
 
+    setStepSpeechFailed(false);
     const step = stepAt(sequence, part, itemIndex, stepIndex);
     let finished = false;
     let advanceTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -314,7 +357,7 @@ export function InterviewRunner({
     audio.addEventListener("error", onFinished);
 
     let cancelled = false;
-    generateSpeech(attemptId, step.text)
+    generateSpeechWithRetry(attemptId, step.text)
       .then(({ audioBase64, mimeType }) => {
         if (cancelled) return;
         audio.src = `data:${mimeType};base64,${audioBase64}`;
@@ -325,7 +368,9 @@ export function InterviewRunner({
         });
       })
       .catch(() => {
-        if (!cancelled) onFinished();
+        if (cancelled) return;
+        if (step.kind === "response") setStepSpeechFailed(true);
+        onFinished();
       });
 
     return () => {
@@ -334,7 +379,7 @@ export function InterviewRunner({
       audio.removeEventListener("ended", onFinished);
       audio.removeEventListener("error", onFinished);
     };
-  }, [part, itemIndex, stepIndex, sequence, attemptId]);
+  }, [part, itemIndex, stepIndex, sequence, attemptId, speechNonce]);
 
   // Clique real do usuário — o navegador aceita isso como gesto válido pra
   // desbloquear autoplay no elemento de áudio daqui em diante, mesmo que o
@@ -351,6 +396,11 @@ export function InterviewRunner({
   function replayAudio() {
     const audio = audioRef.current;
     if (!audio) return;
+    if (!audio.src || stepSpeechFailed) {
+      setSpeechNonce((n) => n + 1);
+      setRepetitionCount((c) => c + 1);
+      return;
+    }
     audio.currentTime = 0;
     audio.play().catch(() => {});
     setRepetitionCount((c) => c + 1);
@@ -444,6 +494,7 @@ export function InterviewRunner({
       recorder.stream.getTracks().forEach((t) => t.stop());
     }
     teardownMic();
+    await recordElapsedSeconds(attemptId, elapsedRef.current);
     if (recorderState === "feedback" && stepIndex + 1 >= steps.length) {
       const result = await advanceState(attemptId);
       if (result.finished) {
@@ -498,8 +549,11 @@ export function InterviewRunner({
         if (result.feedback) {
           setAwaitingFeedbackSpeech(true);
           try {
-            const speech = await generateSpeech(attemptId, result.feedback);
-            const audio = audioRef.current;
+            const speech = await generateSpeechWithRetry(attemptId, result.feedback);
+            // Elemento de áudio dedicado ao feedback — separado do <audio> dos
+            // steps, senão os listeners "ended" do step atual disparavam ao
+            // fim do feedback e derrubavam o estado (ver pilot runner).
+            const audio = feedbackAudioRef.current;
             if (!audio) {
               setAwaitingFeedbackSpeech(false);
               return;
@@ -525,6 +579,8 @@ export function InterviewRunner({
   }
 
   const isRecording = recorderState === "recording" || recorderState === "paused";
+  // Imagem da Parte 4: dividir o retângulo da IHM com o visualizador no desktop.
+  const part4Image = part === "part4" ? currentPrompt.imageUrl : null;
   const orbState: OrbState = isRecording
     ? "rec"
     : speaking || recorderState === "waiting_ai" || awaitingFeedbackSpeech
@@ -582,7 +638,7 @@ export function InterviewRunner({
       return (
         <>
           <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
-          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <KeyButton icon="replay" label={stepSpeechFailed ? "Ouvir a pergunta" : "Repetir pergunta"} onClick={replayAudio} />
           <DeckSpacer />
           {captionsControl}
         </>
@@ -592,7 +648,7 @@ export function InterviewRunner({
     if (recorderState === "ready" && mode === "official") {
       return (
         <>
-          <KeyButton icon="replay" label="Repetir pergunta" onClick={replayAudio} />
+          <KeyButton icon="replay" label={stepSpeechFailed ? "Ouvir a pergunta" : "Repetir pergunta"} onClick={replayAudio} />
           <DeckSpacer />
           {captionsControl}
         </>
@@ -664,8 +720,15 @@ export function InterviewRunner({
   return (
     <div className="space-y-4">
       <audio ref={audioRef} />
+      <audio ref={feedbackAudioRef} />
 
       {micError && <div className="note note-danger">{micError}</div>}
+
+      {stepSpeechFailed && currentStep.kind === "response" && recorderState === "ready" && (
+        <div className="note note-caution">
+          Não foi possível reproduzir a fala da IA. Use “Ouvir a pergunta” para tentar de novo.
+        </div>
+      )}
 
       {audioBlocked && (
         <div className="note note-caution flex items-center justify-between gap-3">
@@ -695,20 +758,6 @@ export function InterviewRunner({
         </div>
       )}
 
-      {part === "part4" && currentPrompt.imageUrl && (
-        // Conteúdo do exame (não decoração): visível durante todo o item da
-        // Parte 4 — o candidato precisa olhar pra imagem de novo ao contar a
-        // história, não só na observação inicial.
-        <div className="card p-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={currentPrompt.imageUrl}
-            alt="Imagem para descrição e história"
-            className="max-h-96 w-full rounded-md object-contain"
-          />
-        </div>
-      )}
-
       <div className="iv">
         <InterviewStrip
           mode={mode}
@@ -717,37 +766,51 @@ export function InterviewRunner({
           elapsedLabel={formatElapsed(elapsed)}
         />
 
-        <div className="iv-stage">
-          <RecLight active={isRecording} />
-          <div className="iv-orb-wrap">
-            <AudioOrb state={orbState} analyser={micAnalyser} />
-          </div>
-          <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
+        <div className={`iv-stage${part4Image ? " iv-stage--split" : ""}`}>
+          <div className="iv-stage-col">
+            <RecLight active={isRecording} />
+            <div className="iv-orb-wrap">
+              <AudioOrb
+                state={orbState}
+                analyser={micAnalyser}
+                size={part4Image ? 150 : 240}
+              />
+            </div>
+            <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
 
-          {currentStep.kind === "silent" && ttsEnded && (
-            <SilentTimer
-              key={stepKey(part, itemIndex, stepIndex)}
-              seconds={currentStep.durationSeconds ?? 15}
-              onExpire={goToNextStep}
-            />
-          )}
-
-          {currentStep.kind === "response" &&
-            recorderState === "ready" &&
-            mode === "official" &&
-            !speaking && (
-              <ResponseStartTimer
+            {currentStep.kind === "silent" && ttsEnded && (
+              <SilentTimer
                 key={stepKey(part, itemIndex, stepIndex)}
-                seconds={5}
-                onExpire={startRecording}
+                seconds={currentStep.durationSeconds ?? 15}
+                onExpire={goToNextStep}
               />
             )}
 
-          {repetitionCount >= 1 && recorderState === "ready" && (
-            <p className="iv-sub text-caution">
-              Pedir a pergunta de novo pesa no critério Compreensão — o relatório final sinaliza
-              isso.
-            </p>
+            {currentStep.kind === "response" &&
+              recorderState === "ready" &&
+              mode === "official" &&
+              !speaking && (
+                <ResponseStartTimer
+                  key={stepKey(part, itemIndex, stepIndex)}
+                  seconds={5}
+                  onExpire={startRecording}
+                />
+              )}
+
+            {repetitionCount >= 1 && recorderState === "ready" && (
+              <p className="iv-sub text-caution">
+                Pedir a pergunta de novo pesa no critério Compreensão — o relatório final
+                sinaliza isso.
+              </p>
+            )}
+          </div>
+
+          {part4Image && (
+            // Conteúdo do exame (não decoração): no mesmo retângulo da IHM.
+            <figure className="iv-ctx-img">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={part4Image} alt="Imagem para descrição e história" />
+            </figure>
           )}
         </div>
 

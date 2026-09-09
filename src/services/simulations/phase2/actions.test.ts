@@ -5,6 +5,12 @@ const generateSpeechAudio = vi.fn(async () => ({
   mimeType: "audio/mpeg",
 }));
 
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn((url: string) => {
+    throw new Error(`REDIRECT:${url}`);
+  }),
+}));
+
 vi.mock("@/lib/ai/openai", () => ({ generateSpeechAudio }));
 vi.mock("@/lib/ai/anthropic", () => ({
   generateFinalReport: vi.fn(),
@@ -84,7 +90,7 @@ describe("generateSpeech — proteção de custo", () => {
 
   it("rejeita sem sessão autenticada", async () => {
     authUserId = null;
-    await expect(generateSpeech("attempt-1", "oi")).rejects.toThrow("Não autenticado.");
+    await expect(generateSpeech("attempt-1", "oi")).rejects.toThrow("REDIRECT:/login?erro=sessao");
     expect(generateSpeechAudio).not.toHaveBeenCalled();
   });
 

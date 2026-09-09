@@ -3,9 +3,17 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
-import type { ProficiencyLevel, SimulationFeedbackRow } from "@/types/database";
+import type {
+  PilotResponseStage,
+  ProficiencyLevel,
+  SimulationFeedbackRow,
+} from "@/types/database";
 import { PROFICIENCY_LABEL as LEVEL_LABEL } from "@/lib/proficiency-display";
 import { canUsePilotTrack } from "@/lib/auth/roles";
+import {
+  pilotResponseContext,
+  type PilotPromptContextFields,
+} from "@/services/simulations/pilot/context";
 import {
   ProficiencyScale,
   CriteriaGrid,
@@ -48,7 +56,9 @@ export default async function SdeaResultadoPage({
 
   const { data: responses } = await supabase
     .from("pilot_responses")
-    .select("response_stage, transcript, ai_feedback, pilot_prompts(part, prompt_text)")
+    .select(
+      "response_stage, transcript, ai_feedback, pilot_prompts(part, prompt_text, atc_audio_text, complication_text, atc_followup_audio_text, discussion_question, discussion_question_2, agree_disagree_statement)",
+    )
     .eq("simulation_attempt_id", attemptId)
     .order("created_at", { ascending: true });
 
@@ -88,7 +98,7 @@ export default async function SdeaResultadoPage({
           </div>
 
           {feedback.general_feedback && (
-            <div className="note mt-4">{feedback.general_feedback}</div>
+            <div className="note mt-4 whitespace-pre-line text-justify leading-relaxed">{feedback.general_feedback}</div>
           )}
         </>
       )}
@@ -98,13 +108,18 @@ export default async function SdeaResultadoPage({
       </div>
       <div className="mt-4 space-y-3">
         {(responses ?? []).map((r: Record<string, unknown>, i: number) => {
-          const prompt = r.pilot_prompts as { part: string; prompt_text: string } | null;
+          const prompt = r.pilot_prompts as
+            | (PilotPromptContextFields & { part: string })
+            | null;
+          const question = prompt
+            ? pilotResponseContext(r.response_stage as PilotResponseStage, prompt)
+            : null;
           return (
             <div key={i} className="card p-4 text-sm">
               <p className="data text-xs text-muted">
                 {prompt?.part} · {r.response_stage as string}
               </p>
-              <p className="mt-1 font-medium text-ink">{prompt?.prompt_text}</p>
+              <p className="mt-1 font-medium text-ink">{question}</p>
               {r.transcript ? (
                 <p className="mt-2 text-ink">
                   <span className="text-xs font-medium text-muted">Answer: </span>

@@ -9,8 +9,9 @@ import {
   MODEL_VERSION,
   type PilotFeedbackStage,
 } from "@/lib/ai/pilot-track";
-import { computeNextPosition } from "@/services/simulations/pilot/state-machine";
+import { computeNextPosition, PART_INTRO_STATE } from "@/services/simulations/pilot/state-machine";
 import { pilotResponseContext } from "@/services/simulations/pilot/context";
+import { isDevTester } from "@/lib/auth/dev-testers";
 import { PILOT_DAILY_ATTEMPT_LIMIT, countAttemptsToday } from "@/services/simulations/pilot/limits";
 import {
   assertOwnAttemptInProgress as assertOwnAttemptInProgressShared,
@@ -26,16 +27,33 @@ export async function assertOwnAttemptInProgress(
   return assertOwnAttemptInProgressShared(supabase, attemptId, userId, "pilot_interview");
 }
 
-export async function startAttempt(mode: SimulationMode) {
+export async function startAttempt(mode: SimulationMode, startPart?: Part) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
 
-  const attemptsToday = await countAttemptsToday(supabase, auth.user.id);
-  if (attemptsToday >= PILOT_DAILY_ATTEMPT_LIMIT) {
-    throw new Error(
-      `Limite de ${PILOT_DAILY_ATTEMPT_LIMIT} simulados do SDEA por dia atingido. Tente novamente amanhã.`,
-    );
+  // Atalho de QA: começar numa parte específica (ex.: testar só a Parte 4).
+  // Só pra contas em dev-testers.ts — candidato real sempre começa na Parte 1.
+  const qaShortcut = Boolean(startPart) && isDevTester(auth.user.email);
+  const part: Part = qaShortcut && startPart ? startPart : "part1";
+
+  if (qaShortcut) {
+    // Abandona qualquer practice em andamento pra não deixar tentativa órfã
+    // "pausada" aparecendo no /sdea depois.
+    await supabase
+      .from("simulation_attempts")
+      .update({ status: "abandoned" })
+      .eq("user_id", auth.user.id)
+      .eq("phase", "pilot_interview")
+      .eq("mode", "practice")
+      .eq("status", "in_progress");
+  } else {
+    const attemptsToday = await countAttemptsToday(supabase, auth.user.id);
+    if (attemptsToday >= PILOT_DAILY_ATTEMPT_LIMIT) {
+      throw new Error(
+        `Limite de ${PILOT_DAILY_ATTEMPT_LIMIT} simulados do SDEA por dia atingido. Tente novamente amanhã.`,
+      );
+    }
   }
 
   const { data, error } = await supabase
@@ -45,9 +63,9 @@ export async function startAttempt(mode: SimulationMode) {
       phase: "pilot_interview",
       mode,
       status: "in_progress",
-      current_part: "part1",
+      current_part: part,
       current_item_index: 0,
-      current_state: "PILOT_PART_1_INTRO",
+      current_state: PART_INTRO_STATE[part],
     })
     .select("id")
     .single();
@@ -90,7 +108,7 @@ export async function generateSpeech(
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Não autenticado.");
+  if (!auth.user) redirect("/login?erro=sessao");
   await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
 
   const { buffer, mimeType } = await generateSpeechAudio(text);
@@ -117,7 +135,7 @@ type ResponseWithPrompt = {
 export async function advanceState(attemptId: string): Promise<{ finished: boolean }> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error("Não autenticado.");
+  if (!auth.user) redirect("/login?erro=sessao");
 
   const attempt = await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
   const currentPart = attempt.current_part as Part;
