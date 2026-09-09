@@ -9,9 +9,8 @@ import {
   PART4_DISCUSSION_1,
   PART4_DISCUSSION_2,
   PART4_NARRATIVE_AFTER,
-  PART4_NARRATIVE_BEFORE_VARIATIONS,
+  part4BeforeNarrative,
 } from "@/services/simulations/pilot/context";
-import { hashStringToSeed } from "@/lib/prng";
 import type { PilotSequence, PilotPrompt } from "@/services/simulations/pilot/queries";
 import type { Part, PilotResponseStage, SimulationMode } from "@/types/database";
 import { AudioOrb, type OrbState } from "@/components/interview/audio-orb";
@@ -133,9 +132,7 @@ function buildSteps(part: Part, itemIndex: number, prompt: PilotPrompt): Step[] 
   steps.push({
     stage: "narrative",
     kind: "response",
-    text: PART4_NARRATIVE_BEFORE_VARIATIONS[
-      hashStringToSeed(prompt.id) % PART4_NARRATIVE_BEFORE_VARIATIONS.length
-    ],
+    text: part4BeforeNarrative(prompt.id),
   });
   steps.push({
     stage: "narrative",
@@ -413,6 +410,10 @@ export function PilotInterviewRunner({
 
     if (step.audioUrl) {
       playSrc(step.audioUrl);
+    } else if (!step.text.trim()) {
+      // Sem texto pra falar (ex.: afirmação de concordar/discordar ausente no
+      // banco) — não adianta bater na API de TTS; segue direto.
+      finish();
     } else {
       generateSpeechWithRetry(attemptId, step.text)
         .then(({ audioBase64, mimeType }) => playSrc(`data:${mimeType};base64,${audioBase64}`))

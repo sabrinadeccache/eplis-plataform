@@ -7,6 +7,7 @@
 // (route handler) quanto pela montagem dos transcripts do relatório final
 // (actions.ts) — um só lugar pra essa regra.
 import type { PilotResponseStage } from "@/types/database";
+import { hashStringToSeed } from "@/lib/prng";
 
 // Perguntas fixas da Parte 4 (não vêm do banco — só a afirmação de
 // concordar/discordar é específica da foto). Fonte única: importadas pelo
@@ -25,6 +26,17 @@ export const PART4_NARRATIVE_BEFORE_VARIATIONS = [
 ];
 export const PART4_NARRATIVE_AFTER =
   "Now imagine that this picture has just been taken. What do you think will happen next?";
+
+// Escolhe uma das 4 variações da pergunta de "hipótese de antes" da Parte 4,
+// determinística pelo id da foto. `hashStringToSeed` é um int32 com sinal, e
+// `%` em JS preserva o sinal — o `((x % n) + n) % n` garante índice válido
+// (sem ele, um id com hash negativo dava índice negativo -> `undefined` -> o
+// TTS da pergunta falhava e a Parte 4 travava sem áudio).
+export function part4BeforeNarrative(promptId: string): string {
+  const n = PART4_NARRATIVE_BEFORE_VARIATIONS.length;
+  const i = ((hashStringToSeed(promptId) % n) + n) % n;
+  return PART4_NARRATIVE_BEFORE_VARIATIONS[i];
+}
 
 export type PilotPromptContextFields = {
   prompt_text: string;

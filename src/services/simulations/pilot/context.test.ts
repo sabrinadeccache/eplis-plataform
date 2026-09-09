@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   PART4_DISCUSSION_1,
   PART4_DISCUSSION_2,
+  PART4_NARRATIVE_BEFORE_VARIATIONS,
+  part4BeforeNarrative,
   pilotResponseContext,
 } from "./context";
 
@@ -31,5 +33,15 @@ describe("pilotResponseContext — Parte 4", () => {
 
   it("narrativa livre não pede descrição literal da imagem", () => {
     expect(pilotResponseContext("narrative", promptFields).toLowerCase()).toContain("narrative");
+  });
+
+  it("part4BeforeNarrative sempre devolve uma pergunta válida (índice nunca negativo)", () => {
+    // ids com hashStringToSeed positivo E negativo — o bug antigo dava índice
+    // negativo -> undefined -> TTS mudo na Parte 4.
+    for (let k = 0; k < 500; k += 1) {
+      const q = part4BeforeNarrative(`prompt-${k}-${k * 7919}`);
+      expect(typeof q).toBe("string");
+      expect(PART4_NARRATIVE_BEFORE_VARIATIONS).toContain(q);
+    }
   });
 });
