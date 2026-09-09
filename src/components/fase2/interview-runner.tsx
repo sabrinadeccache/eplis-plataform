@@ -579,6 +579,8 @@ export function InterviewRunner({
   }
 
   const isRecording = recorderState === "recording" || recorderState === "paused";
+  // Imagem da Parte 4: dividir o retângulo da IHM com o visualizador no desktop.
+  const part4Image = part === "part4" ? currentPrompt.imageUrl : null;
   const orbState: OrbState = isRecording
     ? "rec"
     : speaking || recorderState === "waiting_ai" || awaitingFeedbackSpeech
@@ -764,37 +766,47 @@ export function InterviewRunner({
           elapsedLabel={formatElapsed(elapsed)}
         />
 
-        <div className="iv-stage">
-          <RecLight active={isRecording} />
-          <div className="iv-orb-wrap">
-            <AudioOrb state={orbState} analyser={micAnalyser} />
-          </div>
-          <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
+        <div className={`iv-stage${part4Image ? " iv-stage--split" : ""}`}>
+          <div className="iv-stage-col">
+            <RecLight active={isRecording} />
+            <div className="iv-orb-wrap">
+              <AudioOrb state={orbState} analyser={micAnalyser} />
+            </div>
+            <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
 
-          {currentStep.kind === "silent" && ttsEnded && (
-            <SilentTimer
-              key={stepKey(part, itemIndex, stepIndex)}
-              seconds={currentStep.durationSeconds ?? 15}
-              onExpire={goToNextStep}
-            />
-          )}
-
-          {currentStep.kind === "response" &&
-            recorderState === "ready" &&
-            mode === "official" &&
-            !speaking && (
-              <ResponseStartTimer
+            {currentStep.kind === "silent" && ttsEnded && (
+              <SilentTimer
                 key={stepKey(part, itemIndex, stepIndex)}
-                seconds={5}
-                onExpire={startRecording}
+                seconds={currentStep.durationSeconds ?? 15}
+                onExpire={goToNextStep}
               />
             )}
 
-          {repetitionCount >= 1 && recorderState === "ready" && (
-            <p className="iv-sub text-caution">
-              Pedir a pergunta de novo pesa no critério Compreensão — o relatório final sinaliza
-              isso.
-            </p>
+            {currentStep.kind === "response" &&
+              recorderState === "ready" &&
+              mode === "official" &&
+              !speaking && (
+                <ResponseStartTimer
+                  key={stepKey(part, itemIndex, stepIndex)}
+                  seconds={5}
+                  onExpire={startRecording}
+                />
+              )}
+
+            {repetitionCount >= 1 && recorderState === "ready" && (
+              <p className="iv-sub text-caution">
+                Pedir a pergunta de novo pesa no critério Compreensão — o relatório final
+                sinaliza isso.
+              </p>
+            )}
+          </div>
+
+          {part4Image && (
+            // Conteúdo do exame (não decoração): no mesmo retângulo da IHM.
+            <figure className="iv-ctx-img">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={part4Image} alt="Imagem para descrição e história" />
+            </figure>
           )}
         </div>
 
@@ -811,20 +823,6 @@ export function InterviewRunner({
           </div>
         )}
       </div>
-
-      {part === "part4" && currentPrompt.imageUrl && (
-        // Conteúdo do exame (não decoração): visível durante todo o item da
-        // Parte 4. Fica ABAIXO do painel da IHM — em cima encavalava o
-        // visualizador de áudio e competia com a descrição (achado da Sabrina).
-        <div className="card p-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={currentPrompt.imageUrl}
-            alt="Imagem para descrição e história"
-            className="mx-auto max-h-[28rem] w-full rounded-md object-contain"
-          />
-        </div>
-      )}
     </div>
   );
 }

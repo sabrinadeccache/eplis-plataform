@@ -793,29 +793,39 @@ export function PilotInterviewRunner({
           elapsedLabel={formatElapsed(elapsed)}
         />
 
-        <div className="iv-stage">
-          <RecLight active={isRecording} />
-          <div className="iv-orb-wrap">
-            <AudioOrb state={orbState} analyser={micAnalyser} />
-          </div>
-          <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
+        <div className={`iv-stage${contextImage ? " iv-stage--split" : ""}`}>
+          <div className="iv-stage-col">
+            <RecLight active={isRecording} />
+            <div className="iv-orb-wrap">
+              <AudioOrb state={orbState} analyser={micAnalyser} />
+            </div>
+            <StatusLine tone={status.tone} title={status.title} sub={status.sub} />
 
-          {currentStep.kind === "response" &&
-            recorderState === "ready" &&
-            mode === "official" &&
-            !speaking && (
-              <ResponseStartTimer
-                key={stepKey(part, itemIndex, stepIndex)}
-                seconds={5}
-                onExpire={startRecording}
-              />
+            {currentStep.kind === "response" &&
+              recorderState === "ready" &&
+              mode === "official" &&
+              !speaking && (
+                <ResponseStartTimer
+                  key={stepKey(part, itemIndex, stepIndex)}
+                  seconds={5}
+                  onExpire={startRecording}
+                />
+              )}
+
+            {repetitionCount >= 1 && recorderState === "ready" && (
+              <p className="iv-sub text-caution">
+                Pedir a pergunta de novo pesa no critério Compreensão — o relatório final
+                sinaliza isso.
+              </p>
             )}
+          </div>
 
-          {repetitionCount >= 1 && recorderState === "ready" && (
-            <p className="iv-sub text-caution">
-              Pedir a pergunta de novo pesa no critério Compreensão — o relatório final sinaliza
-              isso.
-            </p>
+          {contextImage && (
+            // Conteúdo do exame (não decoração): no mesmo retângulo da IHM.
+            <figure className="iv-ctx-img">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={contextImage.src} alt={contextImage.alt} />
+            </figure>
           )}
         </div>
 
@@ -832,20 +842,6 @@ export function PilotInterviewRunner({
           </div>
         )}
       </div>
-
-      {contextImage && (
-        // Conteúdo do exame (não decoração). Fica ABAIXO do painel da IHM — em
-        // cima encavalava o visualizador de áudio e competia com a descrição
-        // (achado da Sabrina no teste).
-        <div className="card p-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={contextImage.src}
-            alt={contextImage.alt}
-            className="mx-auto max-h-[28rem] w-full rounded-md object-contain"
-          />
-        </div>
-      )}
     </div>
   );
 }

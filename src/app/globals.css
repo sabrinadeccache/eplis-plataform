@@ -434,6 +434,54 @@ body {
     height: 100%;
     display: block;
   }
+  /* Palco com imagem de conteúdo (Parte 4 / complicação da Parte 2): no
+     desktop o visualizador e a imagem dividem o MESMO retângulo — orb menor à
+     esquerda, imagem à direita — pra o aluno não precisar rolar a tela. No
+     mobile empilha (imagem abaixo). */
+  .iv-stage-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.15rem;
+    position: relative;
+    z-index: 1;
+  }
+  .iv-ctx-img {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    width: 100%;
+    max-width: 30rem;
+  }
+  .iv-ctx-img img {
+    display: block;
+    width: 100%;
+    max-height: 20rem;
+    object-fit: contain;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--sunken);
+  }
+  @media (min-width: 768px) {
+    .iv-stage--split {
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+    }
+    .iv-stage--split .iv-orb-wrap {
+      width: 11rem;
+      height: 11rem;
+    }
+    .iv-stage--split .iv-ctx-img {
+      flex: 0 1 44%;
+      max-width: 24rem;
+    }
+    .iv-stage--split .iv-ctx-img img {
+      max-height: 17rem;
+    }
+  }
+
   .iv-status {
     position: relative;
     z-index: 1;
