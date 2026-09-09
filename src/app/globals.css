@@ -465,17 +465,23 @@ body {
   @media (min-width: 768px) {
     .iv-stage--split {
       flex-direction: row;
+      flex-wrap: nowrap;
       align-items: center;
       justify-content: center;
-      gap: 2rem;
+      gap: 1.75rem;
+    }
+    .iv-stage--split .iv-stage-col {
+      flex: 1 1 0;
+      min-width: 0;
     }
     .iv-stage--split .iv-orb-wrap {
-      width: 11rem;
-      height: 11rem;
+      width: 10.5rem;
+      height: 10.5rem;
     }
     .iv-stage--split .iv-ctx-img {
-      flex: 0 1 44%;
+      flex: 0 0 46%;
       max-width: 24rem;
+      width: auto;
     }
     .iv-stage--split .iv-ctx-img img {
       max-height: 17rem;
