@@ -32,17 +32,29 @@ export async function startAttempt(mode: SimulationMode, startPart?: Part) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) redirect("/login");
 
-  const attemptsToday = await countAttemptsToday(supabase, auth.user.id);
-  if (attemptsToday >= PILOT_DAILY_ATTEMPT_LIMIT) {
-    throw new Error(
-      `Limite de ${PILOT_DAILY_ATTEMPT_LIMIT} simulados do SDEA por dia atingido. Tente novamente amanhã.`,
-    );
-  }
-
   // Atalho de QA: começar numa parte específica (ex.: testar só a Parte 4).
   // Só pra contas em dev-testers.ts — candidato real sempre começa na Parte 1.
-  const part: Part =
-    startPart && isDevTester(auth.user.email) ? startPart : "part1";
+  const qaShortcut = Boolean(startPart) && isDevTester(auth.user.email);
+  const part: Part = qaShortcut && startPart ? startPart : "part1";
+
+  if (qaShortcut) {
+    // Abandona qualquer practice em andamento pra não deixar tentativa órfã
+    // "pausada" aparecendo no /sdea depois.
+    await supabase
+      .from("simulation_attempts")
+      .update({ status: "abandoned" })
+      .eq("user_id", auth.user.id)
+      .eq("phase", "pilot_interview")
+      .eq("mode", "practice")
+      .eq("status", "in_progress");
+  } else {
+    const attemptsToday = await countAttemptsToday(supabase, auth.user.id);
+    if (attemptsToday >= PILOT_DAILY_ATTEMPT_LIMIT) {
+      throw new Error(
+        `Limite de ${PILOT_DAILY_ATTEMPT_LIMIT} simulados do SDEA por dia atingido. Tente novamente amanhã.`,
+      );
+    }
+  }
 
   const { data, error } = await supabase
     .from("simulation_attempts")

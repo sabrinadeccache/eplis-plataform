@@ -76,11 +76,14 @@ export default async function SdeaPage() {
         startOfficial={startAttempt.bind(null, "official")}
       />
 
-      {isDevTester(user.email) && !pausedAttempt && !limitReached && (
+      {isDevTester(user.email) && (
         <form action={startAttempt.bind(null, "practice", "part4")} className="mt-4">
           <button type="submit" className="btn btn-secondary !text-xs">
             ▶ Practice direto na Parte 4 (teste)
           </button>
+          <p className="mt-1 text-xs text-muted">
+            Só aparece para contas de teste. Ignora o limite diário e o simulado pausado.
+          </p>
         </form>
       )}
     </AppShell>
