@@ -468,23 +468,33 @@ body {
       flex-wrap: nowrap;
       align-items: center;
       justify-content: center;
-      gap: 1.75rem;
+      gap: 2rem;
+      padding: 1.75rem;
     }
+    /* Coluna do visualizador: encolhe pro conteúdo, a imagem fica com o resto. */
     .iv-stage--split .iv-stage-col {
-      flex: 1 1 0;
-      min-width: 0;
+      flex: 0 0 auto;
+      width: 12rem;
+      text-align: center;
     }
     .iv-stage--split .iv-orb-wrap {
-      width: 10.5rem;
-      height: 10.5rem;
+      width: 8rem;
+      height: 8rem;
+    }
+    .iv-stage--split .iv-status .iv-now {
+      font-size: 0.9rem;
+    }
+    .iv-stage--split .iv-status .iv-sub {
+      font-size: 0.72rem;
+      max-width: 100%;
     }
     .iv-stage--split .iv-ctx-img {
-      flex: 0 0 46%;
-      max-width: 24rem;
+      flex: 1 1 auto;
+      max-width: 36rem;
       width: auto;
     }
     .iv-stage--split .iv-ctx-img img {
-      max-height: 17rem;
+      max-height: 20rem;
     }
   }
 
