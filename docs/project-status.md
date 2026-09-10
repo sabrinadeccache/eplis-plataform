@@ -57,6 +57,32 @@ produção depois do deploy. Verificado em produção: cadastro pedindo `role=ad
 grava `pilot`; candidato não cria tentativa posicionada (`permission denied`);
 backend cria tentativa normalmente. **M1 + M1.1 fechados e no ar.**
 
+### Fechamento das pendências operacionais da M1
+
+- **Leaked password protection:** ativada no Supabase Auth em produção
+  (`Prevent use of leaked passwords`), com confirmação de salvamento no dashboard.
+- **Smoke E2E em produção:** Fase 1 Practice iniciou, reproduziu áudio, aceitou resposta
+  e exibiu correção/transcrição. Fase 2 e SDEA Practice iniciaram com usuários de QA
+  descartáveis, renderizaram a entrevista e pausaram/retomaram corretamente. Usuários,
+  tentativas e respostas descartáveis foram removidos ao final; as tentativas de
+  evidência do usuário original foram preservadas.
+- **Histórico de migrations:** `supabase_migrations.schema_migrations` reconciliado com
+  os 20 arquivos versionados em `supabase/migrations/`, sem reexecutar SQL. Os registros
+  avulsos criados pelo SQL Editor foram substituídos pelas versões canônicas dos arquivos.
+- **Stash antigo:** `stash@{0}` (`tentativa auth/status descartada`) removido após confirmar
+  que seu conteúdo já estava integralmente superado pela M1/M1.1.
+- **Advisor `function_search_path_mutable`:** as 5 funções do M1/M1.1 subiram sem
+  `search_path` fixo. `20260910140000_pin_m1_function_search_path.sql` pina
+  `search_path = public` nelas (aditiva, sem dependência de código) — aplicada em
+  produção, advisor limpo.
+
+**Pendência aberta (não é do M1):** advisor ainda acusa `public.rls_auto_enable()` —
+função `SECURITY DEFINER` ligada ao event trigger `ensure_rls` (auto-habilita RLS em
+tabela nova), executável por `anon`/`authenticated` via `/rpc`. Foi aplicada fora das
+migrations versionadas. Chamada direta é idempotente/inofensiva, mas o certo é
+`revoke execute ... from anon, authenticated` (event trigger não precisa do GRANT).
+Decidir se entra numa migration ou fica como está.
+
 ### Vulnerabilidades confirmadas (reproduzidas em SQL)
 
 Rodando como candidato autenticado direto no PostgREST (sem passar pelo app):
@@ -102,14 +128,13 @@ restrição de coluna; RLS não filtra coluna.
 - Mocks de `phase2/pilot actions.test.ts` atualizados pro novo fluxo (`authorize`).
 - **95/95 vitest, `tsc`/`lint`/`build` limpos.**
 
-### Achado de infra — histórico de migrations dessincronizado
+### Infra — histórico de migrations reconciliado
 
-O `supabase_migrations.schema_migrations` do projeto de produção só registra **2 das
-18** migrations (as outras foram aplicadas via `scripts/apply-migration.mjs`, que não
-gravava o histórico). Consequência: **`merge_branch` do Supabase não serve** — tentaria
-re-rodar migrations já aplicadas. A migration do M1 vai pra produção pelo fluxo normal
-(`scripts/apply-migration.mjs`). Considerar reconciliar o histórico depois (registrar as
-16 faltantes em `schema_migrations` sem re-executar).
+O histórico esteve dessincronizado porque migrations antigas foram aplicadas por
+`scripts/apply-migration.mjs`, sem registrar `supabase_migrations.schema_migrations`.
+Em 2026-09-10, o histórico de produção foi reconciliado transacionalmente com os **20**
+arquivos versionados em `supabase/migrations/`, sem reexecutar nenhuma migration. A
+consulta posterior confirmou correspondência exata entre as 20 versões locais e remotas.
 
 ### Infra — Supabase Pro
 
