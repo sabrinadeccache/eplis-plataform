@@ -15,5 +15,10 @@ export async function getCurrentUser(): Promise<UserRow | null> {
     .eq("id", auth.user.id)
     .single();
 
-  return (data as UserRow | null) ?? null;
+  const user = (data as UserRow | null) ?? null;
+
+  // Conta `inactive`/`blocked` não opera: as páginas que usam getCurrentUser
+  // tratam `null` como "sem sessão" e mandam pro /login (o proxy também barra,
+  // mas cada superfície precisa checar — proxy é só UX).
+  return user?.status === "active" ? user : null;
 }

@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { authorizeOrRedirect } from "@/lib/auth/authorize";
 import { generateSpeechAudio } from "@/lib/ai/openai";
 import {
   generateFinalReport,
@@ -19,10 +21,9 @@ import type { Part, SimulationMode } from "@/types/database";
 
 export async function startAttempt(mode: SimulationMode) {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login");
+  const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
 
-  const attemptsToday = await countAttemptsToday(supabase, auth.user.id);
+  const attemptsToday = await countAttemptsToday(supabase, user.id);
   if (attemptsToday >= DAILY_ATTEMPT_LIMIT) {
     throw new Error(
       `Limite de ${DAILY_ATTEMPT_LIMIT} simulados da Fase 2 por dia atingido. Tente novamente amanhã.`,
@@ -32,7 +33,7 @@ export async function startAttempt(mode: SimulationMode) {
   const { data, error } = await supabase
     .from("simulation_attempts")
     .insert({
-      user_id: auth.user.id,
+      user_id: user.id,
       phase: "phase2",
       mode,
       status: "in_progress",
@@ -57,14 +58,14 @@ export async function startAttempt(mode: SimulationMode) {
 // cria + redireciona pra uma nova, igual `startAttempt`.
 export async function abandonAndRestartAttempt(attemptId: string) {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login");
+  const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
 
-  await supabase
+  const admin = createAdminClient();
+  await admin
     .from("simulation_attempts")
     .update({ status: "abandoned" })
     .eq("id", attemptId)
-    .eq("user_id", auth.user.id)
+    .eq("user_id", user.id)
     .eq("status", "in_progress");
 
   await startAttempt("practice");
@@ -105,9 +106,8 @@ export async function generateSpeech(
   }
 
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login?erro=sessao");
-  await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
+  const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
+  await assertOwnAttemptInProgress(supabase, attemptId, user.id);
 
   const { buffer, mimeType } = await generateSpeechAudio(text);
   return { audioBase64: buffer.toString("base64"), mimeType };
@@ -115,10 +115,10 @@ export async function generateSpeech(
 
 export async function advanceState(attemptId: string): Promise<{ finished: boolean }> {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login?erro=sessao");
+  const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
+  const admin = createAdminClient();
 
-  const attempt = await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
+  const attempt = await assertOwnAttemptInProgress(supabase, attemptId, user.id);
   const currentPart = attempt.current_part as Part;
   const currentItemIndex = attempt.current_item_index ?? 0;
 
@@ -163,7 +163,7 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
 
     const report = await generateFinalReport(rows, attempt.mode as SimulationMode);
 
-    await supabase.from("simulation_feedbacks").insert({
+    await admin.from("simulation_feedbacks").insert({
       simulation_attempt_id: attemptId,
       phase: "phase2",
       overall_score: report.overall,
@@ -178,10 +178,11 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
       model_version: MODEL_VERSION,
     });
 
-    await supabase
+    await admin
       .from("simulation_attempts")
       .update({ status: "completed", finished_at: new Date().toISOString(), current_state: "INTERVIEW_FINISHED" })
-      .eq("id", attemptId);
+      .eq("id", attemptId)
+      .eq("user_id", user.id);
 
     // Modo `official` não gera feedback curto por resposta durante a entrevista
     // (fidelidade ao exame real). Mas o demonstrativo por parte na tela de
@@ -204,7 +205,7 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
               r.transcript,
               FEEDBACK_STAGES.includes(r.stage as FeedbackStage) ? (r.stage as FeedbackStage) : undefined,
             );
-            await supabase
+            await admin
               .from("phase2_responses")
               .update({ ai_feedback: feedback, ai_provider: "anthropic", model_version: MODEL_VERSION })
               .eq("id", r.id);
@@ -218,10 +219,11 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
     return { finished: true };
   }
 
-  await supabase
+  await admin
     .from("simulation_attempts")
     .update({ current_part: next.part, current_item_index: next.itemIndex, current_state: next.stateLabel })
-    .eq("id", attemptId);
+    .eq("id", attemptId)
+    .eq("user_id", user.id);
 
   return { finished: false };
 }

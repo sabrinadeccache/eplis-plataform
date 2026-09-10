@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { authorize, AuthError } from "@/lib/auth/authorize";
 import { transcribeAudio } from "@/lib/ai/openai";
 import { generatePilotResponseFeedback, MODEL_VERSION, type PilotFeedbackStage } from "@/lib/ai/pilot-track";
 import { pilotResponseContext } from "@/services/simulations/pilot/context";
@@ -28,17 +30,26 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) {
-    return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  let userId: string;
+  try {
+    const { user } = await authorize(supabase, { track: "pilot" });
+    userId = user.id;
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
   }
 
   let attempt;
   try {
-    attempt = await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
+    attempt = await assertOwnAttemptInProgress(supabase, attemptId, userId);
   } catch {
     return NextResponse.json({ error: "Tentativa inválida ou já finalizada." }, { status: 403 });
   }
+
+  // Escrita em pilot_responses só via service_role. Autorização + posse acima.
+  const admin = createAdminClient();
 
   const { data: prompt } = await supabase
     .from("pilot_prompts")
@@ -66,7 +77,7 @@ export async function POST(request: Request) {
   const { data: publicUrlData } = supabase.storage.from("pilot-recordings").getPublicUrl(path);
   const audioUrl = publicUrlData.publicUrl;
 
-  const { data: inserted, error: insertError } = await supabase
+  const { data: inserted, error: insertError } = await admin
     .from("pilot_responses")
     .insert({
       simulation_attempt_id: attemptId,
@@ -84,7 +95,7 @@ export async function POST(request: Request) {
   }
 
   const transcript = await transcribeAudio(buffer, `audio.${ext}`);
-  await supabase
+  await admin
     .from("pilot_responses")
     .update({ transcript, processing_status: "analyzing" })
     .eq("id", inserted.id);
@@ -92,7 +103,7 @@ export async function POST(request: Request) {
   // Modo `official` não dá nenhum feedback durante o simulado (só o relatório
   // final) — mesmo comportamento/motivo já documentado na Fase 2.
   if (attempt.mode === "official") {
-    await supabase
+    await admin
       .from("pilot_responses")
       .update({ processing_status: "done", finished_at: new Date().toISOString() })
       .eq("id", inserted.id);
@@ -107,7 +118,7 @@ export async function POST(request: Request) {
     transcript,
     NO_FEEDBACK_STAGES.includes(stage) ? undefined : (stage as PilotFeedbackStage),
   );
-  await supabase
+  await admin
     .from("pilot_responses")
     .update({
       ai_feedback: feedback,
