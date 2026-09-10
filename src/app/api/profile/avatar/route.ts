@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { authorize, AuthError } from "@/lib/auth/authorize";
 
 const ALLOWED_MIME_TO_EXT: Record<string, string> = {
   "image/png": "png",
@@ -14,9 +15,15 @@ const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 // protocolo Flight que as Server Actions usam pra decodificar argumentos.
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) {
-    return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  let userId: string;
+  try {
+    const { user } = await authorize(supabase);
+    userId = user.id;
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
   }
 
   const formData = await request.formData();
@@ -38,7 +45,7 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   // Caminho fixo por usuário (upsert) — sempre sobrescreve a mesma foto, sem
   // acumular versões antigas no bucket.
-  const path = `${auth.user.id}/avatar.${ext}`;
+  const path = `${userId}/avatar.${ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from("avatars")
@@ -58,7 +65,7 @@ export async function POST(request: Request) {
   const { error: updateError } = await supabase
     .from("users")
     .update({ avatar_url: avatarUrl })
-    .eq("id", auth.user.id);
+    .eq("id", userId);
   if (updateError) {
     return NextResponse.json(
       { error: "Não foi possível salvar a foto de perfil." },

@@ -26,6 +26,32 @@ Nota de processo: a migration chegou a ser aplicada antes do deploy do código e
 revertida na hora (código antigo + triggers = Fase 1/2/SDEA quebradas). A ordem
 correta está no cabeçalho da migration — código primeiro, migration depois.
 
+### M1.1 — correções da revisão do M1 (2 P0 + 2 P1)
+
+Revisão apontou 4 falhas. `20260910120000_m1_1_harden_signup_and_attempt_insert.sql`
++ código:
+
+- **P0 — cadastro pedia `role='admin'`:** `handle_new_user()` copiava
+  `raw_user_meta_data->>'role'` cru (a validação no form é só client-side; o enum tem
+  `admin`). Agora o trigger só aceita `pilot`/`air_traffic_controller`; qualquer outro
+  valor (incl. `admin`) vira `pilot`. `target_exam` e `operational_profile` passam a ser
+  derivados/validados do papel seguro. Papel admin só por SQL/backend.
+- **P0 — INSERT de tentativa aceitava posição/estado do cliente:** o guard só zerava
+  status/score/finished_at; `current_part`/`current_item_index`/`current_state`/
+  `elapsed_seconds` passavam. Agora `authenticated` não faz **nenhuma** escrita em
+  `simulation_attempts` (policy `insert` + GRANT removidos); `startAttempt()` das 3
+  trilhas insere via `service_role`, posição inicial derivada no servidor.
+- **P1 — perfil não usava `authorize()`:** `updateProfile`, `updatePassword`
+  (`src/lib/auth/actions.ts`) e a route `POST /api/profile/avatar` só checavam a sessão.
+  Agora chamam `authorize()` (gate de `status='active'`), não dependem do proxy.
+- **P1 — sonda SQL de conta bloqueada quebrada + faltavam casos:**
+  `supabase/tests/m1_rls_probes.sql` reescrito (prep como `postgres`, só os ataques como
+  `authenticated`, cada um com EXCEPTION próprio). 12 casos, incl. cadastro malicioso,
+  INSERT com posição forjada, conta bloqueada e ação administrativa positiva —
+  **12/12 PASS** na branch `m1-1-verify` (apagada).
+
+`src/lib/auth/actions.test.ts` novo (4). **99/99 vitest, tsc/eslint/build limpos.**
+
 ### Vulnerabilidades confirmadas (reproduzidas em SQL)
 
 Rodando como candidato autenticado direto no PostgREST (sem passar pelo app):

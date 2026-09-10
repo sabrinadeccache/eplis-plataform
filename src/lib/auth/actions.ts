@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { authorize, AuthError } from "@/lib/auth/authorize";
 import { evaluatePasswordStrength } from "@/lib/auth/password";
 import {
   readProfileExtraFields,
@@ -172,20 +173,30 @@ export async function updateProfile(
   }
 
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) {
-    return { error: "Sessão expirada. Entre novamente." };
+  const authed = await authorize(supabase).then(
+    (ok) => ok,
+    (e: unknown) => (e instanceof AuthError ? e : new AuthError("unauthenticated", "erro")),
+  );
+  if (authed instanceof AuthError) {
+    return {
+      error:
+        authed.code === "inactive"
+          ? "Esta conta está bloqueada ou inativa."
+          : "Sessão expirada. Entre novamente.",
+    };
   }
+  const userId = authed.user.id;
 
   // Profissão e perfil operacional definem a trilha do exame e não são
   // autoatendimento — só o administrador altera (a pedido, via contato). Este
   // action toca nome + os campos pessoais; qualquer `role`/`operational_profile`
-  // no corpo da requisição é ignorado de propósito.
+  // no corpo da requisição é ignorado de propósito (e o trigger
+  // `users_block_privileged_columns` recusa se vier).
   const extra = readProfileExtraFields(formData);
   const { error } = await supabase
     .from("users")
     .update({ name, ...extra })
-    .eq("id", auth.user.id);
+    .eq("id", userId);
 
   if (error) {
     return { error: "Não foi possível salvar as alterações. Tente novamente." };
@@ -221,6 +232,18 @@ export async function updatePassword(
   }
 
   const supabase = await createClient();
+  const authed = await authorize(supabase).then(
+    (ok) => ok,
+    (e: unknown) => (e instanceof AuthError ? e : new AuthError("unauthenticated", "erro")),
+  );
+  if (authed instanceof AuthError) {
+    return {
+      error:
+        authed.code === "inactive"
+          ? "Esta conta está bloqueada ou inativa."
+          : "Sessão expirada. Entre novamente.",
+    };
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user?.email) {
     return { error: "Sessão expirada. Entre novamente." };

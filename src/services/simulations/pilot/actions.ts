@@ -38,10 +38,11 @@ export async function startAttempt(mode: SimulationMode, startPart?: Part) {
   const qaShortcut = Boolean(startPart) && isDevTester(user.email);
   const part: Part = qaShortcut && startPart ? startPart : "part1";
 
+  const admin = createAdminClient();
+
   if (qaShortcut) {
     // Abandona qualquer practice em andamento pra não deixar tentativa órfã
     // "pausada" aparecendo no /sdea depois.
-    const admin = createAdminClient();
     await admin
       .from("simulation_attempts")
       .update({ status: "abandoned" })
@@ -58,7 +59,9 @@ export async function startAttempt(mode: SimulationMode, startPart?: Part) {
     }
   }
 
-  const { data, error } = await supabase
+  // Criação da tentativa (incl. posição/estado inicial) vem do servidor via
+  // service_role — `authenticated` não escreve em simulation_attempts.
+  const { data, error } = await admin
     .from("simulation_attempts")
     .insert({
       user_id: user.id,
