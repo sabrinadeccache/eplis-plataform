@@ -29,6 +29,13 @@ type FakeAttempt = {
 };
 
 let authUserId: string | null = "user-1";
+let authUserRow: Record<string, unknown> | null = {
+  id: "user-1",
+  name: "Piloto",
+  email: "piloto@test.local",
+  role: "pilot",
+  status: "active",
+};
 let attempt: FakeAttempt | null = {
   id: "attempt-1",
   user_id: "user-1",
@@ -44,7 +51,7 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: {
       getUser: vi.fn(async () => ({ data: { user: authUserId ? { id: authUserId } : null } })),
     },
-    from() {
+    from(table: string) {
       return {
         select() {
           return this;
@@ -53,6 +60,9 @@ vi.mock("@/lib/supabase/server", () => ({
           return this;
         },
         single: async () => ({ data: attempt }),
+        maybeSingle: async () => ({
+          data: table === "users" ? authUserRow : attempt,
+        }),
       };
     },
   })),
@@ -63,6 +73,13 @@ const { generateSpeech } = await import("./actions");
 beforeEach(() => {
   vi.clearAllMocks();
   authUserId = "user-1";
+  authUserRow = {
+    id: "user-1",
+    name: "Piloto",
+    email: "piloto@test.local",
+    role: "pilot",
+    status: "active",
+  };
   attempt = {
     id: "attempt-1",
     user_id: "user-1",

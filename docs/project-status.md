@@ -13,6 +13,79 @@ conteúdo próprio, baseado nas especificações públicas do exame.
 
 Responsável: Sabrina Deccache.
 
+## Retomada — 2026-09-10 (Plano de correção — Milestone 1: autorização, RLS e status)
+
+Primeiro milestone do "plano de correção" (`Downloads/plano de correção.docx`) — os
+P0 de segurança. Commitado na branch `security/auth-rls-status` (não mergeado).
+
+**Estado da produção:** a migration foi aplicada cedo demais e **revertida na hora**
+(código antigo + triggers ativos quebrava Fase 1/2/SDEA). Produção está no schema
+pré-M1 (funcional, ainda vulnerável). **Sequência correta:** 1) merge em `main` →
+deploy do código novo (funciona sem a migration); 2) reaplicar
+`20260910000000_lock_privileged_writes.sql`. Ver cabeçalho da migration.
+
+### Vulnerabilidades confirmadas (reproduzidas em SQL)
+
+Rodando como candidato autenticado direto no PostgREST (sem passar pelo app):
+- `update users set role='admin' where id=<eu>` **funcionava** → auto-promoção a admin.
+- `update users set status=...` **funcionava**.
+- `update simulation_attempts set score=6, status='completed', mode='official'` na
+  própria tentativa **funcionava** → candidato forjava resultado oficial aprovado.
+- `insert phase1_answers (... is_correct=true)` **funcionava** → inflava score da Fase 1.
+
+Causa: policies `for update using (auth.uid() = id/user_id)` sem `WITH CHECK` nem
+restrição de coluna; RLS não filtra coluna.
+
+### Correção
+
+- **Migration `20260910000000_lock_privileged_writes.sql`** (aditiva/reversível):
+  triggers `BEFORE` + `public.is_privileged_writer()` (`current_user in
+  (service_role,postgres,supabase_admin,supabase_auth_admin)`). `users`: titular não
+  altera `role/status/operational_profile/target_exam/email`. `simulation_attempts`:
+  `authenticated` não faz `UPDATE` nenhum (posição/estado/nota/ciclo de vida são
+  derivados no servidor); no `INSERT` só cria a própria tentativa "limpa" e **só se
+  `status='active'`**. `phase1_answers`/`simulation_feedbacks`/`phase2_responses`/
+  `pilot_responses`: escrita só via `service_role`. `revoke execute` em
+  `handle_new_user` (advisor).
+- **`src/lib/auth/authorize.ts`** — função autoritativa única (sessão válida → carrega
+  `users` → exige `status='active'` → aplica trilha `controller`/`pilot` → `AuthError`
+  tipado). Aplicada em **todas** as Server Actions de Fase 1/2/SDEA e nas 2 route
+  handlers de `submit-response`. `authorizeOrRedirect` para as actions de formulário.
+- **`src/lib/supabase/admin.ts`** — client `service_role` server-side; usado só depois
+  de `authorize()` + verificação de dono, para as escritas que o candidato não pode
+  fazer (nota/estado/posição da tentativa, relatório, transcrição/feedback das
+  respostas). `SUPABASE_SERVICE_ROLE_KEY` já está no `.env.local` e nas vars da Vercel.
+- **`src/lib/supabase/proxy.ts`** — checa `status` em toda rota (não só nas públicas):
+  conta removida/`inactive`/`blocked` com sessão antiga é deslogada e mandada pro
+  `/login?erro=bloqueada`. `getCurrentUser` passa a devolver `null` se não-`active`.
+- **`src/lib/auth/session.ts`** já filtra `status='active'`.
+
+### Testes
+
+- `src/lib/auth/authorize.test.ts` (10) — sem sessão, sem linha em `users`, `inactive`/
+  `blocked`, trilha errada, admin nas duas trilhas, redirects.
+- `supabase/tests/m1_rls_probes.sql` — sondas de elevação de privilégio (falhavam antes,
+  passam depois). Rodadas na branch Supabase de teste `m1-auth-rls`.
+- Mocks de `phase2/pilot actions.test.ts` atualizados pro novo fluxo (`authorize`).
+- **95/95 vitest, `tsc`/`lint`/`build` limpos.**
+
+### Achado de infra — histórico de migrations dessincronizado
+
+O `supabase_migrations.schema_migrations` do projeto de produção só registra **2 das
+18** migrations (as outras foram aplicadas via `scripts/apply-migration.mjs`, que não
+gravava o histórico). Consequência: **`merge_branch` do Supabase não serve** — tentaria
+re-rodar migrations já aplicadas. A migration do M1 vai pra produção pelo fluxo normal
+(`scripts/apply-migration.mjs`). Considerar reconciliar o histórico depois (registrar as
+16 faltantes em `schema_migrations` sem re-executar).
+
+### Infra — Supabase Pro
+
+Org `hnhboswcygsjdczakfif` foi pro **plano Pro** (US$ 25/mês) — libera branching (usado
+pra testar RLS de forma fiel, já que não há Docker/Supabase CLI nesta máquina) e tira o
+pause de 7 dias por inatividade (risco real no lançamento). Branch de teste
+`m1-auth-rls` (`rsdtwanefpywozxvobhb`) — **apagar quando o M1 fechar** (custo ~US$
+0,01/h).
+
 ## Retomada — 2026-09-10 (Fase 1: +130 áudios / +130 perguntas)
 
 Ampliação do pool da Fase 1 a partir do mapa oficial da Sabrina

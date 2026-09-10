@@ -58,25 +58,33 @@ export async function updateSession(request: NextRequest) {
     return redirectTo("/login");
   }
 
-  if (data.user && isPublicPath) {
-    // Sessão de auth válida mas sem linha em `public.users` (conta removida, ou
-    // o trigger `handle_new_user` falhou no cadastro): sem tratar, /login
-    // redireciona pro /dashboard, que não acha o perfil (`getCurrentUser` →
-    // null) e volta pro /login — loop "too many redirects". Encerra a sessão e
-    // deixa o /login renderizar. Só sai da rota pública se o perfil existir de
-    // fato (erro de rede na consulta não desloga ninguém).
+  if (data.user) {
+    // Sessão de auth válida — confere a linha em `public.users` em TODA rota
+    // (não só nas públicas): conta removida, `handle_new_user` que falhou no
+    // cadastro, ou conta `inactive`/`blocked` não podem navegar no app com uma
+    // sessão antiga ainda válida. Sem tratar, /login redireciona pro /dashboard,
+    // que não acha o perfil e volta pro /login — loop "too many redirects".
+    // Só age se a consulta respondeu (erro de rede não desloga ninguém).
+    // Isto é UX/porta de entrada — a autorização de verdade é `authorize()`
+    // dentro de cada Route Handler / Server Action.
     const { data: profile, error: profileError } = await supabase
       .from("users")
-      .select("id")
+      .select("id, status")
       .eq("id", data.user.id)
       .maybeSingle();
 
-    if (!profileError && !profile) {
+    if (!profileError && (!profile || profile.status !== "active")) {
       await supabase.auth.signOut();
-      return redirectTo("/login?erro=conta");
+      return redirectTo(
+        profile?.status === "blocked" || profile?.status === "inactive"
+          ? "/login?erro=bloqueada"
+          : "/login?erro=conta",
+      );
     }
 
-    return redirectTo("/dashboard");
+    if (isPublicPath) {
+      return redirectTo("/dashboard");
+    }
   }
 
   return supabaseResponse;

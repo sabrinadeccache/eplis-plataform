@@ -2,18 +2,19 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { authorizeOrRedirect } from "@/lib/auth/authorize";
 import type { McqOption, SimulationMode } from "@/types/database";
 
 const PRACTICE_COUNTS = [10, 20, 30];
 
 export async function startAttempt(mode: SimulationMode, formData?: FormData) {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login");
+  const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
 
   const { data, error } = await supabase
     .from("simulation_attempts")
-    .insert({ user_id: auth.user.id, phase: "phase1", mode, status: "in_progress" })
+    .insert({ user_id: user.id, phase: "phase1", mode, status: "in_progress" })
     .select("id")
     .single();
 
@@ -63,10 +64,9 @@ export async function recordAnswer(
   selectedOption: McqOption,
 ): Promise<RecordAnswerResult> {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login?erro=sessao");
+  const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
 
-  const mode = await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
+  const mode = await assertOwnAttemptInProgress(supabase, attemptId, user.id);
 
   const { data: question } = await supabase
     .from("phase1_questions")
@@ -78,7 +78,11 @@ export async function recordAnswer(
 
   const isCorrect = question.correct_option === selectedOption;
 
-  await supabase.from("phase1_answers").insert({
+  // `is_correct` é derivado aqui (opção escolhida vs. `correct_option`) e
+  // gravado via service_role — `authenticated` não insere em phase1_answers,
+  // senão daria pra forjar acertos e inflar o score.
+  const admin = createAdminClient();
+  await admin.from("phase1_answers").insert({
     simulation_attempt_id: attemptId,
     question_id: questionId,
     selected_option: selectedOption,
@@ -103,10 +107,9 @@ export async function recordAnswer(
 
 export async function finishAttempt(attemptId: string) {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login?erro=sessao");
+  const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
 
-  await assertOwnAttemptInProgress(supabase, attemptId, auth.user.id);
+  await assertOwnAttemptInProgress(supabase, attemptId, user.id);
 
   const { count } = await supabase
     .from("phase1_answers")
@@ -116,10 +119,14 @@ export async function finishAttempt(attemptId: string) {
 
   const score = count ?? 0;
 
-  await supabase
+  // Nota e ciclo de vida da tentativa são gravados só pelo servidor
+  // (service_role) — o role `authenticated` está bloqueado por trigger/RLS.
+  const admin = createAdminClient();
+  await admin
     .from("simulation_attempts")
     .update({ status: "completed", finished_at: new Date().toISOString(), score })
-    .eq("id", attemptId);
+    .eq("id", attemptId)
+    .eq("user_id", user.id);
 
   return { score };
 }

@@ -11,11 +11,13 @@ export function LoginForm({
   justReset,
   justSignedUp,
   accountGone,
+  accountBlocked,
   sessionExpired,
 }: {
   justReset: boolean;
   justSignedUp?: boolean;
   accountGone?: boolean;
+  accountBlocked?: boolean;
   sessionExpired?: boolean;
 }) {
   const [state, formAction] = useActionState(signIn, initialState);
@@ -33,6 +35,13 @@ export function LoginForm({
         <p role="status" className="note note-caution">
           Sua sessão foi encerrada porque esta conta não está mais ativa. Entre novamente
           ou crie uma nova conta.
+        </p>
+      )}
+
+      {accountBlocked && (
+        <p role="alert" className="note note-caution">
+          Esta conta está bloqueada ou inativa. Fale com o administrador para revisar o
+          acesso.
         </p>
       )}
 
