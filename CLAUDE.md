@@ -29,12 +29,41 @@ confirmação de e-mail no cadastro.
 
 - Não reabrir decisões já registradas em `docs/project-status.md` sem motivo novo —
   várias vieram de especificações oficiais do EPLIS, não são arbitrárias.
-- Migrations ficam em `supabase/migrations/`, aplicadas via `scripts/apply-migration.mjs`
-  usando `SUPABASE_DB_URL` (`.env.local`) enquanto não há Supabase CLI/MCP autorizado
-  nesta máquina. **`SUPABASE_DB_URL` aponta pro Session pooler** (host
-  `aws-0-<região>.pooler.supabase.com`, usuário `postgres.<projeto>`), não pro host de
-  conexão direta (`db.<projeto>.supabase.co`) — esse último é IPv6-only no Supabase e
-  falha com `ENOTFOUND` em rede sem IPv6 (achado real, ver `docs/project-status.md`).
+- Migrations ficam em `supabase/migrations/`. Aplicar em produção por **Supabase MCP
+  `apply_migration`** (registra no `supabase_migrations.schema_migrations`) ou por
+  `scripts/apply-migration.mjs` usando `SUPABASE_DB_URL` (`.env.local`). O MCP está
+  conectado e com escrita nesta máquina (projeto `eplis-plataform` =
+  `nkjnvmuatkibrvfsojmp`, org no plano **Pro** → branching disponível pra testar
+  migration/RLS de forma fiel; **sempre `delete_branch`** ao terminar). **`SUPABASE_DB_URL`
+  aponta pro Session pooler** (host `aws-0-<região>.pooler.supabase.com`, usuário
+  `postgres.<projeto>`), não pro host de conexão direta (`db.<projeto>.supabase.co`) —
+  esse último é IPv6-only no Supabase e falha com `ENOTFOUND` em rede sem IPv6 (achado
+  real, ver `docs/project-status.md`).
+- **Mudança que acopla schema + código (ex.: trigger que bloqueia uma escrita que o
+  código antigo fazia): deploy do código PRIMEIRO (`main`), migration DEPOIS.** Errar a
+  ordem quebrou Fase 1/2/SDEA em produção durante o M1 (código antigo escrevia
+  `simulation_attempts` com o client do usuário → trigger novo rejeitava). O código novo
+  precisa funcionar SEM a migration; a migration só endurece. Ver cabeçalho das
+  migrations `20260910*`.
+- **Autorização no servidor passa por `authorize()` (`src/lib/auth/authorize.ts`) — em
+  TODA Server Action e Route Handler protegida** (Fase 1/2/SDEA, perfil, avatar). Exige
+  sessão + carrega `public.users` + exige `status = 'active'` + aplica trilha
+  (`controller` = EPLIS, `pilot` = SDEA) → `AuthError` tipado. `authorizeOrRedirect` para
+  actions de formulário. `src/proxy.ts` também checa, mas é só UX — **proxy não substitui
+  `authorize()`**.
+- **Escrita de nota/estado/posição/ciclo-de-vida de tentativa, relatório de feedback, e
+  transcrição/feedback de resposta: só via `service_role`** (`createAdminClient()`,
+  `src/lib/supabase/admin.ts`), e só depois de `authorize()` + verificação de dono. O
+  role `authenticated` está bloqueado nessas escritas por trigger `BEFORE` +
+  policies/GRANT removidos (`public.is_privileged_writer()` libera só
+  `service_role`/`postgres`/`supabase_admin`). `startAttempt`, `advanceState`,
+  `finishAttempt`, `recordElapsedSeconds`, `submit-response` já usam o admin client.
+- **`public.users`: o titular só edita campos de perfil** (nome, telefone, cidade…).
+  `role`/`status`/`operational_profile`/`target_exam`/`email` são reservados ao backend —
+  trigger `users_block_privileged_columns` recusa. `handle_new_user` faz clamp do `role`
+  do cadastro pra `pilot`/`air_traffic_controller` (metadata do signup é controlável pelo
+  cliente; o enum tem `admin`). Papel admin só por SQL — ver
+  `memory/prod-account-role-pilot.md`.
 - **Toda migration que cria uma tabela nova precisa de `GRANT` explícito pro role
   `authenticated`** (`grant select/insert/update on public.<tabela> to authenticated;`),
   além das RLS policies — RLS só é avaliado depois que o GRANT de tabela já passou.

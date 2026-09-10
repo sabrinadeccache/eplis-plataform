@@ -20,6 +20,30 @@ users
 precisa nelas pra trilha do piloto (SDEA). `phase1_*` e `phase2_*` seguem exclusivas do
 controlador (EPLIS); `pilot_*` são exclusivas do piloto (SDEA) — ver seção 9.
 
+### Trava de segurança (Milestone 1, 2026-09-10)
+
+Migrations `20260910000000` + `20260910120000`. Para o candidato (`authenticated`):
+
+- **`users`** — só edita campos de perfil. `role`/`status`/`operational_profile`/
+  `target_exam`/`email`/`created_at` são recusados pelo trigger
+  `users_block_privileged_columns`. `handle_new_user` faz clamp do `role` do cadastro
+  pra `pilot`/`air_traffic_controller` (nunca `admin`).
+- **`simulation_attempts`** — `authenticated` **não escreve** (policies + GRANT de
+  `insert`/`update` removidos; trigger `simulation_attempts_guard` recusa). Criação e
+  todo o ciclo de vida (posição, estado, `score`, `finished_at`) vêm do servidor via
+  `service_role`.
+- **`phase1_answers` / `simulation_feedbacks` / `phase2_responses` / `pilot_responses`**
+  — `insert`/`update` só via `service_role` (policies + GRANT removidos; triggers
+  `*_block_client_writes`). `select` de linhas próprias continua liberado.
+- Helper `public.is_privileged_writer()` (`current_user in service_role/postgres/
+  supabase_admin/supabase_auth_admin`) é o que os triggers checam.
+- Autorização de aplicação: `src/lib/auth/authorize.ts` (sessão + `status='active'` +
+  trilha) em toda Server Action / Route Handler; escritas privilegiadas por
+  `src/lib/supabase/admin.ts`.
+- `rls_auto_enable()` / event trigger `ensure_rls`: habilita RLS automática em toda
+  tabela nova de `public` (migration `20260910160000`; event trigger criado à mão fora
+  de migration — exige superusuário).
+
 ---
 
 ## 1. `users`

@@ -15,16 +15,57 @@ Responsável: Sabrina Deccache.
 
 ## Retomada — 2026-09-10 (Plano de correção — Milestone 1: autorização, RLS e status)
 
-Primeiro milestone do "plano de correção" (`Downloads/plano de correção.docx`) — os
-P0 de segurança. **Fechado e no ar** (merge `0b8ead2` em `main` → deploy Vercel;
-migration `20260910000000_lock_privileged_writes.sql` aplicada em produção depois do
-deploy). Verificado em produção: candidato não promove `role`, backend continua
-editando `users` normalmente; 5/5 triggers instalados; policies de `update` em
-`simulation_attempts` e de `insert` em feedback/answers/responses removidas.
+### Estado atual (ponto de retomada)
 
-Nota de processo: a migration chegou a ser aplicada antes do deploy do código e foi
-revertida na hora (código antigo + triggers = Fase 1/2/SDEA quebradas). A ordem
-correta está no cabeçalho da migration — código primeiro, migration depois.
+- **M1 + M1.1 fechados, no ar e verificados em produção.** Advisor de segurança do
+  Supabase **limpo** (0 lints). `main` na frente do `0aee056` por 7 commits (até
+  `2772f62`).
+- **Próximo passo:** Milestone 2 do plano de correção — guard autoritativo de item,
+  idempotência de resposta, validação de arquivo/duração/MIME, rate limit por
+  usuário/tentativa/item. Antes de começar, a Sabrina ia fazer um clique-teste real de
+  Fase 1/2/SDEA practice + um cadastro novo (mexeu em `handle_new_user` e no fluxo de
+  criação de tentativa).
+- **Plano completo:** `Downloads/plano de correção.docx` — 7 milestones, ordem de PRs no
+  fim. M1 = PR `security/auth-rls-status` + `security/m1-1-hardening` (ambos já
+  mergeados). M2 = `security/attempt-audio-guards`.
+- **Supabase MCP disponível nesta máquina** (projeto `eplis-plataform` =
+  `nkjnvmuatkibrvfsojmp`), com escrita: `apply_migration`, `execute_sql`, `get_advisors`,
+  branching (org no plano **Pro**). Migrations em produção passam a poder ir por MCP
+  `apply_migration` (registra no histórico) **ou** `scripts/apply-migration.mjs`.
+- **Ordem de deploy para mudança que acopla schema + código:** deploy do código primeiro
+  (merge em `main`), migration depois. Ver cabeçalho das migrations M1. Errar a ordem
+  quebrou Fase 1/2/SDEA em produção por instantes durante o desenvolvimento (revertido na
+  hora).
+
+### O que o M1 garante
+
+- Candidato não altera **papel, status nem resultados** — RLS + triggers `BEFORE` +
+  `public.is_privileged_writer()`; escritas de nota/estado/posição/relatório/transcrição
+  só via `service_role` (`src/lib/supabase/admin.ts`), sempre após `authorize()` +
+  verificação de dono.
+- Cadastro **não** consegue pedir `role='admin'` — `handle_new_user()` faz clamp pra
+  `pilot`/`air_traffic_controller`; `target_exam`/`operational_profile` derivados do papel
+  seguro.
+- Tentativa **não** aceita posição/estado/nota do cliente — `authenticated` não escreve
+  em `simulation_attempts` (policy + GRANT de `insert`/`update` removidos);
+  `startAttempt()` das 3 trilhas insere via `service_role`.
+- Conta `inactive`/`blocked` **não opera** — `authorize()` em toda Server Action / Route
+  Handler (Fase 1/2/SDEA + perfil + avatar), `src/proxy.ts` desloga sessão antiga,
+  `getCurrentUser` devolve `null`.
+- Autorização centralizada em **`src/lib/auth/authorize.ts`** — nenhuma superfície
+  protegida depende só do proxy.
+
+### Migrations do M1 (todas em produção + registradas no histórico)
+
+| Arquivo | O quê |
+|---|---|
+| `20260910000000_lock_privileged_writes.sql` | triggers/policies/GRANT: trava elevação de privilégio |
+| `20260910120000_m1_1_harden_signup_and_attempt_insert.sql` | clamp de `role` no cadastro; INSERT de tentativa só por `service_role` |
+| `20260910140000_pin_m1_function_search_path.sql` | `set search_path = public` nas 5 funções (advisor) |
+| `20260910160000_version_and_harden_rls_auto_enable.sql` | versiona `rls_auto_enable()` + `revoke execute` de anon/authenticated (advisor limpo) |
+
+Nota de processo: a migration `20260910000000` chegou a ser aplicada antes do deploy do
+código e foi revertida na hora. A ordem correta está no cabeçalho das migrations.
 
 ### M1.1 — correções da revisão do M1 (2 P0 + 2 P1)
 
@@ -76,12 +117,16 @@ backend cria tentativa normalmente. **M1 + M1.1 fechados e no ar.**
   `search_path = public` nelas (aditiva, sem dependência de código) — aplicada em
   produção, advisor limpo.
 
-**Pendência aberta (não é do M1):** advisor ainda acusa `public.rls_auto_enable()` —
-função `SECURITY DEFINER` ligada ao event trigger `ensure_rls` (auto-habilita RLS em
-tabela nova), executável por `anon`/`authenticated` via `/rpc`. Foi aplicada fora das
-migrations versionadas. Chamada direta é idempotente/inofensiva, mas o certo é
-`revoke execute ... from anon, authenticated` (event trigger não precisa do GRANT).
-Decidir se entra numa migration ou fica como está.
+- **`public.rls_auto_enable()` / event trigger `ensure_rls`:** rede de segurança que
+  habilita RLS em toda tabela nova do schema `public`. Existia só em produção (aplicada
+  fora das migrations). `20260910160000_version_and_harden_rls_auto_enable.sql` passa a
+  ser a fonte canônica da **função** e revoga o `execute` de `anon`/`authenticated`
+  (advisor 0028/0029). O **event trigger** em si não entra na migration (`create event
+  trigger` exige superusuário, `postgres` não tem) — num rebuild do zero rodar
+  manualmente: `create event trigger ensure_rls on ddl_command_end execute function
+  public.rls_auto_enable();`.
+
+**Advisor de segurança do Supabase: limpo (0 lints) em 2026-09-10.**
 
 ### Vulnerabilidades confirmadas (reproduzidas em SQL)
 
@@ -123,10 +168,15 @@ restrição de coluna; RLS não filtra coluna.
 
 - `src/lib/auth/authorize.test.ts` (10) — sem sessão, sem linha em `users`, `inactive`/
   `blocked`, trilha errada, admin nas duas trilhas, redirects.
-- `supabase/tests/m1_rls_probes.sql` — sondas de elevação de privilégio (falhavam antes,
-  passam depois). Rodadas na branch Supabase de teste `m1-auth-rls`.
+- `src/lib/auth/actions.test.ts` (4) — `updateProfile`/`updatePassword` recusam conta
+  `blocked`/`inactive` sem tocar no banco.
+- `supabase/tests/m1_rls_probes.sql` — 12 sondas de elevação de privilégio + cadastro
+  malicioso + INSERT com posição forjada + conta bloqueada + ação admin positiva
+  (falhavam antes, passam depois). Rodar aplicando todas as migrations numa branch
+  Supabase de teste; prep como `postgres`, ataques como `authenticated`. Última execução:
+  12/12 PASS.
 - Mocks de `phase2/pilot actions.test.ts` atualizados pro novo fluxo (`authorize`).
-- **95/95 vitest, `tsc`/`lint`/`build` limpos.**
+- **99/99 vitest, `tsc`/`eslint`/`build` limpos.**
 
 ### Infra — histórico de migrations reconciliado
 
@@ -136,13 +186,18 @@ Em 2026-09-10, o histórico de produção foi reconciliado transacionalmente com
 arquivos versionados em `supabase/migrations/`, sem reexecutar nenhuma migration. A
 consulta posterior confirmou correspondência exata entre as 20 versões locais e remotas.
 
-### Infra — Supabase Pro
+### Infra — Supabase Pro + MCP
 
-Org `hnhboswcygsjdczakfif` foi pro **plano Pro** (US$ 25/mês) — libera branching (usado
-pra testar RLS de forma fiel, já que não há Docker/Supabase CLI nesta máquina) e tira o
-pause de 7 dias por inatividade (risco real no lançamento). Branch de teste
-`m1-auth-rls` (`rsdtwanefpywozxvobhb`) — **apagar quando o M1 fechar** (custo ~US$
-0,01/h).
+- Org `hnhboswcygsjdczakfif` foi pro **plano Pro** (US$ 25/mês): libera branching (testar
+  RLS/migrations de forma fiel — não há Docker/Supabase CLI local) e tira o pause de 7
+  dias por inatividade (risco no lançamento). Branch = ~US$ 0,01/h; **sempre apagar** a
+  branch de teste ao terminar (`delete_branch`).
+- **Supabase MCP** está conectado e com escrita nesta máquina. Fluxo de teste de
+  migration: `create_branch` → `execute_sql` pra montar o schema (a branch só replica as
+  migrations registradas; se o histórico estiver ok, replica sozinha) → rodar
+  `m1_rls_probes.sql` → `delete_branch`. Migration de produção: `apply_migration` (via
+  MCP, registra no histórico) ou `scripts/apply-migration.mjs`.
+- Branches de teste `m1-auth-rls` / `m1-1-verify` já foram apagadas.
 
 ## Retomada — 2026-09-10 (Fase 1: +130 áudios / +130 perguntas)
 
