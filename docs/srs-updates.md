@@ -32,6 +32,13 @@ pois a compreensão do item sem ajuda é o que está sendo avaliado. *Fase: F5.*
 permitir retomar uma tentativa `official` interrompida sem reconstruir a posição a
 partir do histórico de `phase2_responses`. *Fase: F5.*
 
+**RF-57** — Ao montar um simulado da Fase 1, o sistema deve priorizar perguntas que o
+usuário ainda não respondeu em tentativas anteriores (practice ou official), só
+reintroduzindo perguntas já vistas quando o pool inédito se esgota — para reduzir a
+memorização do banco com o tempo. Implementado em
+`getRandomQuizQuestions(limit, userId?)`. *(Melhoria de produto, pedido da Sabrina —
+não vem de especificação oficial. Fase 2/SDEA ainda não têm equivalente.)*
+
 ## Requisitos existentes alterados
 
 **RF-12 (esclarecimento)** — O tempo de reescuta do áudio na Fase 1 (segunda escuta

@@ -1,10 +1,10 @@
-// Utilitário de DEV: apaga TODAS as tentativas/respostas de teste da Fase 1 e
-// da Fase 2 (simulation_attempts, phase1_answers, phase2_responses,
-// simulation_feedbacks), pra deixar o banco limpo antes de uma nova rodada de
-// testes. NÃO apaga usuários, conteúdo (phase1_questions/audios,
-// phase2_prompts) nem objetos de Storage. Ordem de delete respeita as FKs
-// (respostas/feedbacks antes das tentativas). Uso:
-// `node scripts/dev-clean-test-data.mjs`.
+// Utilitário de DEV: apaga TODAS as tentativas/respostas de teste da Fase 1, da
+// Fase 2 e da entrevista do piloto (simulation_attempts, phase1_answers,
+// phase2_responses, pilot_responses, simulation_feedbacks), pra deixar o banco
+// limpo antes de uma nova rodada de testes. NÃO apaga usuários, conteúdo
+// (phase1_questions/audios, phase2_prompts, pilot_prompts) nem objetos de
+// Storage. Ordem de delete respeita as FKs (respostas/feedbacks antes das
+// tentativas). Uso: `node scripts/dev-clean-test-data.mjs`.
 import { readFileSync } from "node:fs";
 import { Client } from "pg";
 
@@ -26,12 +26,14 @@ async function main() {
 
   const feedbacks = await client.query(`delete from public.simulation_feedbacks`);
   const phase2Responses = await client.query(`delete from public.phase2_responses`);
+  const pilotResponses = await client.query(`delete from public.pilot_responses`);
   const phase1Answers = await client.query(`delete from public.phase1_answers`);
   const attempts = await client.query(`delete from public.simulation_attempts`);
 
   console.log(
     `Limpo: ${feedbacks.rowCount} simulation_feedbacks, ${phase2Responses.rowCount} phase2_responses, ` +
-      `${phase1Answers.rowCount} phase1_answers, ${attempts.rowCount} simulation_attempts.`,
+      `${pilotResponses.rowCount} pilot_responses, ${phase1Answers.rowCount} phase1_answers, ` +
+      `${attempts.rowCount} simulation_attempts.`,
   );
 
   await client.end();

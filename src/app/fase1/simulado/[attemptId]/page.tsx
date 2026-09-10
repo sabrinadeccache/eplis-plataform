@@ -34,7 +34,7 @@ export default async function Fase1SimuladoPage({
   const requested = Number(n);
   const count = isPractice && PRACTICE_COUNTS.includes(requested) ? requested : 30;
 
-  const questions = await getRandomQuizQuestions(count);
+  const questions = await getRandomQuizQuestions(count, user.id);
   if (questions.length === 0) {
     return (
       <AppShell user={user}>

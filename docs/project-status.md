@@ -13,6 +13,73 @@ conteúdo próprio, baseado nas especificações públicas do exame.
 
 Responsável: Sabrina Deccache.
 
+## Retomada — 2026-09-10 (Fase 1: +130 áudios / +130 perguntas)
+
+Ampliação do pool da Fase 1 a partir do mapa oficial da Sabrina
+(`Material Didático/ATC/Phase 1 - Audios/mapa_questões.xlsx`, aba "FASE 1") + os 130
+arquivos `audio060.mp3`–`audio189.mp3` na mesma pasta.
+
+- **Script novo:** `scripts/add-phase1-audios-batch3.mjs` (+ dados em
+  `scripts/data/phase1-batch3.json`, extraídos/normalizados do xlsx). Aditivo, UPSERT por
+  título (natural key `"SITUAÇÃO — ITEM"`, com sufixo `(2)`/`(3)`… quando o mesmo voo
+  aparece em vários cortes); recusa reinserir perguntas de um áudio que já tenha
+  `phase1_answers` real. Idempotente. Sobe cada mp3 pro bucket `phase1-audios/<arquivo>`
+  com `x-upsert`.
+- `category`/`difficulty` são **inferidos por heurística** (o xlsx não traz) — metadados
+  descritivos, não entram na seleção do simulado. `accent = "mixed"`, `duration_seconds`
+  via `afinfo` (31–39s).
+- **Rodado em produção:** 130 áudios inseridos, 130 perguntas. Pool ativo passou de
+  42 áudios / 60 perguntas para **172 áudios / 189 perguntas**. HEAD nas URLs públicas →
+  200 `audio/mpeg`. `lint` limpo (nenhuma mudança em código do app).
+- Não mexeu nos 43 áudios / 60 perguntas antigos (audio01–10 + lote `v*`) nem nos 3
+  `phase1_answers` reais.
+
+### Não-repetição de conteúdo na Fase 1 (mesmo dia)
+
+`getRandomQuizQuestions(limit, userId?)` (`src/services/simulations/phase1/queries.ts`)
+agora, quando recebe `userId`, **prioriza perguntas que o usuário ainda não respondeu**
+em nenhuma tentativa anterior (practice ou official): embaralha o pool, põe as inéditas
+na frente e só volta a incluir as já vistas quando as inéditas acabam — aí o ciclo
+recomeça, embaralhado. Falha "aberto" (sem exclusão) se a consulta de histórico der erro.
+`src/app/fase1/simulado/[attemptId]/page.tsx` passa `user.id`. Novo
+`queries.test.ts` (4 testes → 85/85). `tsc`/`lint`/`build` limpos.
+
+**Fase 2 / SDEA ainda NÃO têm isso** — `getSequenceForAttempt` faz shuffle determinístico
+por `attemptId` (varia entre tentativas, mas não olha o que o candidato já viu). Se for
+pra fazer, é por parte, contra `phase2_responses` / `phase2_prompt_id`.
+
+### Fase 2 · Parte 2: pool refeito — 80 situações por perfil (mesmo dia)
+
+Pool da Parte 2 substituído pelo mapa oficial da Sabrina
+(`Material Didático/ATC/Phase 2/mapa_questoes_part2.xlsx`): **320 situações, 80 por perfil
+operacional** (TWR, APP, ACC, COpM). Era 30 por perfil.
+
+- **Script novo:** `scripts/replace-phase2-part2-situations.mjs` (+ dados em
+  `scripts/data/phase2-part2.json`). **Não faz DELETE** (21 `phase2_responses` reais
+  apontam pros prompts da Parte 2 via FK) — UPSERT por
+  `(part='part2', operational_profile, order_index)`: as linhas 1..30 existentes foram
+  reescritas in-place, 31..80 inseridas; `order_index > 80` seria desativado (nenhum caso).
+  Idempotente. `expected_duration_seconds = 45`, sem imagem.
+- **Rodado em produção:** 120 atualizados + 200 inseridos → 320 ativos (80/perfil,
+  `order_index` 1–80). As ~21 respostas de teste antigas agora exibem o texto novo nas
+  telas de resultado (aceito — é dado de teste). `lint`/`test` limpos (nenhuma mudança em
+  código do app).
+- ⚠️ O seed legado `scripts/seed-phase2-prompts.mjs` ainda tem uma lista `PART2` de 12
+  placeholders em `operational_profile = 'general'` — se rodado, injeta esses 12 no pool
+  de **todos** os perfis (o filtro de `queries.ts` é `[profile, 'general']`). Hoje não há
+  nenhuma linha `general` de `part2` ativa; **não rodar aquele seed** para Parte 2.
+
+### Banco limpo para nova rodada de testes (mesmo dia)
+
+`scripts/dev-clean-test-data.mjs` rodado em produção — agora também apaga
+`pilot_responses` (a entrevista do piloto, que faltava). Zerou:
+3 `simulation_feedbacks`, 35 `phase2_responses`, 47 `pilot_responses`,
+3 `phase1_answers`, 24 `simulation_attempts`. **Conteúdo intacto** (172 áudios Fase 1,
+320 prompts Parte 2, pilot_prompts) e **usuários mantidos** (4: `sdeccache` admin +
+`brucewayne`/`peterparker` pilotos + `ravenclaw` APP). Buckets `phase2-recordings` (50 objetos)
+e `pilot-recordings` (82 objetos) também esvaziados — eram só gravações de voz órfãs dos
+testes. Buckets de conteúdo (`phase1-audios`, `phase2-images`, `pilot-*`) intactos.
+
 ## Infraestrutura já provisionada
 
 - **Vercel**: projeto `orion-flight-lab/eplis-trainer` (deploy em produção:

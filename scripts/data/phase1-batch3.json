@@ -1,0 +1,2342 @@
+[
+  {
+    "file": "audio060.mp3",
+    "title": "Instrução de proa — Turkish Airlines 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Turkish 4 Mike Lima heavy, New York radar contact, good morning, climb to maintain 1-1-thousand 1-1-thousand, Turkey, 4 Mike Lima Turkish 4 Mike Lima heavy, turn left heading 0-5-0 Left heading 0-5-0, Turkey 4 Mike Lima Turkish 4 Mike Lima heavy, what's your speed? Now speed 1 minus 0. Now you got to pick it up to 250, please get behind you.",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 050",
+        "optionB": "Proa 080",
+        "optionC": "Proa 110",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio061.mp3",
+    "title": "Altitude instruída — Turkish Airlines 787",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "We have a problem about the landing gear, so request holding over available points. You're requesting what? Requesting holding over available points, Turkish, for Mykema. Problem is we will turn back to Kennedy. Okay, Turkish, for Mykema Heavy, amend your altitude, maintain 7000, make a right turn, heading 180. Heading 1A0 and maintain 7000 Turkish for Machima. We will call you for further information. Hey Turkish.",
+    "questions": [
+      {
+        "prompt": "Qual altitude ou nível é mencionado na comunicação?",
+        "optionA": "8000",
+        "optionB": "6000",
+        "optionC": "7000",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio062.mp3",
+    "title": "Curva à direita — Turkish Airlines 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "If possible, we can hold over available points. Turkish 4-mike Lima heavy, okay. Make a right turn now, heading 040. Make a right turn heading 040, Turkish 4-mike Lima. Turkish 4-mike Lima heavy, you can start present position hold there. Standard legs, 7000. Let me know what's going on, when you know. I have a call for the Turkish formation to maintain 7000 and hold the cover of the Turkish position for Machinima. Confirm my right turn. Confirm what? I'm sorry? Confirm my right turn in holding Turkish formation for Machinima.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "Manter a proa atual",
+        "optionB": "À direita",
+        "optionC": "À esquerda",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio063.mp3",
+    "title": "Retorno ao aeroporto — Turkish Airlines 787",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "We are talking with the company, probably we will meet few judges and after that we will request for landing to come back to Canada airport. Okay, I just need to let the tower know and when you get a chance, I need a little more information. Tell me when you can, exactly what's going on. Okay, third reform. I will give you further information in a couple of minutes.",
+    "questions": [
+      {
+        "prompt": "Qual intenção de voo é manifestada ou discutida?",
+        "optionA": "Retornar ao aeroporto",
+        "optionB": "Prosseguir necessariamente ao destino",
+        "optionC": "Cancelar a comunicação por rádio",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio064.mp3",
+    "title": "Informação sobre combustível — Turkish Airlines 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Let's go ahead. Yes, we will need fuel that is on, it will take approximately 20 to 25 minutes. And the fuel passenger is 20 to 25 plus 60, sorry, 60. So we don't have any dangerous goods, request fuel that is on during holding. Turkish floor mic, we may have you, I'm sorry. Sorry, save the tolls on board one more time. POTUS is 240, 240, Turkey, 4 miles to go.",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Bagagem de passageiros",
+        "optionB": "Iluminação do aeroporto",
+        "optionC": "Combustível",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio065.mp3",
+    "title": "Informação sobre combustível — Turkish Airlines 787 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "I think the remaining fuel will be 30.8 kg. 30.8 kg, thanks. You need to hold and burn fuel for a while, is that what you said? Yeah, during closing unit, fuel's up in Turkish for Machima. Turkish for Machima, did you copy the information? Turkish for Mike Lima heavy what you need to hold for the burn fuel. I'm Say it again, please",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Iluminação do aeroporto",
+        "optionB": "Combustível",
+        "optionC": "Bagagem de passageiros",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio066.mp3",
+    "title": "Informação sobre combustível — Turkish Airlines 787 (3)",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "What is the nature of your merge, what's going on? We have landing gear problem, landing gear, we cannot request landing gear, 34 machima. Okay, project. Are we clear for shield dumping during 40, 34 machima? You need what, I'm sorry? You can feel something. You can feel something during calling. Yes, that is approved. As requested. You can feel something. Approved.",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Combustível",
+        "optionB": "Bagagem de passageiros",
+        "optionC": "Iluminação do aeroporto",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio067.mp3",
+    "title": "Curva à direita — Turkish Airlines 787 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Continue the fuel dumping. Continue your right turn also. Heading 180. Continue right turn. Heading 180. Turkish 4-mine-lima. Turkish 4-mine-lima. We haven't started fuel dumping yet, so we are waiting for the flare. I'm turning right heading 180. Okay, just fly heading 180 and you can achieve with the fuel dumping at any time you'd like.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À esquerda",
+        "optionB": "Manter a proa atual",
+        "optionC": "À direita",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio068.mp3",
+    "title": "Curva à direita — Turkish Airlines 787 (3)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "We are starting. Turkish four-mike Lima heavy turn right heading 220. Turn right heading 220, Turkish four-mike Lima. Turkish four-mike Lima heavy change of plans. When you are able to come in to Kennedy again, it's going to be runway 31 left. It's going to be runway 31, let's confirm, Turkish four-mike Lima. runway 3, one night, copy, Turkey's format, we call you ready for departure, thank you.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "Manter a proa atual",
+        "optionB": "À direita",
+        "optionC": "À esquerda",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio069.mp3",
+    "title": "Instrução de proa — Turkish Airlines 787 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "before you can start making your way back into Kennedy. Approximately 1 minutes after that we will request a direct approach for runway 3-1 at Turkish-4 Maikima. Turkish-4 Maikima heavy okay make a right turn now heading 0-4-0. Make a right turn heading 0-4-0 Turkish-4 Maikima. Turkish-4 Maikima heavy turn right heading 1-8-0. Sir, am I taking 182, 34, Mike Lima? Circus 4, Mike Lima, have you turned right?",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 040",
+        "optionB": "Proa 070",
+        "optionC": "Proa 100",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio070.mp3",
+    "title": "Procedimento de aproximação — Turkish Airlines 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Okay, heading zero, five, zero. I'm heading zero, five, zero, 34 micrometer. Before approach. Circus, four micrometer heavy, you said you're ready for the approach? Affirmative, we are ready for approach. I'm at three, one, that's 34 micrometer. Okay, Roger that. Circus, four micrometer heavy, descend, maintain at 3,000. Please take please call to service 4, Mike Leemah. Service 4, Mike Leemah, can you do a visual approach from runway 3-1 left? Thank you, sir.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Abastecimento no pátio",
+        "optionB": "Inspeção de bagagem",
+        "optionC": "Aproximação",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio071.mp3",
+    "title": "Controle de velocidade — Turkish Airlines 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Turkish 4 Mike Lima heavy, okay. We should like the ILS runway 3-1-M. Turkish 4 Mike Lima heavy, turn left heading 3-2-0. Turkish 4 Mike Lima heavy, descend maintain 2,000. Tenement includes Turkish 4-mike device. Turkish 4-mike, we may have you reduce speed to 170. Say again, Turkish 4-mike, we must... Yes, reduce speed to 170. Oh, I just...",
+    "questions": [
+      {
+        "prompt": "Qual parâmetro de voo é discutido?",
+        "optionA": "Quantidade de bagagem",
+        "optionB": "Velocidade",
+        "optionC": "Temperatura da cabine",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio072.mp3",
+    "title": "Pista mencionada — Turkish Airlines 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Turkish 4 Mike Lima Heavy, turn left heading 290, intercept runway 31 Left localizer. Heading 290, intercept localizer runway 31 Left, Turkish 4 Mike Lima. Turkish 4 Mike Lima Heavy, eight miles from MEALS, heading 290, maintain 2,000 until established on the localizer, cleared ILS runway 31 Left approach. Heading 290, maintain 2,000 until established, cleared ILS runway 31 Left, Turkish 4 Mike Lima. Reduce speed to 160.",
+    "questions": [
+      {
+        "prompt": "Qual pista é mencionada na comunicação?",
+        "optionA": "Pista 31 Left",
+        "optionB": "Pista 35",
+        "optionC": "Pista 4",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio073.mp3",
+    "title": "Autorização para pouso — Turkish Airlines 787",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "158, 34, MiK-LIMA Turkish 4, MiK-LIMA, contact tower, 1100.1 1100.1, Turkish 4, MiK-LIMA, good luck Good morning again, Turkish 4, MiK-LIMA, heavy, runway 31 left Turkish 4, MiK-LIMA, tower, try to get Airbus 320 on departure, runway 4 left, runway 31 left, clear to land Thank you very much, we are in the Turkish format. Turkish format, we are in the Turkish equivalent standing by. Thank you, Turkish format.",
+    "questions": [
+      {
+        "prompt": "Qual autorização é dada à aeronave?",
+        "optionA": "Decolar",
+        "optionB": "Entrar em espera",
+        "optionC": "Pousar",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio074.mp3",
+    "title": "Instrução de táxi — Turkish Airlines 787",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Circus 4 Mike, Lima Heavy, can you exit the runway? Uh, turn this over now, we are exiting where Papa Aisler, Turkey, 4 Mike, Lima Heavy. Hey, Circus 4 Mike, Lima Heavy, do you require any assistance? Uh-huh. Uh-huh. Okay, Circus 4 Mike, Lima Heavy, exit Papa Alpha. Alpha, taxi right Papa, and you know where your park is today? Negative, you don't have any information. I think we're Papa ISA and we see you on Papa Turkey. Thank you very much. Thank you very much. Happy Roger. Papa...",
+    "questions": [
+      {
+        "prompt": "Qual operação é discutida no trecho?",
+        "optionA": "Voo em cruzeiro",
+        "optionB": "Táxi da aeronave",
+        "optionC": "Alijamento de combustível",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio075.mp3",
+    "title": "Vetoração radar — American A321neo",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "So contact departure 124.35. I'll let him know. Are you declaring an emergency? Not sure. We'll declare an emergency now. We'll go to 2435. American 2435, contact them 124.35. And departure American 2035 is checking in. We're leveling here at 3,000 and need to go back to the airport. to the airport. American 2035 radar contact, maintain 3,000, if you need to run a checklist you're coming right back. We're going to run a checklist, so we'll need some vectors.",
+    "questions": [
+      {
+        "prompt": "Que tipo de assistência o controle menciona?",
+        "optionA": "Vetoração radar",
+        "optionB": "Reboque no pátio",
+        "optionC": "Abastecimento em voo",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio076.mp3",
+    "title": "Curva à esquerda — American A321neo",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "All right. American 2035, turn left heading 310. 2035, whenever you just second the fuel remaining in the passengers. There's 101 fuels on board and currently call it 39 and a half thousand pounds of fuel on board. American 2035, turn left heading 260. And I want to keep it close to the field, how much longer do you think you need?",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À direita",
+        "optionB": "Manter a proa atual",
+        "optionC": "À esquerda",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio077.mp3",
+    "title": "Procedimento de aproximação — American A321neo",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "40, American 2035. American 2035, contact Philly 128.4. 28.4, American 2035. American 2035, 3000. American 2035, Philly approach for Roger, fly heading of 210. 210, American 2035. about five, one minute, and we'll be ready. Okay. Uh, five minutes before you get on the final, or five minutes before...",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Inspeção de bagagem",
+        "optionB": "Aproximação",
+        "optionC": "Abastecimento no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio078.mp3",
+    "title": "Procedimento de aproximação — American A321neo (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "That should probably work out for the five minutes, so I'll put you right on the final. Alright, 232 and we're doing 190 now, American 2035. American 2035, just curious do you want to hold on the runway for a minute? Do you think when you land it has to get checked out that you're going to be able to exit? We'll be able to exit, American 2035. Okay, thank you. American 2035, just let me know if you want to start to turn on for the final. We'll let you know as far as it is. Roger.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Aproximação",
+        "optionB": "Abastecimento no pátio",
+        "optionC": "Inspeção de bagagem",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio079.mp3",
+    "title": "Mudança de frequência — American A321neo",
+    "category": "ground_operations",
+    "difficulty": "easy",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "1-5-0, head up. Thank you. American 2035, turn left heading 1-2. And your four miles to V1, I mean. That was my localizer. You're cleared to Isle of Zulu. Alright, so 1-2-9, down to 2. Alright, 3-3-2. American 2035, contact tower 118.5. 18.5, 2035.",
+    "questions": [
+      {
+        "prompt": "Qual frequência é mencionada no trecho?",
+        "optionA": "119.0",
+        "optionB": "118.0",
+        "optionC": "118.5",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio080.mp3",
+    "title": "Instrução de táxi — American A321neo",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "Go to land, nine rights, 2035. American 2035, do you need any assistance on the taxi? We do not need any assistance, but we do need to call the company and figure out what gate we're going back to, American 2035. America 2035, no problem, Texas, Sierra and Lima hold a short pop-up.",
+    "questions": [
+      {
+        "prompt": "Qual operação é discutida no trecho?",
+        "optionA": "Voo em cruzeiro",
+        "optionB": "Táxi da aeronave",
+        "optionC": "Alijamento de combustível",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio081.mp3",
+    "title": "Instrução de hold short — Aer Lingus",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 31,
+    "accent": "mixed",
+    "transcript": "CPLM. Right, Juliette, Zulu, hold short of golf. Maintain physical use, Shemok 107. Shemok, where are you going right now? Off the hold short, Q2 right there? No, I instructed you hold short of golf, and that's where you read back. You don't remember that? Uh, apologies sir. Uh, it's, uh, it's a problem. Chairman 107, have you hold your position?",
+    "questions": [
+      {
+        "prompt": "Qual instrução de solo é mencionada?",
+        "optionA": "Aguardar antes do ponto indicado (hold short)",
+        "optionB": "Cruzar a pista imediatamente",
+        "optionC": "Retornar ao portão",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio082.mp3",
+    "title": "Instrução de hold short — Aer Lingus (2)",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 31,
+    "accent": "mixed",
+    "transcript": "Golf taxi ride on Bravo, we'll short a box front. We'll take you to ride on Golf, ride on Bravo, hold short a box front, Shamak 107. Shamak 107, heavy advise when you ready to copy the number down. Go ahead, Shamak 107. The number is... Are we asking for it? No, you're not going to be asking for anybody, sir. It's the tower number.",
+    "questions": [
+      {
+        "prompt": "Qual instrução de solo é mencionada?",
+        "optionA": "Cruzar a pista imediatamente",
+        "optionB": "Retornar ao portão",
+        "optionC": "Aguardar antes do ponto indicado (hold short)",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio083.mp3",
+    "title": "Procedimento de aproximação — WestJet 737",
+    "category": "emergency_fire",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Say again? [Unintelligible] crash-fire-rescue. Roger. [Call sign unintelligible], maintain 2,600 feet, contact approach 128.95. Maintain 2,600, contact departure. [Unintelligible] hold over [unintelligible].",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Inspeção de bagagem",
+        "optionB": "Aproximação",
+        "optionC": "Abastecimento no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio084.mp3",
+    "title": "Procedimento de aproximação — WestJet 737 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "1,600 feet, contact with an approach 1,285, hold over our back. 1,285, go to 2,600, contact the departure, and we're only half of our people to them. Return to our back, hold over our back, 2,600 feet, approach on one direction. Approach 1,285. Copy, autoplate, C-94. I can do the 7-6-3-4 down to you, Lombard. Hi, this is WS-4-1, WS-6-7-6-163, P.E.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Aproximação",
+        "optionB": "Abastecimento no pátio",
+        "optionC": "Inspeção de bagagem",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio085.mp3",
+    "title": "Informação sobre combustível — WestJet 737",
+    "category": "emergency_fire",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "11,600 pounder fuel, WS-257. 11,600 pounder fuel, copy. Uh, search and rescue is on the way to you. WS-256. Confirm any dangers, go to onboard WS-2276. No dangers, go to WS-2276. WS-2276, confirm your engines are off. Start by WS-256. WC2276, the fire department is on the runway.",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Bagagem de passageiros",
+        "optionB": "Iluminação do aeroporto",
+        "optionC": "Combustível",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio086.mp3",
+    "title": "Risco de incêndio — WestJet 737",
+    "category": "emergency_fire",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Right now it's 227-6. Can you confirm if your engines are shut down? Engines are shut down. Right now it's 227-6. Is it OK for fire departments to proceed for the aircraft now? Yes, they can proceed. Right now it's 227-6. Rancho. Right now it's 227-6. Go ahead. Right now it's 227-6. Fire Department is asking if you are going to deploy issues for the emergency flight.",
+    "questions": [
+      {
+        "prompt": "Qual risco ou ocorrência é mencionado?",
+        "optionA": "Perda de bagagem",
+        "optionB": "Incêndio ou indicação de fogo",
+        "optionC": "Formação de gelo na pista",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio087.mp3",
+    "title": "Evacuação da aeronave — WestJet 737",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Okay, we copy, Russia 2676, and later made it, made it, Russia 2676 will be evacuated Okay, now run the starboard side, right?",
+    "questions": [
+      {
+        "prompt": "Qual ação de emergência é mencionada?",
+        "optionA": "Evacuar a aeronave",
+        "optionB": "Iniciar o abastecimento",
+        "optionC": "Prosseguir para o destino",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio088.mp3",
+    "title": "Autorização para decolagem — JetBlue",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 39,
+    "accent": "mixed",
+    "transcript": "You don't understand, JetBlue, 5-1. JetBlue, 5-11, wind 310 at 9, runway 3-1 left, you've got the takeoff. Sure, I've got clear for takeoff, JetBlue, 5-1 left. Takeoff, 47-14, can you count, 3-1 left, line up and wait. More than 90 seconds in position for Indian Trail. 3-1 left, line up and wait, copy offer, jetBlue, 47-14. Uh, Jeffle, can we hold for just 30 seconds? Uh, who's asking, 511? Yeah, 511 can't take out plans and hold for 30 seconds. Uh, what station?",
+    "questions": [
+      {
+        "prompt": "Qual autorização é dada à aeronave?",
+        "optionA": "Pousar",
+        "optionB": "Retornar ao portão",
+        "optionC": "Decolar",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio089.mp3",
+    "title": "Cancelamento da autorização — JetBlue",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 39,
+    "accent": "mixed",
+    "transcript": "It's on to Juliette and Holchota Zulu. Yeah, we're ready to go. Jebu 511, please exit the runway, cancel take-off clearance, enter your Juliette and Holchota Zulu. Really? It's not really, it's a control instruction. You exit the runway, right on Juliette and Holchota Zulu. If you have any further questions or concerns, we can take that off-frequency. Yeah, we understand it, right? I'll give you a whole short of two loops with that loop by the left. Okay, 47, 14, disregard more than 90 seconds in position, 131011, Roman.",
+    "questions": [
+      {
+        "prompt": "O que ocorre com a autorização de decolagem?",
+        "optionA": "Ela é convertida em autorização de pouso",
+        "optionB": "Ela é cancelada",
+        "optionC": "Ela é confirmada sem alterações",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio090.mp3",
+    "title": "Altitude instruída — Delta A220",
+    "category": "traffic_conflict",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "Delta 1630, we just have an indication here, maybe we retain 8,000. Delta 1630, okay, maintain 8,000, what's the issue? Delta 1630 approach. Uh, we're just getting a smile here for Delta 1630. Delta 1630. Okay, just maintain 8,000. There's traffic beneath you at 7,000.",
+    "questions": [
+      {
+        "prompt": "Qual altitude ou nível é mencionado na comunicação?",
+        "optionA": "8,000",
+        "optionB": "9000",
+        "optionC": "7000",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio091.mp3",
+    "title": "Curva à direita — Delta A220",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "We are at turn right heading 360. We are at turn 360. Delta 1630, turn right heading 0201 Abel. Stay fuel and soles on board please. Heading 020, soles on board 95. So you're on board, 13,400. 13,400. So the 1630 rides you're in, did you want...",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À esquerda",
+        "optionB": "Manter a proa atual",
+        "optionC": "À direita",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio092.mp3",
+    "title": "Instrução de proa — Delta A220",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "Yes, we'd like to continue holding Delta 1630. For the 1630, Roger, just keep us advised of your intention. Contact approach, 118.25. 118.25, Delta 1630. Flaps in Delta, 1630. 8000 heading 020. The 60-30 box, the first drive to survive, the clear inspection is whenever you're ready.",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 080",
+        "optionB": "Proa 020",
+        "optionC": "Proa 050",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio093.mp3",
+    "title": "Instrução de proa — Delta A220 (2)",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "We are declaring an emergency. C-30 Roger, expect Atlas runway 3G, left approach, we're going to get back to you in a second. C-30 Sunrise heading 120, make it 8000. 120, 8000, Delta 1630. the",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 120",
+        "optionB": "Proa 150",
+        "optionC": "Proa 180",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio094.mp3",
+    "title": "Contato em outra frequência — Delta A220",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "7000. 7000 Delta, 1630, just to confirm for runway 3311. 1630 in front of us, ILS, 3D, left to first. 3D, left, Delta, 1630. 1630, just to maintain 5000, turn right heading 145. 5000, 145 Delta, 1630. 1630 flight heading 150 contact approach 126.5 126.5 126.5",
+    "questions": [
+      {
+        "prompt": "O que a aeronave é orientada a fazer?",
+        "optionA": "Permanecer em silêncio",
+        "optionB": "Desligar o transponder",
+        "optionC": "Contatar outra frequência",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio095.mp3",
+    "title": "Altitude instruída — Delta A220 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "At the center, maintain 3,000. 3,000, Delta 1630. Delta 1630, turn five degrees to the left. Constantly turbulence. You're going to follow a heavy building, triple seven. Delta 1630. 4,0. At the center, maintain 2,000. 2400, 2000, Delta 1630 Hit the runway I'm sorry, I'm going up Delta 1630",
+    "questions": [
+      {
+        "prompt": "Qual altitude ou nível é mencionado na comunicação?",
+        "optionA": "2000",
+        "optionB": "3,000",
+        "optionC": "4000",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio096.mp3",
+    "title": "Procedimento de aproximação — Delta A220",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "Reachery left, maintain 170 knots. Clear visual, 3DL, 170 knots, Delta 16-30. Delta 16-30, contact the tower on 134.05. 134.05, Delta 16-30. Tower, Delta 16-30, visual 3DL. So for 1630 Boston Jack, caution weight turbulence to a heavy short final, there'll be one depart to Friday arrival. Runway 33 left, continue. 1630. Thanks, all alert vehicles are on.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Aproximação",
+        "optionB": "Abastecimento no pátio",
+        "optionC": "Inspeção de bagagem",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio097.mp3",
+    "title": "Curva à esquerda — Delta A220",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "The left turn is unreadable, but left turn to the right, sir. I'll turn on T2-8 Delta 16-30. Everything okay?",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À direita",
+        "optionB": "Manter a proa atual",
+        "optionC": "À esquerda",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio098.mp3",
+    "title": "Problema no motor — Republic E175",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "5,000, Brickard 4379. Brickard 4379, turn left heading 340. Standby, Brickard 4379, we're going to engine issue. Brickard 4379, Roger. Departure, Brickard 4379, Mayday, would like Vectors 2 JFK, engine 2 fail. Brickard 4379, Roger, maintain 3,000, scan. and you clear to Kennedy the radar vector. 3,000 radar vectors for Kennedy. Precure 43.79.",
+    "questions": [
+      {
+        "prompt": "Qual sistema da aeronave é discutido no trecho?",
+        "optionA": "O sistema de iluminação da cabine",
+        "optionB": "O motor",
+        "optionC": "O rádio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio099.mp3",
+    "title": "Pista mencionada — Republic E175",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "I'm bringing you into a Kennedy, let me know if you need extra time, but right now they're landing runway 13 left. Yeah, can we get some delay vectors please, 43.79. Hey, Brigad, 43.79, Roger. Heading 150. 150, heading 43.79. Breakout 43.78.",
+    "questions": [
+      {
+        "prompt": "Qual pista é mencionada na comunicação?",
+        "optionA": "Pista 13 Left",
+        "optionB": "Pista 17",
+        "optionC": "Pista 22",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio100.mp3",
+    "title": "Procedimento de aproximação — Republic E175",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "One, two, five, point seven. Twenty-five, seven. Brickyard forty-three, seventy-nine, low relay. Okay. Brickyard forty-three, seventy-nine here. Forty-three, seventy-nine, checking in, number two, failure, uh, standby for solos on board, heading one, five, zero, three, thousand. Roger. Brickyard forty-three, seventy-nine, coming up if you want some time, or if you want to be, uh, vectored in, so the Arnav X-ray to two left. Just a little bit of time, Brickyard, forty-three, seventy-nine, what's that approach? Arnav X-ray, runway two, two, left approach. Ok we are careful to freeze the",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Abastecimento no pátio",
+        "optionB": "Inspeção de bagagem",
+        "optionC": "Aproximação",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio101.mp3",
+    "title": "Informação sobre combustível — Republic E175",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Okay, thanks, and then whenever you're ready to give me the fulls on board and fuel in time. Fulls on board, 68th time, we got 13,000 pounds. About 3 hours, 43.79 I'm sorry, say again the number of people. 68, fulls on board, 3 hours, we're at the fuel grid, guard 43.79 Grid, guard 43.79, turn right heading 34.0 Right, 3, for sure, grid, guard 43.79",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Iluminação do aeroporto",
+        "optionB": "Combustível",
+        "optionC": "Bagagem de passageiros",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio102.mp3",
+    "title": "Informação sobre combustível — Republic E175 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Brick Air 43-79 Brick Air 43-79, I can back you in as close as you might, I can go in about 6 miles or 15 We'll do 15 Brick Air 43-79, rods are flooding 360 360, Brick Air 43-79 And it is going to be an overweight landing for Brick Air 43-79 Brick Air 43-79, thanks, and just to confirm, I'm sorry again, the pounds and fuel is 13,000 13,000 Brick Air 43-79 Freaker 43-79, do you expect any of us to be getting out of the runway?",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Combustível",
+        "optionB": "Bagagem de passageiros",
+        "optionC": "Iluminação do aeroporto",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio103.mp3",
+    "title": "Procedimento de aproximação — Republic E175 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Right zero seven zero brick out forty three seventy nine. Break out forty three seventy nine, ready for the approach. Break out forty three seventy nine, Roger turn left turn to two seven zero. Left two seven zero brick out forty three seventy nine. Break out forty three seventy nine, turn off heading two five zero, we're able to right pass it. 2,000-year-old direct, uh, Captain, 340-3789. And, uh, direct copy of the Charlie Alpha Papa India signal. Copy.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Abastecimento no pátio",
+        "optionB": "Inspeção de bagagem",
+        "optionC": "Aproximação",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio104.mp3",
+    "title": "Vetoração radar — Republic E175",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Breakout 43-79, Roger. Heading Q5-0 to draw in the final. Q5-0 to draw in the final. Big guard, 43-79. Turn off on the runway. Turn off the taxiway. Can we have an inspection? We had a loud bang earlier and we're just going to be overweight so we'd like to get the aircraft inspected. Breakout 43-79, Roger. Roger. Freakout 43.79, cleared on a vector 822. Cleared on a vector 822, Freakout 43.79.",
+    "questions": [
+      {
+        "prompt": "Que tipo de assistência o controle menciona?",
+        "optionA": "Abastecimento em voo",
+        "optionB": "Vetoração radar",
+        "optionC": "Reboque no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio105.mp3",
+    "title": "Situação de emergência — Republic E175",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Okay, tower, we got 43.79 emergency aircraft, 2-2-Lufthead, Exeter. We got 43.79, can you tower, we're in 1501 runway 2-2-Lufthead, just to quickly understand the bias, clear the land. 2-2-Lufthead, clear the land, we got 43.79. We got 43.79, do you know if you're going to be able to tech you off and clear? Yeah, we're going to clear the runway, then we like an inspection of the number 2 engine for we got 43.79 to overweight landing. We got 43.79, no problem. If you are not able, that is fine too. The runway is yours.",
+    "questions": [
+      {
+        "prompt": "Como a situação operacional é caracterizada?",
+        "optionA": "Como emergência",
+        "optionB": "Como voo de treinamento",
+        "optionC": "Como operação normal de pátio",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio106.mp3",
+    "title": "Mudança de frequência — Republic E175",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "We've got 43.79. If able, I'd like to write by Juliette. Do you require further assistance? Right, Juliette. We'd just like to write, number 200, in perspective, 43.79. Okay. Do you feel comfortable pulling away up to Yankee, or do you want to stop and be dealing with that? We're just going to pull up right here on a Juliette this Saturday at 43.79. You could stop wherever you're comfortable and switch to 121.65 with the immersion vehicles.",
+    "questions": [
+      {
+        "prompt": "Qual frequência é mencionada no trecho?",
+        "optionA": "122.2",
+        "optionB": "121.2",
+        "optionC": "121.65",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio107.mp3",
+    "title": "Coordenação com manutenção — Delta A350",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "And Tokyo Delta 274, set the freak again. Well, 99.02. 19.02. That's quick. Bye-bye. Tokyo, hello, Delta 227-4, 19.5 for 220. President, there's a photo of your radar, be clear and direct to startable, then I want to make time travelable to 500. Alright, also, and we'd like to request 220, We're working on a maintenance issue, please. At the 504, right to make sure that all... 220, in direct call boat, at the 504.",
+    "questions": [
+      {
+        "prompt": "Com qual setor ou assunto a tripulação está coordenando?",
+        "optionA": "Controle de passaportes",
+        "optionB": "Manutenção",
+        "optionC": "Serviço de bordo",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio108.mp3",
+    "title": "Retorno ao aeroporto — Delta A350",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "It's abnormal, and we're leveling at 220 for now, Delta 274. Delta 274, copy. Let me know when you can fly. Well, go ahead. Thank you. Tokyo Delta 274. Go ahead. I believe we're going to have to come back to Tokyo. We're still talking to the maintenance sector, requesting heading south, so we don't get too far away. Delta 2, the fish, heading 1, 5-0, it's OK. And actually, OK, heading 1, 5-0, thanks, Delta 2. Delta 2, 7-4, I just fly heading 1, 5-0, maintain flight above...",
+    "questions": [
+      {
+        "prompt": "Qual intenção de voo é manifestada ou discutida?",
+        "optionA": "Retornar ao aeroporto",
+        "optionB": "Prosseguir necessariamente ao destino",
+        "optionC": "Cancelar a comunicação por rádio",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio109.mp3",
+    "title": "Altitude instruída — Delta A350",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Okay, sir, heading 150, maintain 220. Yeah, we're still troubleshooting. We'll get back to you in a couple of minutes. Yes, sir, sir. Copy. How many minutes? How long do you need for travel to be? Sir, three to five minutes. Sorry, sir. Three? Three to five minutes. Call it five minutes. Copy. And what is the nature due to flight control program? Engines indication. Engines indication. Copy. Thank you.",
+    "questions": [
+      {
+        "prompt": "Qual altitude ou nível é mencionado na comunicação?",
+        "optionA": "230",
+        "optionB": "210",
+        "optionC": "220",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio110.mp3",
+    "title": "Instrução de proa — Delta A350",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Delta 274, let's fly heading 200, Hong Kong UDF-1, 6-Left, ILS Hey, primitive, heading 200, Delta 274 Delta 274, how about RNP approach, 4-1? I'll see you again Delta, how about approach type, RNP, runway 16-Left I request that I adopt Document 270 That's deja vu from the side, now we won the basement",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 260",
+        "optionB": "Proa 200",
+        "optionC": "Proa 230",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio111.mp3",
+    "title": "Altitude instruída — Delta A350 (2)",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "We request priority at this time, Delta 274, just an indication. Delta 274, copy. Delta 274, turn right 20. Right heading, 220, Delta 274. Delta 274, this time maintain flight level 150. This time maintain flight level 150, Delta 274. This is a 274 design to the Southern International Airport by a present person. Then there is a big town right in the 274.",
+    "questions": [
+      {
+        "prompt": "Qual altitude ou nível é mencionado na comunicação?",
+        "optionA": "150",
+        "optionB": "160",
+        "optionC": "140",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio112.mp3",
+    "title": "Instrução de proa — Delta A350 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Zero, Vector's wireless, 16L, direct to Sandy at this time, correct? Negative, heading 270, radar, Vector, copy. Okay, excellent. 270 heading for now, Delta, 274. Delta, 274, radar. Go ahead. Delta, 274, do you need a peer dump? Negative, Delta, 274. Copy. Seattle 174, Tokyo radar 119,",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 300",
+        "optionB": "Proa 330",
+        "optionC": "Proa 270",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio113.mp3",
+    "title": "Vetoração radar — Delta A350",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Data 274, Tokyo Approach, Tokyo QNH 29083. Roger. Data 274, and Vector 2, LORI. Understand, Vector 2, LORI Delta 274. Data 274, confirm, heading 270, Vector 2, LORI. Heading 270, Delta 2, support. And...",
+    "questions": [
+      {
+        "prompt": "Que tipo de assistência o controle menciona?",
+        "optionA": "Abastecimento em voo",
+        "optionB": "Vetoração radar",
+        "optionC": "Reboque no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio114.mp3",
+    "title": "Indicação de óleo — Delta A350",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Data 274, just confirmation, your trouble is only indicator. Say again for Delta 274. Data 274, you have only indicator trouble. Correct, just low oil pressure indication, Delta 274. Data 274, say again please. A low oil quantity, Delta 274, educational. Educational. Graduate. Thank you.",
+    "questions": [
+      {
+        "prompt": "Qual indicação ou sistema é discutido?",
+        "optionA": "Óleo do motor",
+        "optionB": "Pressurização da cabine",
+        "optionC": "Radar meteorológico",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio115.mp3",
+    "title": "Instrução de descida — Delta A350",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Delta 274, turn right heading 290. Right heading 290, 274. Delta 274, descend 19,000. Descend 19,000, Delta 274. Delta 274, turn right heading 320, descend 19,000. 3-2-0 and 19,000 to 7-4 DT4, turn right heading to 0-1-0 Right heading 0-1-0",
+    "questions": [
+      {
+        "prompt": "Qual ação vertical é instruída ou confirmada?",
+        "optionA": "Subir",
+        "optionB": "Manter-se no solo",
+        "optionC": "Descer",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio116.mp3",
+    "title": "Curva à esquerda — Delta A350",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Delta 274, 9000 Delta 274, Tokyo Radar with us, maintain 9000, now turn left heading 3, I2-0 Maintain 9000, heading 350, Delta 274 Delta 274, turn left heading 320, you can now maintain 8000 Heading 320 to send and maintain 8000 Delta 274. Delta 274, send and maintain 6000.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "Manter a proa atual",
+        "optionB": "À esquerda",
+        "optionC": "À direita",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio117.mp3",
+    "title": "Curva à esquerda — Delta A350 (2)",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Again? There's a system which can affect the reduced speed at 210. I understand. Reduce speed to 210 delta 274 confirmed. Thank you. Reduce speed to 210 for delta 274. Reduce speed 210 delta 274, thank you. Delta 274, time left heading 270. Left heading 270 delta 274. Data 274, descend on the maintain 5,000. Submitted 5,000 on the 274. Data 274, turn left.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À esquerda",
+        "optionB": "À direita",
+        "optionC": "Manter a proa atual",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio118.mp3",
+    "title": "Instrução de descida — Delta A350 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "GECTO, DORI, descend on the maintain 4,000. GECTO, DORI descend maintain 4,000, Delta-274. Delta-274, clear the iris runway 1, 6 left approach. GECTO, the iris 1, 6 left approach, Delta-274, thank you. Delta-274, this will be auto land. This will be an auto land.",
+    "questions": [
+      {
+        "prompt": "Qual ação vertical é instruída ou confirmada?",
+        "optionA": "Subir",
+        "optionB": "Manter-se no solo",
+        "optionC": "Descer",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio119.mp3",
+    "title": "Procedimento de aproximação — Delta A350",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 37,
+    "accent": "mixed",
+    "transcript": "Delta 274, contact tower 124.135. 124.135, Delta 274. Tower, Delta 274, priority aircraft runway 16, left island. Delta 274, Tokyo Tower, runway 16, next wing, runway 200.13, continue approach. Continue approach, Delta 274. Delta QSRN, runway 163, get on, we're in the one-night-night tract, one-night-night, one-night-night.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Inspeção de bagagem",
+        "optionB": "Aproximação",
+        "optionC": "Abastecimento no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio120.mp3",
+    "title": "Altitude instruída — Aeronave em aproximação",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "You have cleared to land, break out 44-1. Sorry, break out 44-1, we're going to need to cancel the approach. We got a message to pop up. Break out 44-0-1, no problem. Just continue flying the approach, cancel your landing clearance, and maintain 2,000 feet. You set a message pop up? Yeah, we'll make sure 2,000 feet continue on the approach. And yeah, we got a message to pop up. Break out 44-0-1, no problem. Over your sequence, you just continue flying the approach. You're going to over find the field at 2,000 feet for now. All right, we'll replay the seal at 2,000. Appreciate it. Hope 4401. No problem.",
+    "questions": [
+      {
+        "prompt": "Qual altitude ou nível é mencionado na comunicação?",
+        "optionA": "2,000",
+        "optionB": "3000",
+        "optionC": "1000",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio121.mp3",
+    "title": "Contato em outra frequência — Aeronave em aproximação",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "1-0-0 at this time and contact New York approach 1-3-5 point minor for the recent ones. All right, 100 on the heading, 135.9, Richard, 4401, thank you. No problem. Departure, Richard, 4401, 100 heading, 2000 feet, then we're going to meet to go ahead and report you. We've got an indication the parking brake is not released on your point.",
+    "questions": [
+      {
+        "prompt": "O que a aeronave é orientada a fazer?",
+        "optionA": "Permanecer em silêncio",
+        "optionB": "Desligar o transponder",
+        "optionC": "Contatar outra frequência",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio122.mp3",
+    "title": "Informação sobre combustível — Aeronave em aproximação",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "I'm way 2-2 left. Alright, I've actually 2-2 left. We'll expect a 4401. I'm right here at 4401. Let me get a chance. I just need the fuel remaining in pounds and the soles on board. Fuel remaining in pounds is 3600 and we are currently looking at 29 soles on board. Take care of 4401, Roger, thank you. Take care of 4401, you can make a...",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Iluminação do aeroporto",
+        "optionB": "Combustível",
+        "optionC": "Bagagem de passageiros",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio123.mp3",
+    "title": "Execução de checklist — Aeronave em aproximação",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Brickard 4401, heading 060. Brickard 4401, New York, Delta's the current ease, altimeter 3026, you're inbound for the on-air X-ray, runway 22 left approach. 26 and 22 left, Brickard 4401. Brickard 4401, are you ready to proceed inbound for the approach? We're just going to wrap up one checklist and we'll let you know, Brickard 4401. zero four zero advise when you're ready for a turn for the basic lift. Zero four zero will advise, bring up forty four zero one.",
+    "questions": [
+      {
+        "prompt": "O que a tripulação informa estar executando?",
+        "optionA": "Um checklist",
+        "optionB": "O desembarque de passageiros",
+        "optionC": "O abastecimento da aeronave",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio124.mp3",
+    "title": "Curva à esquerda — Aeronave em aproximação",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Uh, we're ready for the approach. Pre-care 4401, turn left at 270 for on-air vex ferry, 2-2 left approach. 2-7-0, Pre-care 4401. Pre-care 4401, are we anticipating getting stuck on the runway? We're hoping not, but there is potential we are going to be stuck on the runway. Understood, thank you. Pre-care 4401, continue left, turning 250, join the final approach course. 2-50 on the heading, join the final Pre-care 4401. Take care of 4401, 5 miles from Caput, maintain 2000, establish approach course, put on eva...",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À direita",
+        "optionB": "Manter a proa atual",
+        "optionC": "À esquerda",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio125.mp3",
+    "title": "Situação de emergência — Aeronave em aproximação",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Okay, sorry, we got 4401. We got 4401, contact Kennedy Tower 119.1. Over to Tower 191, 4401, thank you for your help. Tower, we got 4401, checking on with 2-2-1. We got 4401, can you tell emergency equipment we'll be sending by when 1-5-0-5 runway 2-2-1, you put it on. 2-2-1, thanks for the emergency equipment, 4401. You",
+    "questions": [
+      {
+        "prompt": "Como a situação operacional é caracterizada?",
+        "optionA": "Como operação normal de pátio",
+        "optionB": "Como emergência",
+        "optionC": "Como voo de treinamento",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio126.mp3",
+    "title": "Pista mencionada — Aeronave em aproximação",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "All right, we got 4401. Exit on hotel. We'll remain clear of the runway and then advise your intentions when able. All right, we'll remain clear of the runway and we'll give you cover at 4401. Thank you. No problem. We got 4401. Looks like we're getting through to the gate. We got 4401. Understand no further assistance required. Negative. Brigade 44 is your one look. Continue hotel, left on Yankee, right on Juliet and a whole short of runway 22R. Alright, hotel Yankee, Juliet, short of 22R, Brigade 44, one thank you.",
+    "questions": [
+      {
+        "prompt": "Qual pista é mencionada na comunicação?",
+        "optionA": "Pista 22",
+        "optionB": "Pista 26",
+        "optionC": "Pista 31",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio127.mp3",
+    "title": "Instrução de proa — British Airways 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "1,100 climbing climbable 250 360 9171, radar contact Pan Pan, Pan Pan, Pan Pan, sleeper 9171 Request direct to Denny to take up the hold, we have flight control issues 370 9171, Pan Pan, Roger, heading 360 please Heading 360 degrees, sleeper 9171 Superession Nagemime one contact departure 120 decelerate.",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 030",
+        "optionB": "Proa 060",
+        "optionC": "Proa 360",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio128.mp3",
+    "title": "Execução de checklist — British Airways 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Speed bar 7-1, speed 1, 9-1, 7-1, Tokyo Departure, request your inter-sum, do you have any problem? Okay, speed bar 9-1, 7-1, we're requesting to hold on to any, we need to run some checklists and then we'll be returning and also can we level off at 12,000 feet or less? Okay, speed was 9171, this time, reverse maintain 1, 0,000, 10,000. Okay, we'll...",
+    "questions": [
+      {
+        "prompt": "O que a tripulação informa estar executando?",
+        "optionA": "O abastecimento da aeronave",
+        "optionB": "Um checklist",
+        "optionC": "O desembarque de passageiros",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio129.mp3",
+    "title": "Instrução de proa — British Airways 787 (2)",
+    "category": "airspace_hazard",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Affirm, speedbird 9171. Okay, quantity heading 360. Maintain heading 360 degrees, speedbird 9171. Speedbird 9171, may I ask you the nature of your problem? Speedbird 9171, we have a flight control issue and we need to run some checklists before we can return, but we won't be continuing. Okay. Speedbar 9171, if you accessed a 10-year hold, all bars...",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 360",
+        "optionB": "Proa 030",
+        "optionC": "Proa 060",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio130.mp3",
+    "title": "Curva à esquerda — British Airways 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "To echo Lima, speed bed 9171, and can you say the hold, please? No, the speed was 9171, normal speed, speed up your distribution. Thank you, speed our discretion, and can you just tell me the inbound course spot up there? I'll hold over, no bell, inbound track 264, ready up. Thank you, yeah, we see that now, hold no bell, Jesus for left turn, Can you confirm we are clear to direct to novel this time? Yes, proceed direct to novel, hold over, novel in, construct 264 ready.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À direita",
+        "optionB": "Manter a proa atual",
+        "optionC": "À esquerda",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio131.mp3",
+    "title": "Retorno ao aeroporto — British Airways 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Just for information, with the flight control issues, we will be having to return to Heneda but we need to get us some fuel which will probably take around four zero minutes. Will we be able to get us in the Novel area? You need 40 minutes if you are dumping. Exactly. Eighth time. It will be bad. 917. You",
+    "questions": [
+      {
+        "prompt": "Qual intenção de voo é manifestada ou discutida?",
+        "optionA": "Cancelar a comunicação por rádio",
+        "optionB": "Retornar ao aeroporto",
+        "optionC": "Prosseguir necessariamente ao destino",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio132.mp3",
+    "title": "Instrução de proa — British Airways 787 (3)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Go to a different area. Speed at 91.71, expect to feel it get some other along the south side of our area. So, now turn right heading 170 for feel it get some, maintain 10,000. Okay, right turn heading 170 degrees, maintain 10,000, and just confirm you will let us know when we can start gesturing. Okay, we will let you know, you can feel it just a moment. Okay, thank you.",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 170",
+        "optionB": "Proa 200",
+        "optionC": "Proa 230",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio133.mp3",
+    "title": "Curva à esquerda — British Airways 787 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Speedwire to 9171, turn left heading 180 Sorry, say again, speedwire to 9171 Speedwire to 9171, turn left heading 180 Left turn heading 180, speedwire to 9171 Speedwire to 9171, touch your approach Okay, now we are holding anything here for example area, and how about RB hold and",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À direita",
+        "optionB": "Manter a proa atual",
+        "optionC": "À esquerda",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio134.mp3",
+    "title": "Comunicação operacional — British Airways 787",
+    "category": "airspace_hazard",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Speedbird 917-1 Speedbird 917-1, please Can you say again the hold point, Speedbird 917-1 Okay, AVI, Alpha, Victor, Echo, Echo, Yankee Are the Alpha, Victor, Echo, Echo, Yankee to hold Speedbird 917-1 We have planned in our coordinating order over AB for your field exam, but how about you, Eric, what is your intention?",
+    "questions": [
+      {
+        "prompt": "Que tipo de comunicação aparece no trecho?",
+        "optionA": "Um anúncio comercial",
+        "optionB": "Uma troca operacional entre piloto e controle",
+        "optionC": "Uma conversa entre passageiros",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio135.mp3",
+    "title": "Instrução de proa — British Airways 787 (4)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Okay, I understand, but the heading white, please, due to Avalido 93 departure and 130 departure. Okay, maintaining heading 180 degrees, super 9171. And confirm you are planning to serve them altitude 10000 or another altitude. We are happy with 10000, are you happy with 10000 for the dump? Yeah, that's okay, 10000, we are planning to 10000 for the dump as a section. Thank you.",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 180",
+        "optionB": "Proa 210",
+        "optionC": "Proa 240",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio136.mp3",
+    "title": "Presença ou colisão com aves — British Airways 787",
+    "category": "airspace_hazard",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "So, after the jumping, we need to return to Hanada, but we need an arrival with a straight-in approach due to the flight control issues and with the longest available runway. Okay, straight-in approach, runway 32, understand. Can you make an ILS runway 32 approach or under the R-Polish take. Requesting ILS 416 left. Speed bird 9171. Speed mode 9171.",
+    "questions": [
+      {
+        "prompt": "Qual perigo é mencionado na comunicação?",
+        "optionA": "Drone",
+        "optionB": "Balão meteorológico",
+        "optionC": "Aves",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio137.mp3",
+    "title": "Procedimento de aproximação — British Airways 787",
+    "category": "airspace_hazard",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "A-Firm, we need the longest runway available, speedbird 9171. Okay, I understand. Stand by this moment for coordination. We're requesting 1-6 left. Thanks. See the board on 9-0-1-7-1. Torque up to load the Tokyo departure confirmed. Now, how about to round me 3-4. Role mail of storage approach. Now, window 5-1-9-0. Therefore, degrees 8-0.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Inspeção de bagagem",
+        "optionB": "Aproximação",
+        "optionC": "Abastecimento no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio138.mp3",
+    "title": "Instrução de proa — British Airways 787 (5)",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "and stand by for coordination. Roger. Speedway 291-71, left heading 1-60 to join RV hold inbound call 314. Left heading 1-60 to intercept the inbound call of take-end, sir, at Marlton 1. To join, I'll be holding an inbound course, 314. Thank you, Vectors, to intercept the inbound course.",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 160",
+        "optionB": "Proa 190",
+        "optionC": "Proa 220",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio139.mp3",
+    "title": "Material perigoso a bordo — British Airways 787",
+    "category": "airspace_hazard",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Speedbird 9171, approach, confirm: do you have any hazmat? Say again please, Speedbird 9171. Hazmat: do you have any hazardous material on board? Sorry, I do not understand. One second. Hazardous material—is that on board? Negative.",
+    "questions": [
+      {
+        "prompt": "Qual informação o controlador procura confirmar?",
+        "optionA": "Se o serviço de bordo terminou",
+        "optionB": "Se a bagagem já foi descarregada",
+        "optionC": "Se há material perigoso a bordo",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio140.mp3",
+    "title": "Curva à direita — British Airways 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "No passengers and only three pilots on board. Right. And can you confirm... Hold on, hold on. How hard is the direction? Is it 3AV, 314, right turn? Affirmative. Inbound course, 314, right turn. And may we do extended 10 nautical miles to the main distance? 3rd, 9171. One minute to break. One minute to break, right turn. Okay, one minute, can maybe we extend just while we are adjusting fuel? Okay, I understand. Extend...",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "Manter a proa atual",
+        "optionB": "À direita",
+        "optionC": "À esquerda",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio141.mp3",
+    "title": "Informação sobre combustível — British Airways 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "if you cannot come out copied it. And to the 9171, can we turn right, Director? Is there anything to pick up the hold? Speedway 9171. So we're saying? Request direct to Avi to take up the hold. Okay, that's nice. Speedway 9171, proceed, Director, Avi, and hold over Avi. Ten minutes to take the upload. Thank you, Director Avi Hold, Avi Ten Nordic mile legs and request to start the full jet thing, the full dumping.",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Combustível",
+        "optionB": "Bagagem de passageiros",
+        "optionC": "Iluminação do aeroporto",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio142.mp3",
+    "title": "Procedimento de aproximação — British Airways 787 (2)",
+    "category": "airspace_hazard",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "and hold the speed to come through, so we're at 9-1-7-1. Speed is 9-1-7-1, Tokyo approach. Go ahead, speed is 9-1-7-1. I'm now confirm making right turn to join Avi. We will be speedbird 9171, our computer is just doing a join at the moment, you'll be turning left to back to AV to do right hand patterns.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Abastecimento no pátio",
+        "optionB": "Inspeção de bagagem",
+        "optionC": "Aproximação",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio143.mp3",
+    "title": "Controle de velocidade — British Airways 787",
+    "category": "airspace_hazard",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Second, speedbird 9171 Speedbird 9171, report to stand hold Okay, AFM, speedbird 9171 Speedbird 9171, in-house, your field dump approved Thank you, we're in the hold and cleared to dump, speedbird 9171 Speed about 9-1-7-1, change frequency, 1-2-6-2-10-5, 1-2-3-4.",
+    "questions": [
+      {
+        "prompt": "Qual parâmetro de voo é discutido?",
+        "optionA": "Quantidade de bagagem",
+        "optionB": "Velocidade",
+        "optionC": "Temperatura da cabine",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio144.mp3",
+    "title": "Informação sobre combustível — British Airways 787 (2)",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "We have now completed our fuel dumping, press radar vectors for a 2-0 mile approach, ILS 1-6-1. ... This about...",
+    "questions": [
+      {
+        "prompt": "Qual assunto operacional é mencionado?",
+        "optionA": "Combustível",
+        "optionB": "Bagagem de passageiros",
+        "optionC": "Iluminação do aeroporto",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio145.mp3",
+    "title": "Procedimento de aproximação — British Airways 787 (3)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Goli, NMN107 OK, radar heading of 3403, maintain 10000, radar vector is LORI and requesting a 20 mile straight-in approach We've heard, 9171 NMN107, NGP, vector to final, I-826-6 Thank you, vector, final, I-826-6, 9179 C1901 to the 1, Tokyo radar. Go ahead, C1901.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Abastecimento no pátio",
+        "optionB": "Inspeção de bagagem",
+        "optionC": "Aproximação",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio146.mp3",
+    "title": "Instrução de proa — British Airways 787 (6)",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Thank you. And can you confirm the altitude setting to the 9171? Evo 9171 Altimeter 29.96 inches. Thank you Altimeter 299.6 to the 9171. Evo 9171 turn right clean 360. Right heading 360 to the 9171. Do you need any assistance after your landing?",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 060",
+        "optionB": "Proa 360",
+        "optionC": "Proa 030",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio147.mp3",
+    "title": "Instrução de proa — British Airways 787 (7)",
+    "category": "airspace_hazard",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Speedbird 9171, do you need any assistance after your landing? Negative, Speedbird 9171. Can you taxi on your own? Speedbird 9171, maintain 7,000. Maintain 7,000, Speedbird 9171. Speedbird 9171, left heading 320. Left 320, Speedbird 9171.",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 320",
+        "optionB": "Proa 350",
+        "optionC": "Proa 020",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio148.mp3",
+    "title": "Presença ou colisão com aves — British Airways 787 (2)",
+    "category": "airspace_hazard",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Speed, C191, set one. C191, to the wind region. C191, to the wind region. Revised maintain, four thousand. Ten four thousand, C191. C191, to the wind, tower lifting two eight zero. Left heading two eight zero, speed bird nine one set one. D1-9171, channel 18250, setting 250 to be read 9171.",
+    "questions": [
+      {
+        "prompt": "Qual perigo é mencionado na comunicação?",
+        "optionA": "Drone",
+        "optionB": "Balão meteorológico",
+        "optionC": "Aves",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio149.mp3",
+    "title": "Controle de velocidade — British Airways 787 (2)",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "C1-9171, for approach, procedure speed is not required and report establishing the localizer. Secondly, for the message, C1-9171, you're requested. C1-9171, speed restriction final is not required. Thank you, no speed restriction. I'll make sure I've established one step to C1-9171. C1-9171, contact Tokyo Tower, 124-135. 124-135, C1-9171.",
+    "questions": [
+      {
+        "prompt": "Qual parâmetro de voo é discutido?",
+        "optionA": "Quantidade de bagagem",
+        "optionB": "Velocidade",
+        "optionC": "Temperatura da cabine",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio150.mp3",
+    "title": "Presença ou colisão com aves — British Airways 787 (3)",
+    "category": "airspace_hazard",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "I will 1-6 left Continue to bird 9171 6-04, speed bird 9171 We are now at 08.3 Clear that, 1-6 left, see birds, 9-1, 7-1",
+    "questions": [
+      {
+        "prompt": "Qual perigo é mencionado na comunicação?",
+        "optionA": "Aves",
+        "optionB": "Drone",
+        "optionC": "Balão meteorológico",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio151.mp3",
+    "title": "Situação de emergência — United A319",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "We need to declare an emergency, we got an electrical something burning in the cockpit. You can see that he closest to your eyes, this is your left-handing zero-nitre, you can see the actual hair, depending on your age, it's $6,000. Down to $6,000, left-handing zero-nitre, United, it's $12,000. You just need to get on the ground and be in here.",
+    "questions": [
+      {
+        "prompt": "Como a situação operacional é caracterizada?",
+        "optionA": "Como voo de treinamento",
+        "optionB": "Como operação normal de pátio",
+        "optionC": "Como emergência",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio152.mp3",
+    "title": "Instrução de descida — United A319",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "Two-way center. Yeah, two-way center will work. Yeah, two-way center will work. Alright, down to 5,000 guys. 1250. Okay, we have, uh, ninety-six...",
+    "questions": [
+      {
+        "prompt": "Qual ação vertical é mencionada?",
+        "optionA": "Manter-se no solo",
+        "optionB": "Descer",
+        "optionC": "Subir",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio153.mp3",
+    "title": "Fumaça ou odor a bordo — United A319",
+    "category": "emergency_smoke",
+    "difficulty": "easy",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "Yes, we have electrical, something's burning, I think it's our PFC display. 020, that's the P.I. left turn, 020. 020, heading United, 1250. United is 1250 kind of the boat now, I'm on 33.62. 3362 United, 1250. Hello Chicago United, 1250 5300.",
+    "questions": [
+      {
+        "prompt": "Qual problema é relatado ou discutido?",
+        "optionA": "Fumaça ou odor anormal a bordo",
+        "optionB": "Colisão com aves",
+        "optionC": "Falha no rádio",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio154.mp3",
+    "title": "Instrução de descida — United A319 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "and right at the shoreline. United 1250 turn left heading 360 to send and maintain 4,000. 360 on heading down to 4,000, United 1250. United 1250 speeds absolutely all your discretion. Speed our discretion, United 1250. United 1250 to send and maintain 3,300. 3,300, United 1250. United 1250, are you going to be able to get off the runway or are you going to need to?",
+    "questions": [
+      {
+        "prompt": "Qual ação vertical é mencionada?",
+        "optionA": "Subir",
+        "optionB": "Manter-se no solo",
+        "optionC": "Descer",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio155.mp3",
+    "title": "Situação de emergência — United A319 (2)",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "In 3,000 those established, clear to ILS runway 287. Okay, 3,000 those established, clear for the ILS 28 Center, United 1250. United 1250 contact tower now, 12075. 12075, United 1250, thank you. Oh, Tower United, 1250 inside of Hazel to the emergency 28 Center. Yes, 1250, we're at 126014, runway 28 center, put land, transfer runway 22 up. Clear to land, 28 center, get I-1250.",
+    "questions": [
+      {
+        "prompt": "Como a situação operacional é caracterizada?",
+        "optionA": "Como operação normal de pátio",
+        "optionB": "Como emergência",
+        "optionC": "Como voo de treinamento",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio156.mp3",
+    "title": "Curva à esquerda — United 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "We'd like to turn around and go back into Newark. United, 11-22 Rogers, is the right turn work for you? That's permanent. 11-22 Rogers, clear the right turn direct to Newark. Right turn direct to Newark, United, left turn. At 11.22 to send a file of discretion, maintaining flightable 2.7-0. 80.27, sir, and I left flight 2. At 11.22...",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À esquerda",
+        "optionB": "À direita",
+        "optionC": "Manter a proa atual",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio157.mp3",
+    "title": "Instrução de descida — United 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "Yeah man, we have 253 shows on board and a lot of fuel. We'll probably have to start dumping here in a little bit. At 11.22, if you need to begin fuel dumping, that's approved as requested. At 11.22, Redder. At 12.22, descend upon discretion, maintain flight level 210. PD 210, yeah, at 11.22. 1122 is able across 6060 miles south of Newark at 7000, Kennedy up to 3004.",
+    "questions": [
+      {
+        "prompt": "Qual ação vertical é instruída ou confirmada?",
+        "optionA": "Subir",
+        "optionB": "Manter-se no solo",
+        "optionC": "Descer",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio158.mp3",
+    "title": "Instrução para aguardar — United 787",
+    "category": "emergency_fire",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "If you let me know. Stand by. Newer TPA is 0-2-2-1, United Web 22. Roger, and we'll have some firefighting equipment standing by, and anything else you might need if you need something you want to know, alright? I'll be sure to. Yes. 70 miles, demeanor for United Web 22. 1122, Kennedy up to 3-0-0-4-2. At 1122, contact New York Center now, 1-2-8.3.",
+    "questions": [
+      {
+        "prompt": "Que instrução é dada ou confirmada na comunicação?",
+        "optionA": "Iniciar a decolagem",
+        "optionB": "Aguardar (stand by)",
+        "optionC": "Mudar imediatamente de frequência",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio159.mp3",
+    "title": "Altitude instruída — United 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "United 11-22 near preferred to Kennedy out 3-0-0-3, fly heading 310. Heading 3-1-0, United 11-22. United 11-12 to 17-18, 4,000. I'm sorry, United 11-22 to 17-18, 4,000. We'd like 6,000 for now, see 9-11-22. Okay, you're now at 11-22, maintain 6,000. 6,000 at 11-22. You're now at 11-22, request 5,000.",
+    "questions": [
+      {
+        "prompt": "Qual altitude ou nível é mencionado na comunicação?",
+        "optionA": "6,000",
+        "optionB": "7000",
+        "optionC": "5000",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio160.mp3",
+    "title": "Contato em outra frequência — United 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "United, 11-22, wind able, you can keep direct gritty. Direct gritty, wind able, United, 11-22. United, 11-22, contact approach on 128.5. 128.5, United, 11-22. Right now, I'm going to plant you a Mercedes-Benz aircraft, 5,000. Yeah, 11-22, have any aircraft to be the 3-006. It's going to be the LS-4, right? You should be direct ready. We are direct ready and copy, 3-0.",
+    "questions": [
+      {
+        "prompt": "O que a aeronave é orientada a fazer?",
+        "optionA": "Permanecer em silêncio",
+        "optionB": "Desligar o transponder",
+        "optionC": "Contatar outra frequência",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio161.mp3",
+    "title": "Controle de velocidade — United 787",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "Let's know when we stop. Can I have 11-22 heavy, Roger? Do you want to come in immediately, or do you need to stay out for a minute? No, we'll come in immediately. Roger. Can I have 11-22 heavy? Can I start slowing you? Can I have 11-22 heavy? Can I start reducing your speed? Affirmative. Roger, start slowing it back to 190 now. Can I have 11-22 heavy? Polo 190 United, left the car, please. United 11-22, heavy trucks are standing by for you. Copy that, and we will stop the fill-down. Thank you.",
+    "questions": [
+      {
+        "prompt": "Qual parâmetro de voo é discutido?",
+        "optionA": "Quantidade de bagagem",
+        "optionB": "Velocidade",
+        "optionC": "Temperatura da cabine",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio162.mp3",
+    "title": "Autorização para pouso — United 787",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "4R. Gritty 2,800. Included Alice 4R, United 11.2. United 11.22, heavy, 180 knots still due in, tower is only 8.3. Good luck, have a good night. 180 knots still due in, and over tower, 18.3, United 11.22, mercy United. Thanks. Tower, United 11.22, mercy aircraft approaching Gritty for the Alice 4R. Let's pour right. Yeah, 11.0, you're having your time around the way. Pour right. Clear to land. 0405. Clear to land. Pour right. United, 11.22.",
+    "questions": [
+      {
+        "prompt": "Qual autorização é dada à aeronave?",
+        "optionA": "Pousar",
+        "optionB": "Decolar",
+        "optionC": "Entrar em espera",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio163.mp3",
+    "title": "Cruzamento de pista — United 787",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 38,
+    "accent": "mixed",
+    "transcript": "You know, 11-22 heavy, Fable, continue straight ahead, Juliet, and cross runway four left at Juliet, advise if any assistance is required. That's four left at Juliette, and then we'll get back in. 9-11-22, Heavy Roger, Juliette, hold short of Sierra and contact.",
+    "questions": [
+      {
+        "prompt": "Qual ação em relação à pista é mencionada?",
+        "optionA": "Permanecer no portão",
+        "optionB": "Subir para nível de cruzeiro",
+        "optionC": "Cruzar a pista",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio164.mp3",
+    "title": "Aquisição visual de tráfego — JetBlue A320",
+    "category": "traffic_conflict",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "47, Roger. If you can, make right traffic for runway 24, making visual. Right traffic, 24, unable visual above cloudship, with 547. 3547, Roger, zero man, and hold on board. So, remaining 22.7, and hold on board, 167. What's the nature of emergency? Engine failure. 547-1124, you catch on 1-2-0-0-1-2, gusting 1-7, we'll have the truck stop.",
+    "questions": [
+      {
+        "prompt": "O que a tripulação informa sobre a outra aeronave?",
+        "optionA": "Que perdeu toda a comunicação por rádio",
+        "optionB": "Que ainda procura ou tenta manter contato visual",
+        "optionC": "Que já está estacionada no portão",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio165.mp3",
+    "title": "Curva à direita — JetBlue A320",
+    "category": "airspace_hazard",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Turn right heading 3300 for now, and then 060 on the downwind. Right, 330, and stand by on that, 547. 547, you want to park your course here on the heading, or you want me to do it? Ashley, if we go to departure, we're going to divert to GFKJIP with 547. 547, no problem, contact departure, 1-2-0-0-5. 1-2-0-0-5, 547. We're just moving. 547-1400. I think 3,000 for the air defense. It's two failures converted to JFK. We're going to use pressure other time, then. There you have it. Right there. I'll slide through our lens. Please.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À direita",
+        "optionB": "À esquerda",
+        "optionC": "Manter a proa atual",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio166.mp3",
+    "title": "Procedimento de aproximação — JetBlue A320",
+    "category": "technical_malfunction",
+    "difficulty": "easy",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "57 547 checking in 25 002 failure diver 547 you're clear to Kennedy via radar vectors information fox current plan ILS runway 22 left ILS 22 left 547",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Abastecimento no pátio",
+        "optionB": "Inspeção de bagagem",
+        "optionC": "Aproximação",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio167.mp3",
+    "title": "Procedimento de aproximação — JetBlue A320 (2)",
+    "category": "technical_malfunction",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "and soles and field please. We have engine 2 failure and soles on board 167, fuel on board 22.1, Chyplu 547. 167 soles, what about the field? At the permit 167 and 42.1 on board, Chyplu 547. Chyplu 547, Roger that, contact approach 1324. 1324, Chyplu 547. Yes sir, we're with you and just to let you know.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Inspeção de bagagem",
+        "optionB": "Aproximação",
+        "optionC": "Abastecimento no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio168.mp3",
+    "title": "Contato em outra frequência — JetBlue A320",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "22 left or right, your choice, keep me advised. Okay, well, 22 left should be fine. Actually, 22 right. That's a longer runway. We'll take 22 right and then we'll advise you. Okay. Just fly heading 240. Okay, heading 240 for Chyplu 540, then we'll let you know. Thank you. Chyplu 540, 7th turn, left heading 160, contact approach 135.9. Okay, left turn 160, 35, 90 for chest blue, 547.",
+    "questions": [
+      {
+        "prompt": "O que a aeronave é orientada a fazer?",
+        "optionA": "Contatar outra frequência",
+        "optionB": "Permanecer em silêncio",
+        "optionC": "Desligar o transponder",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio169.mp3",
+    "title": "Retorno ao aeroporto — JetBlue A320",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "I'm sorry, can you confirm the 2-9 or 8-9? 2-9 or 8-8 on the yelp, I'm going to 2988. 2988, thanks. And 2547, just let us know when you're ready to come back in. Yes, sir, we're finishing up our checklist and we'll let you know when we're ready. Thank you. And 2547, when you get a second to verify, are you okay with 2-2 right right or you're gonna think you wanted to run away Stand by, what is your wind right now? Wind...",
+    "questions": [
+      {
+        "prompt": "Qual intenção de voo é manifestada ou discutida?",
+        "optionA": "Prosseguir necessariamente ao destino",
+        "optionB": "Cancelar a comunicação por rádio",
+        "optionC": "Retornar ao aeroporto",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio170.mp3",
+    "title": "Execução de checklist — JetBlue A320",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "We're just going to try to keep you close to the airport as quickly as we can when you're ready when you get to range. Perfect. We appreciate that. Yeah, we're almost on our checklist, so we'll be notified shortly. OK. Pressure blue, 547. Can we get the temperature and what? You said you want the temperature also. Discard. I just got the temperature from the 8th.",
+    "questions": [
+      {
+        "prompt": "O que a tripulação informa estar executando?",
+        "optionA": "O abastecimento da aeronave",
+        "optionB": "Um checklist",
+        "optionC": "O desembarque de passageiros",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio171.mp3",
+    "title": "Curva à esquerda — JetBlue A320",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Left turn 130, we're setting up for 2-2 left now for JetBlue 547, just to give you a heads up. Roger, I expect our ILSC to approach Foxtrot now, current is let me know when you're ready to come in. Okay, the heading was 140, you said? 130 heading. 130 heading, JetBlue 547. Richard Blue, 547, we'll do one more lap around here and then we'll come back in for the approach probably after that.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À esquerda",
+        "optionB": "À direita",
+        "optionC": "Manter a proa atual",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio172.mp3",
+    "title": "Instrução de táxi — JetBlue A320",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "We'll plan on stopping on the runway, get inspected before we move off. Roger. CFP 5407 contacting 1-3-0. 5407, CFP 5407. And CFP 5407, the tower is asking, do you think you need to tow off the runway? No, I think we'll be alright once we get inspected. We should be able to taxi on our own power, CFP 5407. 10, 2547, are you ready for your downwind? Two more minutes, 2547.",
+    "questions": [
+      {
+        "prompt": "Qual operação é discutida no trecho?",
+        "optionA": "Alijamento de combustível",
+        "optionB": "Voo em cruzeiro",
+        "optionC": "Táxi da aeronave",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio173.mp3",
+    "title": "Procedimento de aproximação — JetBlue A320 (3)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Company about 321-6 for 4,000 only. Copy JETLU 547. JETLU 547, ready for the approach. JETLU 547, very nice, flying 0-2-0. It's like the ILS T2 left approach, box shot is good. 0-2-0 with the ILS T2 left and box shot, JETLU 547. JETLU 547, Kennedy optimum is 1086 and say indicated Okay, there's feet. Two down there, eight, six, and we are slowing to about two twenty, two twenty, two twenty, five, four, seven.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Inspeção de bagagem",
+        "optionB": "Aproximação",
+        "optionC": "Abastecimento no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio174.mp3",
+    "title": "Curva à esquerda — JetBlue A320 (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "547, 8 first, thank you, can I be off the bed at 298-6? Yeah, I hear you, 6, 7, 547. 547, reduce speed to 190. C100, reduce speed to 547. 547, reduce speed to 180. C100, reduce speed to 547. 547, turn right heading, 040 for the sequence. 040, reduce speed to 547. Thank you. At the 547 turn left wing 2900. At 2900 at the 547.",
+    "questions": [
+      {
+        "prompt": "Para qual lado é dada ou confirmada a instrução de curva?",
+        "optionA": "À esquerda",
+        "optionB": "À direita",
+        "optionC": "Manter a proa atual",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio175.mp3",
+    "title": "Controle de velocidade — JetBlue A320",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "Tilt established, about 22 left 75, 0-2 down, Tilt established, clear, I will, I'll shift to 547 Shift to 547, speed 170, as, uh, tilt 60 in the APK I'll take it, shift to 547 Shift to 547, again, speed 170, tilt 6 mile final 7-6, 6 mile final, shift to 547 Thank you 547, Kedavisar, 19.1, good day I'll keep going, watch, shift to 547 8 hours, just blue, 547, LST 2 left, we're going to see a crowd, we'll be stopping.",
+    "questions": [
+      {
+        "prompt": "Qual parâmetro de voo é discutido?",
+        "optionA": "Temperatura da cabine",
+        "optionB": "Quantidade de bagagem",
+        "optionC": "Velocidade",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio176.mp3",
+    "title": "Esteira de turbulência — JetBlue A320",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "We're going to have a heavy Airbus 330, caution with covering from the two to the left side tonight. Left side left, GIPL 547. GIPL 547, you said you're going to make a full stop. Private Gipley, 547. Roger. Telephone 9-9 Cachaud, 4R, 2-2, let's close at this time. Car 9-9.",
+    "questions": [
+      {
+        "prompt": "Sobre qual risco o controle chama a atenção?",
+        "optionA": "Objetos soltos na cabine",
+        "optionB": "Esteira de turbulência de aeronave pesada",
+        "optionC": "Gelo no para-brisa",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio177.mp3",
+    "title": "Situação de emergência — JetBlue A320",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "JetBlue 547 would like the emergency equipment to take a look. Perfect, JetBlue 547. JetBlue 547, they are going to switch them to me now so you can communicate with them. Rescue Truck 1, you can proceed onto runway 22 Left. The runway is closed and JetBlue requires assistance; you can communicate with them on the frequency. Truck 1 copies, permission to enter 22 Left at Hotel granted. JetBlue 547 from Emergency Truck 1, how do you read?",
+    "questions": [
+      {
+        "prompt": "Como a situação operacional é caracterizada?",
+        "optionA": "Como emergência",
+        "optionB": "Como voo de treinamento",
+        "optionC": "Como operação normal de pátio",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio178.mp3",
+    "title": "Problema no motor — JetBlue A320",
+    "category": "emergency_fire",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "We did not have any fire indication at the right hand engine. The engine failed on takeoff out of I-slip. We secured it. We pushed our engine fire push button on it, but we didn't. We also deployed the grip here for engine number two, but we never had an indication. Okay, so the firm, you did activate the throttle so you didn't get confirmation that they were discharging the engine, correct? Correct. Yeah, we had the engine fail and looked like we might have some damage, so we deployed it as a precaution.",
+    "questions": [
+      {
+        "prompt": "Qual sistema da aeronave é discutido no trecho?",
+        "optionA": "O rádio",
+        "optionB": "O sistema de iluminação da cabine",
+        "optionC": "O motor",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio179.mp3",
+    "title": "Instrução de táxi — JetBlue A320 (2)",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "We, uh, if everything is correct, we can uh, taxi to the gate for the blue, uh, uh, portico, and the parking brake is on. Okay, Roger that, parking brake is set, we need that idle, uh, we're gonna do an inspection, I'll let you know where we're going. Thank you much. JetBlue 547 from Mercer Truck 1. Yes, sir, we're here. All right, I can confirm that number two engine is completely destroyed. It's like the entire surface section got forced out. I can actually see right through these. So you still want to tax me at this point?",
+    "questions": [
+      {
+        "prompt": "Qual operação é discutida no trecho?",
+        "optionA": "Voo em cruzeiro",
+        "optionB": "Táxi da aeronave",
+        "optionC": "Alijamento de combustível",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio180.mp3",
+    "title": "Reboque da aeronave — JetBlue A320",
+    "category": "ground_operations",
+    "difficulty": "medium",
+    "durationSeconds": 36,
+    "accent": "mixed",
+    "transcript": "And JetBlue 547, just for planning purposes, are you planning to be towed to the gate? That's perfect, JetBlue 547, we are planning, I get towed. Okay, and I think the tow is there first? Yes, that's perfect, JetBlue 547. Can any ground for Merck to drop one if you want? I can get the tires on. Thanks, Alex. So when is the aircraft? If so, would it be nice to follow the aircraft with you? Bestie truck 2, I believe. That's no problem. Truck 1, truck 1. Got it, boss. Sorry.",
+    "questions": [
+      {
+        "prompt": "Como a aeronave pretende chegar ao portão?",
+        "optionA": "Sendo rebocada",
+        "optionB": "Decolando novamente",
+        "optionC": "Prosseguindo em voo visual",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio181.mp3",
+    "title": "Aquisição visual de tráfego — Aeronave no JFK",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "We're only 1-3 left, when 2-0 is our 4, clear the line? Clear the line, runway 1-3 left, and we'll let you know if we see the heavy, W1794. 7294, you see that 3-30? Negative, we're looking. We got them on the transclonder, but we don't have it visual yet. Tovacanarcy of 2,000. Okay. Yeah, we're looking, JetBlue1794, from Rome.",
+    "questions": [
+      {
+        "prompt": "O que a tripulação informa sobre a outra aeronave?",
+        "optionA": "Que já está estacionada no portão",
+        "optionB": "Que perdeu toda a comunicação por rádio",
+        "optionC": "Que ainda procura ou tenta manter contato visual",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio182.mp3",
+    "title": "Procedimento de aproximação — Aeronave no JFK",
+    "category": "traffic_conflict",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "Jeppu 1794, do you see the traffic? Short final, 1-3 left. Jeppu 1794, traffic is now in sight. Jeppu 1794, you can visual separation from that traffic. Yeah, we'll do our best. Jeppu 1794, we're on an approach. Okay, I need an answer to the affirmative or negative Jeppu 1794. Can you or not? Uh, we would like to stay under your radar surveillance, so negative. We're on an approach, definitely 1794. I don't know what you're saying here.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Inspeção de bagagem",
+        "optionB": "Aproximação",
+        "optionC": "Abastecimento no pátio",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio183.mp3",
+    "title": "Arremetida — Aeronave no JFK",
+    "category": "traffic_conflict",
+    "difficulty": "easy",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "JetBlue 1794, we're going around. JetBlue 1794, we're flying the public smiths at a 3,200 for 4,000. Okay, we'll go to 3,000 and turn this to 1,000.",
+    "questions": [
+      {
+        "prompt": "Qual manobra a tripulação informa estar realizando?",
+        "optionA": "Arremetida",
+        "optionB": "Pouso completo",
+        "optionC": "Retorno ao portão",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio184.mp3",
+    "title": "Instrução de proa — Aeronave no JFK",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "JetBlue 1794, 1359, Wester, who? JetBlue 1794, 1359, or? 359, JetBlue 1794. JetBlue 1794, out of 3,800 for 3,000, heading 110. JetBlue 1794, new approach, expect vectors for the, you know, standby. They got another departure rolling. The commanding by is up to 1794.",
+    "questions": [
+      {
+        "prompt": "Qual proa é mencionada na instrução ou no readback?",
+        "optionA": "Proa 140",
+        "optionB": "Proa 170",
+        "optionC": "Proa 110",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio185.mp3",
+    "title": "Controle de velocidade — Aeronave no JFK",
+    "category": "navigation",
+    "difficulty": "easy",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "JetBlue 1794. JetBlue 1794, turn left heading 040, contact approach on 125.7. 040, 257, JetBlue 1794. Approach, JetBlue 1794, we're 3,000 and heading 040. JetBlue 1794, new approach, thank you. Speed 210, expecting me on at X-ray 22 left. Okay, 210.",
+    "questions": [
+      {
+        "prompt": "Qual parâmetro de voo é discutido?",
+        "optionA": "Quantidade de bagagem",
+        "optionB": "Velocidade",
+        "optionC": "Temperatura da cabine",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio186.mp3",
+    "title": "Procedimento de aproximação — Aeronave no JFK (2)",
+    "category": "traffic_conflict",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "To be honest with you, the tower controller was very distracting, kept on asking us if we had a visual separation with the aircraft in front of us, and we were looking and basically distracted us from flying the approach. Did you find Jipple 1794 in the turn, or was that mostly on the straight and on the fourth canard? It was basically on the whole profile of the approach. He had a number of times, I advised him that we're looking. At one point we got him in sight, and then we lost him, and I believe I advise him of that. distracted us and we were not able to be fully configured by a thousand feet.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Aproximação",
+        "optionB": "Abastecimento no pátio",
+        "optionC": "Inspeção de bagagem",
+        "correct": "a"
+      }
+    ]
+  },
+  {
+    "file": "audio187.mp3",
+    "title": "Controle de velocidade — Aeronave no JFK (2)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "330. Roger, thank you very much. JetBlue 1794, channel 10, tree 10. Left turn 310, JetBlue 1794. JetBlue 1794, proceed direct to Capit, you're 5 from Capit, cross Capit at above 2,900, cleared on I-X-ray to 2 left. Direct Capit, Capit at or above 2,900, clear for the RNAV 2,2 left, JetBlue 1794. The blue 1794 speed is 180.",
+    "questions": [
+      {
+        "prompt": "Qual parâmetro de voo é discutido?",
+        "optionA": "Temperatura da cabine",
+        "optionB": "Quantidade de bagagem",
+        "optionC": "Velocidade",
+        "correct": "c"
+      }
+    ]
+  },
+  {
+    "file": "audio188.mp3",
+    "title": "Pista mencionada — Aeronave no JFK",
+    "category": "ground_operations",
+    "difficulty": "easy",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "Chapel 1794, change tower, wind 2005, runway 22L, SELIN. Little land 22L, Gepley 1794. Jeff Blue 1794, Sexy Juliet, ride on Zulu, hold short of Sexy Way Hotel. Julia, Zulu, Short Hotel, JetBlue 1794.",
+    "questions": [
+      {
+        "prompt": "Qual pista é mencionada na comunicação?",
+        "optionA": "Pista 31",
+        "optionB": "Pista 22",
+        "optionC": "Pista 26",
+        "correct": "b"
+      }
+    ]
+  },
+  {
+    "file": "audio189.mp3",
+    "title": "Procedimento de aproximação — Aeronave no JFK (3)",
+    "category": "navigation",
+    "difficulty": "medium",
+    "durationSeconds": 35,
+    "accent": "mixed",
+    "transcript": "What was the miss on 13 left earlier? The guy told me, I guess, there's a farce of controllers. Whoever the controller was on our approach coming into 13 left was very distracting. He contacted us numerous times, that was for an A330. We didn't have it in sight, and when we eventually did have it in sight, we lost it a little while after. He asked again, and by that time, because of all the distracting radio calls, We were not able to have the aircraft properly configured by the required thousands of feet.",
+    "questions": [
+      {
+        "prompt": "A que fase ou procedimento de voo a comunicação se refere?",
+        "optionA": "Aproximação",
+        "optionB": "Abastecimento no pátio",
+        "optionC": "Inspeção de bagagem",
+        "correct": "a"
+      }
+    ]
+  }
+]

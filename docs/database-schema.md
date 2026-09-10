@@ -83,7 +83,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | audio_url | text | |
 | transcript | text | uso interno (QA, painel admin) |
 | difficulty | enum | `easy`, `medium`, `hard` — equivalente simplificado do índice de facilidade real do EPLIS |
-| category | text | domínio/evento (ver lista de Eventos e Domínios do Doc 9835, Apêndice B) |
+| category | text | domínio/evento (ver lista de Eventos e Domínios do Doc 9835, Apêndice B). Metadado descritivo — **não** entra na seleção do simulado. **[2026-09-10]** no lote `audio060–189` foi inferido por heurística (o mapa da Sabrina não traz o campo) |
 | accent | text | ex: `american`, `mixed` |
 | duration_seconds | int | especificação oficial: 10–45s |
 | is_active | boolean | |
@@ -118,6 +118,8 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 
 **Regra de tempo (confirmada pelo Manual do Examinando, item 1.2.1):** 30s de leitura (pode iniciar o áudio antes) → até 45s de áudio → 1 minuto para responder, **incluindo** a reescuta opcional dentro dessa mesma janela (não é tempo adicional). Ao fim de 1 min, avança automaticamente.
 
+**Pool atual (2026-09-10):** 172 áudios ativos / 189 perguntas — audio01–10 + lote `v*` (43/60, batches 1–2) + `audio060–189` (`scripts/add-phase1-audios-batch3.mjs`, dados em `scripts/data/phase1-batch3.json`, do mapa `Material Didático/ATC/Phase 1 - Audios/mapa_questões.xlsx`). `getRandomQuizQuestions(limit, userId?)` prioriza perguntas ainda não respondidas pelo usuário (só repete quando o pool inédito esgota) — ver `src/services/simulations/phase1/queries.ts`.
+
 ---
 
 ## 6. `phase2_prompts`
@@ -126,7 +128,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 |---|---|---|
 | id | uuid | |
 | part | enum | `part1`, `part2`, `part3`, `part4` |
-| operational_profile | enum, nullable | mesmo enum de `users.operational_profile`, mais `general` (item sem restrição de perfil, usado nas Partes 1/3 e como fallback nas Partes 2/4). Confirma o RF-49 original mas agora com o campo que faltava no SPD (Tabela 5). **[2026-08-10]** Conteúdo real da Parte 2 (40 situações, 10 por perfil: TWR/APP/ACC/COpM — `scripts/seed-phase2-part2-profiles.mjs`) e da Parte 4 (1 imagem real por perfil — `scripts/seed-phase2-part4-profile-images.mjs`) substituiu o placeholder `general` único que existia antes. |
+| operational_profile | enum, nullable | mesmo enum de `users.operational_profile`, mais `general` (item sem restrição de perfil, usado nas Partes 1/3 e como fallback nas Partes 2/4). Confirma o RF-49 original mas agora com o campo que faltava no SPD (Tabela 5). **[2026-08-10]** Conteúdo real da Parte 2 (40 situações, 10 por perfil: TWR/APP/ACC/COpM — `scripts/seed-phase2-part2-profiles.mjs`) e da Parte 4 (1 imagem real por perfil — `scripts/seed-phase2-part4-profile-images.mjs`) substituiu o placeholder `general` único que existia antes. **[2026-09-10]** pool da Parte 2 refeito: **80 situações por perfil** (320 no total), `order_index` 1–80 — `scripts/replace-phase2-part2-situations.mjs` (dados em `scripts/data/phase2-part2.json`, do mapa `Material Didático/ATC/Phase 2/mapa_questoes_part2.xlsx`). UPSERT por `(part, operational_profile, order_index)`, sem DELETE (FK de `phase2_responses`). **Não rodar `scripts/seed-phase2-prompts.mjs` pra Parte 2** — a lista `PART2` dele é placeholder `general` e polui o pool de todos os perfis. |
 | prompt_text | text | |
 | image_url | text, nullable | só Parte 4 |
 | expected_duration_seconds | int | |
@@ -136,7 +138,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 
 **Composição por tentativa (confirmada pelas especificações oficiais — mesma lógica de banco de itens da Fase 1):**
 - Parte 1: 4 perguntas sorteadas do pool `part1` do perfil do usuário
-- Parte 2: 10 situações sorteadas do pool `part2` do perfil, em ordem crescente de complexidade
+- Parte 2: 10 situações sorteadas do pool `part2` do perfil (80 no pool), em ordem de `order_index`
 - Parte 3: 4 perguntas sorteadas do pool `part3` do perfil (2 concretas + 2 abstratas)
 - Parte 4: 1 imagem sorteada do pool `part4` do perfil
 
