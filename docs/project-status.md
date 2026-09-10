@@ -16,13 +16,15 @@ Responsável: Sabrina Deccache.
 ## Retomada — 2026-09-10 (Plano de correção — Milestone 1: autorização, RLS e status)
 
 Primeiro milestone do "plano de correção" (`Downloads/plano de correção.docx`) — os
-P0 de segurança. Commitado na branch `security/auth-rls-status` (não mergeado).
+P0 de segurança. **Fechado e no ar** (merge `0b8ead2` em `main` → deploy Vercel;
+migration `20260910000000_lock_privileged_writes.sql` aplicada em produção depois do
+deploy). Verificado em produção: candidato não promove `role`, backend continua
+editando `users` normalmente; 5/5 triggers instalados; policies de `update` em
+`simulation_attempts` e de `insert` em feedback/answers/responses removidas.
 
-**Estado da produção:** a migration foi aplicada cedo demais e **revertida na hora**
-(código antigo + triggers ativos quebrava Fase 1/2/SDEA). Produção está no schema
-pré-M1 (funcional, ainda vulnerável). **Sequência correta:** 1) merge em `main` →
-deploy do código novo (funciona sem a migration); 2) reaplicar
-`20260910000000_lock_privileged_writes.sql`. Ver cabeçalho da migration.
+Nota de processo: a migration chegou a ser aplicada antes do deploy do código e foi
+revertida na hora (código antigo + triggers = Fase 1/2/SDEA quebradas). A ordem
+correta está no cabeçalho da migration — código primeiro, migration depois.
 
 ### Vulnerabilidades confirmadas (reproduzidas em SQL)
 
