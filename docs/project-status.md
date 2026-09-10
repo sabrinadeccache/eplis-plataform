@@ -52,6 +52,11 @@ Revisão apontou 4 falhas. `20260910120000_m1_1_harden_signup_and_attempt_insert
 
 `src/lib/auth/actions.test.ts` novo (4). **99/99 vitest, tsc/eslint/build limpos.**
 
+Merge `2d79ffc` em `main` → deploy Vercel; migration `20260910120000` aplicada em
+produção depois do deploy. Verificado em produção: cadastro pedindo `role=admin`
+grava `pilot`; candidato não cria tentativa posicionada (`permission denied`);
+backend cria tentativa normalmente. **M1 + M1.1 fechados e no ar.**
+
 ### Vulnerabilidades confirmadas (reproduzidas em SQL)
 
 Rodando como candidato autenticado direto no PostgREST (sem passar pelo app):
