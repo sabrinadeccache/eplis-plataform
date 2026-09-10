@@ -12,7 +12,10 @@ export async function startAttempt(mode: SimulationMode, formData?: FormData) {
   const supabase = await createClient();
   const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
 
-  const { data, error } = await supabase
+  // Criação da tentativa vai via service_role — `authenticated` não escreve em
+  // simulation_attempts (nem posição/estado forjados no INSERT).
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("simulation_attempts")
     .insert({ user_id: user.id, phase: "phase1", mode, status: "in_progress" })
     .select("id")

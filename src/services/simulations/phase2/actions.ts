@@ -30,7 +30,10 @@ export async function startAttempt(mode: SimulationMode) {
     );
   }
 
-  const { data, error } = await supabase
+  // Criação da tentativa (incl. posição/estado inicial) vem do servidor via
+  // service_role — `authenticated` não escreve em simulation_attempts.
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("simulation_attempts")
     .insert({
       user_id: user.id,
