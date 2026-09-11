@@ -22,6 +22,19 @@
 // samples reais — não um campo do container. Se o arquivo não decodifica
 // (dados corrompidos, payload zerado, container forjado), o ffmpeg sai com
 // erro e `probeAudioDecodable` rejeita.
+//
+// **Achados da 4ª rodada da revisão (2026-09-11), reproduzidos de verdade:**
+// 3. Sem `-map 0:a`, o `ffmpeg` decodifica QUALQUER stream que o `-f null`
+//    encontrar primeiro — um MP4 só de vídeo (sem faixa de áudio nenhuma)
+//    era aceito, com a duração do VÍDEO reportada como se fosse áudio.
+//    `-map 0:a -vn` restringe a decodificação só a streams de áudio e faz o
+//    `ffmpeg` sair com erro se não houver nenhum.
+// 4. Corrupção no MEIO do stream (zerar um trecho do payload, não o
+//    arquivo inteiro) fazia o `ffmpeg` imprimir erros de decodificação no
+//    stderr mas ainda assim sair com código 0 — só arquivos totalmente
+//    irrecuperáveis quebravam o processo. `-xerror` faz o `ffmpeg` abortar
+//    (código de saída != 0) no primeiro erro de decodificação, não só no
+//    final.
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { unlink, writeFile } from "node:fs/promises";
@@ -71,10 +84,18 @@ export async function probeAudioDecodable(buffer: Buffer, ext: "webm" | "mp4"): 
       execFile(
         ffmpegBinaryPath,
         // -v error: silencia log verboso, mas erros reais (dados inválidos)
-        // ainda aparecem no stderr e fazem o processo sair com erro.
+        // ainda aparecem no stderr.
+        // -xerror: aborta com código de saída != 0 no PRIMEIRO erro de
+        // decodificação — sem isso, corrupção no meio do stream (não o
+        // arquivo inteiro) só gerava mensagens de erro no stderr, mas o
+        // processo terminava com exit 0 mesmo assim.
+        // -map 0:a -vn: decodifica só stream(s) de ÁUDIO — sem isto, um
+        // arquivo sem nenhuma faixa de áudio (só vídeo) tinha a duração do
+        // VÍDEO reportada como se fosse a duração do áudio. Com `-map 0:a`
+        // e nenhum stream de áudio presente, o ffmpeg sai com erro.
         // -f null -: decodifica de verdade (precisa, pro null muxer poder
         // descartar frames) sem escrever arquivo de saída nenhum.
-        ["-v", "error", "-i", tmpPath, "-progress", "pipe:1", "-f", "null", "-"],
+        ["-v", "error", "-xerror", "-i", tmpPath, "-map", "0:a", "-vn", "-progress", "pipe:1", "-f", "null", "-"],
         { timeout: PROBE_TIMEOUT_MS, maxBuffer: MAX_FFMPEG_OUTPUT_BYTES },
         (error: unknown, stdoutData: string) => {
           if (error) {

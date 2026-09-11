@@ -4,7 +4,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // testes é o FLUXO da rota (o que ela chama, em que ordem, e o que devolve
 // pra cada desfecho do guard), não redemonstrar a lógica interna de
 // `reserveResponseSlot` (isso já é coberto por
-// src/lib/simulations/item-guard.test.ts) nem de `validateAudioUpload`
+// src/lib/simulations/item-guard.test.ts) nem de `validateAudioContainer`/`validateDecodedAudio`
 // (src/lib/audio/validate.test.ts).
 
 const authorize = vi.fn();
@@ -19,10 +19,11 @@ vi.mock("@/services/simulations/phase2/actions", () => ({ assertOwnAttemptInProg
 const getSequenceForAttempt = vi.fn();
 vi.mock("@/services/simulations/phase2/queries", () => ({ getSequenceForAttempt }));
 
-const validateAudioUpload = vi.fn();
+const validateAudioContainer = vi.fn();
+const validateDecodedAudio = vi.fn();
 vi.mock("@/lib/audio/validate", async (importOriginal) => {
   const actual = (await importOriginal()) as object;
-  return { ...actual, validateAudioUpload };
+  return { ...actual, validateAudioContainer, validateDecodedAudio };
 });
 
 const reserveResponseSlot = vi.fn();
@@ -137,7 +138,8 @@ beforeEach(() => {
   authorize.mockResolvedValue({ user: { id: "user-1", operational_profile: "APP" } });
   assertOwnAttemptInProgress.mockResolvedValue(attempt);
   getSequenceForAttempt.mockResolvedValue(sequence);
-  validateAudioUpload.mockReturnValue({ ok: true, container: "webm", durationSeconds: 12 });
+  validateAudioContainer.mockReturnValue({ ok: true, container: "webm" });
+  validateDecodedAudio.mockResolvedValue({ ok: true, container: "webm", durationSeconds: 12 });
   assertSubmissionRate.mockResolvedValue(undefined);
   storageUpload.mockResolvedValue({ error: null });
   transcribeAudio.mockResolvedValue("I see a runway incursion.");
@@ -177,7 +179,7 @@ describe("POST /api/phase2/submit-response", () => {
   });
 
   it("rejeita áudio inválido (vazio/MIME forjado/duração excedida) antes de guard, storage ou IA", async () => {
-    validateAudioUpload.mockReturnValue({ ok: false, reason: "Áudio vazio." });
+    validateAudioContainer.mockReturnValue({ ok: false, reason: "Áudio vazio." });
     const res = await POST(makeRequest());
     expect(res.status).toBe(422);
     expect(reserveResponseSlot).not.toHaveBeenCalled();
@@ -243,6 +245,9 @@ describe("POST /api/phase2/submit-response", () => {
     const res = await POST(makeRequest());
     const body = await res.json();
     expect(res.status).toBe(200);
+    // Confirma que o decode REALMENTE roda no fluxo normal — sem isto os
+    // testes de "não decodifica antes de X" seriam vacuosos.
+    expect(validateDecodedAudio).toHaveBeenCalledOnce();
     expect(storageUpload).toHaveBeenCalledOnce();
     expect(transcribeAudio).toHaveBeenCalledOnce();
     expect(generateResponseFeedback).toHaveBeenCalledOnce();
@@ -274,5 +279,41 @@ describe("POST /api/phase2/submit-response", () => {
     expect(res.status).toBe(403);
     expect(reserveResponseSlot).not.toHaveBeenCalled();
     expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("NÃO decodifica o áudio antes do rate limit — decode é caro e só roda depois (achado da 4ª rodada)", async () => {
+    const { ItemGuardError } = await import("@/lib/simulations/item-guard");
+    assertSubmissionRate.mockRejectedValue(new ItemGuardError("Aguarde alguns segundos.", 429));
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(429);
+    expect(validateDecodedAudio).not.toHaveBeenCalled();
+  });
+
+  it("NÃO decodifica o áudio quando a reserva de slot dá conflito (corrida) — nenhum processo de ffmpeg é gasto", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "conflict" });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(409);
+    expect(validateDecodedAudio).not.toHaveBeenCalled();
+  });
+
+  it("NÃO decodifica o áudio num replay idempotente (resultado já em cache)", async () => {
+    reserveResponseSlot.mockResolvedValue({
+      kind: "replay",
+      response: { transcript: "cached", ai_feedback: "cached feedback" },
+    });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
+    expect(validateDecodedAudio).not.toHaveBeenCalled();
+  });
+
+  it("decodifica só DEPOIS da reserva, e um arquivo que não decodifica marca a linha reservada como erro (conta pro teto de retry) — achado da 4ª rodada", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    validateDecodedAudio.mockResolvedValue({ ok: false, reason: "Arquivo de áudio corrompido ou não decodificável." });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(422);
+    expect(reserveResponseSlot).toHaveBeenCalledOnce();
+    expect(adminUpdate).toHaveBeenCalledWith(expect.objectContaining({ processing_status: "error" }));
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).not.toHaveBeenCalled();
   });
 });

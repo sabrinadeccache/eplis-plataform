@@ -9,7 +9,7 @@ import { assertOwnAttemptInProgress } from "@/services/simulations/pilot/actions
 import { getSequenceForAttempt, type PilotItemSequence } from "@/services/simulations/pilot/queries";
 import { responseStagesForPilotItem } from "@/services/simulations/pilot/response-stages";
 import { sdeaAircraftType } from "@/lib/auth/roles";
-import { validateAudioUpload, MAX_REQUEST_BODY_BYTES } from "@/lib/audio/validate";
+import { validateAudioContainer, validateDecodedAudio, MAX_REQUEST_BODY_BYTES } from "@/lib/audio/validate";
 import {
   assertCurrentPrompt,
   assertContentLengthWithinLimit,
@@ -24,7 +24,9 @@ import type { Part, PilotResponseStage } from "@/types/database";
 // limite "Maximum array nesting exceeded" do protocolo Flight com áudio longo
 // em base64; ver src/app/api/phase2/submit-response/route.ts) e mesmo guard
 // de item/idempotência/ordem do Milestone 2
-// (src/lib/simulations/item-guard.ts, revisado em 2026-09-11).
+// (src/lib/simulations/item-guard.ts, revisado em 2026-09-11). O decode
+// real do áudio só roda DEPOIS do rate limit e da reserva de slot — ver
+// comentário em src/lib/audio/validate.ts e na rota equivalente da Fase 2.
 export async function POST(request: Request) {
   try {
     assertContentLengthWithinLimit(request, MAX_REQUEST_BODY_BYTES);
@@ -75,11 +77,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tentativa inválida ou já finalizada." }, { status: 403 });
   }
 
+  // Checagem barata (tamanho/MIME/assinatura) — o decode real vem depois da
+  // reserva de slot, mais abaixo.
   const mimeType = audio.type || "audio/webm";
   const buffer = Buffer.from(await audio.arrayBuffer());
-  const validation = await validateAudioUpload(buffer, mimeType);
-  if (!validation.ok) {
-    return NextResponse.json({ error: validation.reason }, { status: 422 });
+  const containerCheck = validateAudioContainer(buffer, mimeType);
+  if (!containerCheck.ok) {
+    return NextResponse.json({ error: containerCheck.reason }, { status: 422 });
   }
 
   // Escrita em pilot_responses só via service_role. Autorização + posse acima.
@@ -124,6 +128,16 @@ export async function POST(request: Request) {
     }
 
     const responseId = reservation.responseId;
+
+    // Só agora, com o slot já reservado (rate limit e corrida já passaram),
+    // decodifica de verdade. Arquivo inválido marca ESTA linha como erro —
+    // conta pro teto de retry do slot, não é mais uma tentativa "de graça".
+    const validation = await validateDecodedAudio(buffer, containerCheck.container);
+    if (!validation.ok) {
+      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
+      return NextResponse.json({ error: validation.reason }, { status: 422 });
+    }
+
     const ext = validation.container === "mp4" ? "mp4" : "webm";
     const path = `${attemptId}/${promptId}-${stage}-${Date.now()}.${ext}`;
 

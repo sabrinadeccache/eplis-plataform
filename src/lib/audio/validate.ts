@@ -88,16 +88,38 @@ function isAllowedMimeType(mimeType: string): boolean {
   return ALLOWED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
 }
 
+export type AudioContainerCheck =
+  | { ok: true; container: AudioContainer }
+  | { ok: false; reason: string };
+
 export type AudioValidationResult =
   | { ok: true; container: AudioContainer; durationSeconds: number }
   | { ok: false; reason: string };
 
-// Checagem completa, na ordem pedida pelo plano de correção: tamanho ->
-// formato suportado -> assinatura real de conteúdo (não só extensão/MIME
-// declarado) -> decodificação real (integridade + duração) — a única etapa
-// que efetivamente prova que existe áudio decodificável, ver
-// src/lib/audio/probe.ts. Assíncrona por causa dela (spawna o `ffmpeg`).
-export async function validateAudioUpload(buffer: Buffer, declaredMimeType: string): Promise<AudioValidationResult> {
+// **Achado da revisão (2026-09-11, 4ª rodada): o decode real (ffmpeg) é caro
+// e não pode rodar antes do rate limit / da reserva atômica de item** —
+// antes, `validateAudioUpload` fazia tudo (barato + decode) numa função só,
+// chamada ANTES de `assertSubmissionRate`/`reserveResponseSlot`; requisições
+// concorrentes conseguiam disparar processos de decodificação livremente, e
+// um arquivo inválido nunca chegava a criar/tocar uma linha de resposta —
+// então não consumia `retry_count`, permitindo tentativas caras ilimitadas
+// (só a autenticação limitava). Por isso esta validação foi separada em
+// DUAS etapas, chamadas em pontos diferentes da rota:
+//
+// 1. `validateAudioContainer` (esta função, síncrona e barata) — ANTES do
+//    rate limit e da reserva de slot. Tamanho, MIME numa allowlist,
+//    assinatura real dos bytes. Nunca decodifica nada.
+// 2. `validateDecodedAudio` (abaixo, assíncrona) — DEPOIS que o slot já foi
+//    reservado (`reserveResponseSlot`, item-guard.ts). Só roda o `ffmpeg` de
+//    verdade (`probeAudioDecodable`) pra quem já passou pela reserva —
+//    então um arquivo inválido AGORA consome a linha reservada (o guard
+//    marca `processing_status = 'error'`), contando pro teto de retry por
+//    slot (`MAX_RETRIES_PER_SLOT`) como qualquer outra falha.
+//
+// Ver src/app/api/phase2/submit-response/route.ts e .../sdea/... pra ver a
+// ordem completa: Content-Length -> auth -> validateAudioContainer ->
+// rate limit -> guard de item/reserva de slot -> SÓ ENTÃO validateDecodedAudio.
+export function validateAudioContainer(buffer: Buffer, declaredMimeType: string): AudioContainerCheck {
   if (buffer.length === 0) {
     return { ok: false, reason: "Áudio vazio." };
   }
@@ -121,7 +143,15 @@ export async function validateAudioUpload(buffer: Buffer, declaredMimeType: stri
     return { ok: false, reason: "O conteúdo do arquivo não corresponde ao formato declarado." };
   }
 
-  const probe = await probeAudioDecodable(buffer, sniffed);
+  return { ok: true, container: sniffed };
+}
+
+// Decodificação real (integridade + duração) — a única etapa que
+// efetivamente prova que existe áudio decodificável, ver
+// src/lib/audio/probe.ts. Chamar só DEPOIS de `reserveResponseSlot` ter
+// reservado a linha (ver comentário acima).
+export async function validateDecodedAudio(buffer: Buffer, container: AudioContainer): Promise<AudioValidationResult> {
+  const probe = await probeAudioDecodable(buffer, container);
   if (!probe.ok) {
     return { ok: false, reason: probe.reason };
   }
@@ -129,5 +159,5 @@ export async function validateAudioUpload(buffer: Buffer, declaredMimeType: stri
     return { ok: false, reason: "Áudio mais longo que o limite permitido para uma resposta." };
   }
 
-  return { ok: true, container: sniffed, durationSeconds: probe.durationSeconds };
+  return { ok: true, container, durationSeconds: probe.durationSeconds };
 }

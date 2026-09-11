@@ -7,7 +7,7 @@ import { generateResponseFeedback, MODEL_VERSION, type FeedbackStage } from "@/l
 import { assertOwnAttemptInProgress } from "@/services/simulations/phase2/actions";
 import { getSequenceForAttempt, type Phase2ItemSequence } from "@/services/simulations/phase2/queries";
 import { responseStagesForPhase2Item } from "@/services/simulations/phase2/response-stages";
-import { validateAudioUpload, MAX_REQUEST_BODY_BYTES } from "@/lib/audio/validate";
+import { validateAudioContainer, validateDecodedAudio, MAX_REQUEST_BODY_BYTES } from "@/lib/audio/validate";
 import {
   assertCurrentPrompt,
   assertContentLengthWithinLimit,
@@ -40,6 +40,15 @@ import type { Part, ResponseStage } from "@/types/database";
 // — a versão anterior materializava o multipart inteiro em memória antes de
 // checar sessão ou tamanho, então um chamador não-autenticado ainda forçava
 // o parsing do corpo.
+//
+// **Ordem corrigida de novo na revisão (4ª rodada):** o decode real do
+// áudio (`validateDecodedAudio`, roda o `ffmpeg`) só acontece DEPOIS do
+// rate limit e da reserva atômica do slot — antes, rodava logo depois do
+// parse do formulário, e requisições concorrentes disparavam processos de
+// decodificação livremente, sem nenhum limite; um arquivo inválido também
+// nunca chegava a criar/tocar uma linha de resposta, então não contava pro
+// teto de retry (`MAX_RETRIES_PER_SLOT`) — só a autenticação limitava
+// tentativas caras repetidas. Ver comentário em src/lib/audio/validate.ts.
 export async function POST(request: Request) {
   try {
     assertContentLengthWithinLimit(request, MAX_REQUEST_BODY_BYTES);
@@ -90,14 +99,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Tentativa inválida ou já finalizada." }, { status: 403 });
   }
 
-  // Valida o arquivo ANTES de qualquer I/O (storage/banco/IA) — arquivo
-  // vazio, gigante, de formato não suportado ou com MIME forjado falha aqui,
-  // sem gastar nada.
+  // Checagem BARATA do arquivo (tamanho, MIME, assinatura) ANTES de
+  // qualquer I/O (storage/banco/IA) — nunca decodifica nada ainda. O decode
+  // real (`validateDecodedAudio`) só roda depois da reserva de slot, mais
+  // abaixo — ver comentário no topo do arquivo.
   const mimeType = audio.type || "audio/webm";
   const buffer = Buffer.from(await audio.arrayBuffer());
-  const validation = await validateAudioUpload(buffer, mimeType);
-  if (!validation.ok) {
-    return NextResponse.json({ error: validation.reason }, { status: 422 });
+  const containerCheck = validateAudioContainer(buffer, mimeType);
+  if (!containerCheck.ok) {
+    return NextResponse.json({ error: containerCheck.reason }, { status: 422 });
   }
 
   // Escrita em phase2_responses só via service_role (o role `authenticated`
@@ -143,6 +153,16 @@ export async function POST(request: Request) {
     }
 
     const responseId = reservation.responseId;
+
+    // Só agora, com o slot já reservado (rate limit e corrida já passaram),
+    // decodifica de verdade. Arquivo inválido marca ESTA linha como erro —
+    // conta pro teto de retry do slot, não é mais uma tentativa "de graça".
+    const validation = await validateDecodedAudio(buffer, containerCheck.container);
+    if (!validation.ok) {
+      await admin.from("phase2_responses").update({ processing_status: "error" }).eq("id", responseId);
+      return NextResponse.json({ error: validation.reason }, { status: 422 });
+    }
+
     const ext = validation.container === "mp4" ? "mp4" : "webm";
     const path = `${attemptId}/${promptId}-${stage}-${Date.now()}.${ext}`;
 

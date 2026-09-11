@@ -24,6 +24,18 @@ import { probeAudioDecodable } from "./probe";
 //   # WebM válido (valid-2s.webm) com o conteúdo do Cluster (a partir do
 //   # cabeçalho do Cluster) todo zerado.
 //   zeroed-cluster.webm
+//
+// E as duas da 4ª rodada:
+//
+//   # MP4 só de vídeo, sem NENHUMA faixa de áudio:
+//   #   ffmpeg -f lavfi -i "color=c=black:s=64x64:d=2" -c:v libx264 video-only.mp4
+//   video-only.mp4
+//
+//   # MP4/AAC real de 10s com o TERÇO CENTRAL do payload do mdat zerado —
+//   # corrupção parcial, não total: o resto do arquivo continua
+//   # decodificável, e era exatamente esse caso que passava antes (o ffmpeg
+//   # imprimia erros no stderr mas saía com código 0).
+//   partial-corruption-10s.mp4
 const FIXTURES_DIR = join(__dirname, "fixtures");
 function fixture(name: string): Buffer {
   return readFileSync(join(FIXTURES_DIR, name));
@@ -109,6 +121,29 @@ describe("probeAudioDecodable — decode real via ffmpeg, contra fixtures reais 
     "rejeita conteúdo que não é áudio nenhum",
     async () => {
       const result = await probeAudioDecodable(Buffer.from("<html>não é áudio</html>"), "webm");
+      expect(result.ok).toBe(false);
+    },
+    PROBE_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "rejeita MP4 que só tem faixa de VÍDEO, sem áudio nenhum — achado da 4ª rodada da revisão",
+    async () => {
+      // Antes de `-map 0:a`, o ffmpeg decodificava o stream de vídeo e
+      // devolvia a duração DELE como se fosse áudio (ok: true, ~1,96s).
+      const result = await probeAudioDecodable(fixture("video-only.mp4"), "mp4");
+      expect(result.ok).toBe(false);
+    },
+    PROBE_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "rejeita corrupção PARCIAL no meio do stream (terço central do mdat zerado) — achado da 4ª rodada da revisão",
+    async () => {
+      // Antes de `-xerror`, o ffmpeg imprimia erros de decodificação mas
+      // saía com código 0, e o probe aceitava: só arquivo totalmente
+      // irrecuperável era rejeitado.
+      const result = await probeAudioDecodable(fixture("partial-corruption-10s.mp4"), "mp4");
       expect(result.ok).toBe(false);
     },
     PROBE_TEST_TIMEOUT_MS,

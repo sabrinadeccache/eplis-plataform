@@ -17,18 +17,20 @@ Responsável: Sabrina Deccache.
 
 ### Estado atual (ponto de retomada)
 
-- **M2 implementado na branch `security/attempt-audio-guards`, com TRÊS rodadas de
+- **M2 implementado na branch `security/attempt-audio-guards`, com QUATRO rodadas de
   revisão adversarial da Sabrina já incorporadas.** 1ª rodada: 5 bloqueadores funcionais
-  (P0/P1). 2ª rodada: mais 3 bloqueadores — os três apontando que a correção da 1ª
-  rodada era insuficiente/só deslocava o problema. **3ª rodada: mais 2 bloqueadores de
-  áudio + 1 erro de documentação** — os dois de áudio provando, com ataques reais
-  reproduzidos por ela, que validação de duração/integridade só em JS (lendo
-  metadado/estrutura do container) NUNCA seria suficiente; a correção definitiva trocou
-  isso por decodificação real via `ffmpeg` (ver "Achados da 3ª rodada" abaixo).
-  **Aguardando 4ª rodada de revisão antes de merge em `main`** (mesmo processo do M1:
-  PR → revisão → correção → revisão de novo → merge, quantas vezes precisar).
-  `tsc`/`eslint` (0 erros, 0 warnings)/`test` (170/170, incluindo testes que rodam
-  `ffmpeg` de verdade)/`build` limpos.
+  (P0/P1). 2ª rodada: mais 3 — apontando que a correção da 1ª era insuficiente/só
+  deslocava o problema. 3ª rodada: mais 2 de áudio + 1 erro de documentação — provando,
+  com ataques reais, que validar duração/integridade só em JS (lendo metadado/estrutura
+  do container) nunca seria suficiente; trocado por decodificação real via `ffmpeg`.
+  **4ª rodada: mais 3 — dois sobre COMO o `ffmpeg` era invocado** (sem `-map 0:a`, um
+  MP4 só de vídeo passava como áudio; sem `-xerror`, corrupção parcial saía com código 0
+  e era aceita) **e um de ordem/custo** (o decode rodava antes do rate limit e da reserva
+  atômica, e arquivo inválido não consumia `retry_count`). Ver "Achados da 4ª rodada"
+  abaixo. **Aguardando 5ª rodada de revisão antes de merge em `main`** (mesmo processo do
+  M1: PR → revisão → correção → revisão de novo → merge, quantas vezes precisar).
+  `tsc`/`eslint` (0 erros, 0 warnings)/`test` (182/182, incluindo testes que rodam
+  `ffmpeg` de verdade contra fixtures adversariais)/`build` limpos.
 - **3 migrations aditivas, ainda NÃO aplicadas em produção** —
   `20260911000000_response_item_slot.sql` (coluna `item_slot` + índice único, segura em
   qualquer ordem de deploy — ver cabeçalho) e `20260911010000_m2_review_fixes.sql`
@@ -201,6 +203,40 @@ submit-response, apontando pro binário — confirmado localmente que ele aparec
 manifesto de rastreamento (`route.js.nft.json`), mas o funcionamento real numa função
 da Vercel (o binário existe e executa lá) só se confirma com um deploy de verdade.
 
+### Achados da 4ª rodada de revisão (2026-09-11) e como foram corrigidos
+
+Os dois primeiros mostram que "rodar o ffmpeg" não bastava — importava COMO rodar.
+Reproduzidos por ela com arquivos reais, como nas rodadas anteriores.
+
+1. **MP4 só de vídeo era aceito como áudio.** Ela gerou um MP4 de 2s sem NENHUMA faixa
+   de áudio; `probeAudioDecodable` devolvia `ok: true` com 1,96s — porque sem `-map`, o
+   `ffmpeg` decodifica o primeiro stream que encontrar, e reportava a duração do VÍDEO
+   como se fosse áudio. **Correção:** `-map 0:a -vn` — decodifica só stream(s) de áudio
+   e o `ffmpeg` sai com erro (`Stream map '0:a' matches no streams`) quando não existe
+   nenhum. Verificado: o arquivo só-vídeo agora é rejeitado; áudio normal continua
+   passando igual.
+2. **Corrupção PARCIAL continuava passando.** Zerando metade (ou o terço central) do
+   payload AAC de uma fixture real, o `ffmpeg` imprimia erros de decodificação no stderr
+   mas **terminava com código 0** — e o probe, que só olhava o código de saída, aceitava.
+   Só arquivo totalmente irrecuperável era rejeitado. **Correção:** `-xerror`, que faz o
+   `ffmpeg` abortar com código != 0 no PRIMEIRO erro de decodificação, não só no fim.
+   Verificado com a fixture nova `partial-corruption-10s.mp4` (terço central do mdat
+   zerado, 10s): antes exit 0, agora exit 183 → rejeitado.
+3. **O ffmpeg rodava ANTES do rate limit e da reserva atômica.** Requisições
+   concorrentes disparavam processos de decodificação livremente, e — pior — um arquivo
+   inválido nunca chegava a criar/tocar uma linha de resposta, então não consumia
+   `retry_count`: tentativas caras repetidas eram limitadas só pela autenticação.
+   **Correção:** a validação foi separada em duas etapas
+   (`src/lib/audio/validate.ts`) e a ordem da rota mudou —
+   `Content-Length` → `authorize` → `validateAudioContainer` (barata, síncrona, sem
+   decodificar) → `assertSubmissionRate` → guard de item/`reserveResponseSlot` → **só
+   então** `validateDecodedAudio` (o `ffmpeg`). Arquivo que não decodifica agora marca a
+   linha JÁ RESERVADA como `error`, consumindo o slot e contando pro teto de retry
+   (`MAX_RETRIES_PER_SLOT`) como qualquer outra falha. Os testes das duas rotas provam a
+   ordem: nada de decode em 429 (rate limit), 409 (corrida) ou replay — e, pra esses
+   testes não serem vacuosos, o fluxo normal afirma explicitamente que o decode É
+   chamado.
+
 ### O que o M2 garante (visão geral, já com as correções acima)
 
 Escopo: as duas route handlers de envio de áudio da entrevista simulada
@@ -216,18 +252,20 @@ sem áudio enviado pelo candidato) fica de fora.
   validado pelo servidor (item 1 acima), com teto de retry por linha (item 2) e trava de
   banco (índice único `(simulation_attempt_id, prompt_id, item_slot)`) como backstop de
   corrida real — a perdedora de uma corrida recebe `409` sem tocar storage/IA.
-- **Validação de arquivo** (`src/lib/audio/validate.ts` + `src/lib/audio/probe.ts`) —
-  `Content-Length` antes de ler o corpo, tamanho real calibrado (~3,75 MB, dentro do
-  limite da Vercel), MIME numa allowlist, assinatura real dos bytes só pra escolher a
-  extensão/detectar MIME forjado — e, como decisão final, **decode real via `ffmpeg`**
-  (3ª rodada da revisão): duração medida pelo que o decoder de fato processou
-  (`out_time_us` do `ffmpeg -progress`), nunca por um campo do container (que a Sabrina
-  provou ser forjável independente do conteúdo real); arquivo rejeitado se o `ffmpeg` não
-  conseguir decodificar. Toda a validação anterior por parsing de estrutura em JS
-  (EBML/ISO-BMFF, Cluster/mdat, Tracks/CodecID) foi removida — não provava
-  decodificabilidade, só a "moldura" do container. Testado contra fixtures de áudio
-  reais E adversariais geradas com `ffmpeg` (`src/lib/audio/fixtures/`) — incluindo os
-  dois ataques exatos que a revisão reproduziu (duração forjada, payload zerado).
+- **Validação de arquivo em DUAS etapas** (`src/lib/audio/validate.ts` +
+  `src/lib/audio/probe.ts`) — etapa barata (`validateAudioContainer`, síncrona):
+  `Content-Length` antes de ler o corpo, tamanho calibrado (~3,75 MB, dentro do limite
+  da Vercel), MIME numa allowlist, assinatura real dos bytes. Etapa cara
+  (`validateDecodedAudio`, só DEPOIS do rate limit e da reserva de slot — 4ª rodada):
+  **decode real via `ffmpeg`** com `-map 0:a -vn` (só faixa de áudio: MP4 só de vídeo é
+  rejeitado) e `-xerror` (aborta no 1º erro: corrupção parcial é rejeitada, não só a
+  total); a duração usada é o `out_time_us` que o decoder de fato processou, nunca um
+  campo do container (que a Sabrina provou ser forjável independente do conteúdo real).
+  Toda a validação por parsing de estrutura em JS (EBML/ISO-BMFF, Cluster/mdat,
+  Tracks/CodecID) foi removida — não provava decodificabilidade, só a "moldura" do
+  container. Testado contra fixtures reais E adversariais geradas com `ffmpeg`
+  (`src/lib/audio/fixtures/`) — os quatro ataques que a revisão reproduziu: duração
+  forjada no mvhd, payload zerado, só-vídeo, corrupção parcial.
 - **Rate limit** (`src/lib/simulations/rate-limit.ts`) — cooldown por compare-and-swap em
   `simulation_attempts.last_submission_at` (mede taxa de envio de verdade, cobre retry do
   mesmo slot — 2ª rodada da revisão), teto por tentativa, teto diário agregado por
@@ -239,9 +277,9 @@ sem áudio enviado pelo candidato) fica de fora.
 |---|---|
 | `src/lib/simulations/item-guard.ts` | guard de item + `reserveResponseSlot` (idempotência/corrida, slot validado) |
 | `src/lib/simulations/rate-limit.ts` | rate limit por cooldown (CAS)/tentativa/usuário, fail-closed |
-| `src/lib/audio/probe.ts` | decodifica o áudio de verdade via `ffmpeg` (`ffmpeg-static`) — única fonte de duração/integridade |
-| `src/lib/audio/validate.ts` | orquestra a validação (tamanho/MIME/assinatura antes do decode; `probeAudioDecodable` como decisão final) |
-| `src/lib/audio/fixtures/` | áudio real (WebM/Opus, MP4/AAC) e adversarial (duração forjada, payload zerado) gerado com `ffmpeg`, usado pelos testes |
+| `src/lib/audio/probe.ts` | decodifica o áudio de verdade via `ffmpeg` (`ffmpeg-static`, `-map 0:a -vn -xerror`) — única fonte de duração/integridade |
+| `src/lib/audio/validate.ts` | validação em 2 etapas: `validateAudioContainer` (barata, antes do rate limit) e `validateDecodedAudio` (decode, depois da reserva) |
+| `src/lib/audio/fixtures/` | áudio real (WebM/Opus, MP4/AAC) e adversarial (duração forjada, payload zerado, só-vídeo, corrupção parcial) gerado com `ffmpeg` |
 | `src/services/simulations/phase2/response-stages.ts` | sequência de estágios de resposta por parte (Fase 2) |
 | `src/services/simulations/pilot/response-stages.ts` | idem, trilha do piloto (com o caso `narrative` x2) |
 | `supabase/migrations/20260911000000_response_item_slot.sql` | coluna `item_slot` + índice único |
@@ -249,17 +287,20 @@ sem áudio enviado pelo candidato) fica de fora.
 
 ### Testes
 
-`item-guard.test.ts` (17), `rate-limit.test.ts` (7), `audio/probe.test.ts` (8 — roda
-`ffmpeg` de verdade contra fixtures reais E adversariais), `audio/validate.test.ts` (13),
-`submit-response/route.test.ts` das duas trilhas (14 + 11) — cobrindo, além do fluxo
-normal: prompt de outra tentativa, slot fora de ordem, conflito/replay, retry além do
+`item-guard.test.ts` (17), `rate-limit.test.ts` (7), `audio/probe.test.ts` (10 — roda
+`ffmpeg` de verdade contra fixtures reais E adversariais), `audio/validate.test.ts` (16),
+`submit-response/route.test.ts` das duas trilhas (18 + 15) — cobrindo, além do fluxo
+normal: **MP4 só de vídeo rejeitado**, **corrupção parcial (terço central do payload
+zerado) rejeitada**, **decode NÃO rodando antes do rate limit / da reserva / num replay**
+(com o fluxo normal afirmando que ele É chamado, pra esses testes não serem vacuosos),
+**arquivo que não decodifica marcando a linha reservada como erro** (consome retry), prompt de outra tentativa, slot fora de ordem, conflito/replay, retry além do
 teto, corpo maior que o limite antes de autenticar, autenticação antes do parse do
 corpo, sequência persistida sendo usada, **duração forjada no metadado do MP4 (mvhd
 editado pra 2s num arquivo de 540s reais) sendo ignorada em favor da duração
 decodificada de verdade**, **payload zerado (mdat/Cluster) sendo rejeitado por não
 decodificar**, áudio real de baixo bitrate excedendo a duração mesmo dentro do teto de
 bytes, cooldown de envio cobrindo retry do mesmo slot, falha fechada em toda
-consulta/CAS de limite. **170/170 vitest** (inclui testes que spawnam `ffmpeg` de
+consulta/CAS de limite. **182/182 vitest** (inclui testes que spawnam `ffmpeg` de
 verdade — mais lentos que o resto da suíte, ainda na casa de segundos),
 `tsc`/`eslint` (0 erros/warnings)/`build` limpos.
 
