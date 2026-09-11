@@ -86,7 +86,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
 
   try {
-    await assertSubmissionRate(supabase, "pilot_responses", attemptId, userId);
+    await assertSubmissionRate(supabase, admin, "pilot_responses", attemptId, userId);
 
     const currentPart = attempt.current_part as Part;
     const currentItemIndex = attempt.current_item_index ?? 0;

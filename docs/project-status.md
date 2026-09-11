@@ -17,19 +17,19 @@ Responsável: Sabrina Deccache.
 
 ### Estado atual (ponto de retomada)
 
-- **M2 implementado na branch `security/attempt-audio-guards`, com a 1ª rodada de
-  revisão adversarial da Sabrina já incorporada.** Ela apontou 5 bloqueadores
-  funcionais (P0/P1) na 1ª versão — nenhum viable pra merge — e todos foram corrigidos
-  na mesma sessão. **Aguardando 2ª rodada de revisão antes de merge em `main`** (mesmo
-  processo do M1: PR → revisão → correção → revisão de novo → merge).
-  `tsc`/`eslint` (**0 erros, 0 warnings** — a 1ª versão tinha 2 warnings, apontado pela
-  Sabrina como "não literalmente limpo", corrigido)/`test` (171/171)/`build` limpos.
-- **2 migrations aditivas, ainda NÃO aplicadas em produção** — seguras em qualquer
-  ordem de deploy (ver "Achados da revisão" abaixo, item da janela de deploy):
-  `20260911000000_response_item_slot.sql` (coluna `item_slot` + índice único) e
-  `20260911010000_m2_review_fixes.sql` (`item_sequence` em `simulation_attempts`,
-  `retry_count` nas duas tabelas de resposta).
-- **Próximo passo, depois da 2ª revisão:** aplicar as 2 migrations em produção, mergear
+- **M2 implementado na branch `security/attempt-audio-guards`, com DUAS rodadas de
+  revisão adversarial da Sabrina já incorporadas.** 1ª rodada: 5 bloqueadores funcionais
+  (P0/P1). 2ª rodada: mais 3 bloqueadores — os três apontando que a correção da 1ª
+  rodada era insuficiente/só deslocava o problema, não resolvia (ver "Achados da 2ª
+  rodada" abaixo). **Aguardando 3ª rodada de revisão antes de merge em `main`** (mesmo
+  processo do M1: PR → revisão → correção → revisão de novo → merge, quantas vezes
+  precisar). `tsc`/`eslint` (0 erros, 0 warnings)/`test` (177/177)/`build` limpos.
+- **3 migrations aditivas, ainda NÃO aplicadas em produção** — seguras em qualquer
+  ordem de deploy: `20260911000000_response_item_slot.sql` (coluna `item_slot` +
+  índice único), `20260911010000_m2_review_fixes.sql` (`item_sequence` em
+  `simulation_attempts`, `retry_count` nas duas tabelas de resposta, e — 2ª rodada —
+  `last_submission_at` em `simulation_attempts`).
+- **Próximo passo, depois da 3ª revisão:** aplicar as 3 migrations em produção, mergear
   a branch, e então Milestone 3 (gravações privadas, retenção e LGPD).
 - **Achado à parte, fora do escopo do código:** ao testar o deploy de preview desta
   branch na Vercel, descobri que as 7 env vars de produção (`OPENAI_API_KEY` etc.)
@@ -95,6 +95,48 @@ Responsável: Sabrina Deccache.
    `assignSlots()` em `item-guard.ts` atribui posição sintética (pela ordem de criação)
    a qualquer linha antiga sem `item_slot`, então a ordem de deploy deixou de importar.
 
+### Achados da 2ª rodada de revisão (2026-09-11) e como foram corrigidos
+
+A Sabrina apontou que os 3 pontos abaixo, da 1ª correção, não resolviam de verdade —
+só deslocavam o problema. Ela tinha razão nos três.
+
+1. **O teto de bytes não garantia o teto de 8 min.** `MAX_AUDIO_BYTES` calibrado por um
+   bitrate MÁXIMO assumido não protege contra bitrate BAIXO — um arquivo de baixo
+   bitrate cabe muito mais áudio no mesmo tamanho, e WebM sem elemento Duration
+   (`null`) continuava sendo aceito. Reproduzido de propósito: `ffmpeg` gerando 9 min de
+   Opus a 6 kbps em stream (sem Duration) cabe em ~520 KB — bem dentro do teto de bytes
+   antigo, mas 60% acima do teto de duração. **Correção real:** `parseWebmDurationSeconds`
+   ganhou um fallback pelo **timecode do último Cluster** (elemento obrigatório pelo
+   spec Matroska, ao contrário de Duration, que é opcional) + margem de segurança —
+   praticamente todo WebM real passa a ter duração calculável mesmo sem Duration.
+   **Duração `null` deixou de ser aceita** (antes passava sem limite nenhum). Ao
+   implementar isso, a busca por assinatura de bytes (`indexOf`) usada pra achar
+   Info/Tracks/Duration se mostrou ela mesma quebrada contra arquivo real: dava falso
+   positivo dentro do `SeekHead` (elemento que todo muxer real escreve, guardando IDs de
+   outros elementos como dado bruto) — **reescrito como parser EBML de verdade,
+   navegando pai→filho pelo tamanho declarado de cada elemento**, nunca mais por busca
+   de sequência de bytes solta. Testado contra fixtures de áudio REAIS geradas com
+   `ffmpeg` (não bytes sintéticos à mão) — ver `src/lib/audio/fixtures/` e a nota de
+   proveniência no topo de `validate.test.ts`.
+2. **A validação ainda aceitava arquivo estruturalmente falso.** Achar um `Cluster`
+   (WebM) ou `mdat` com bytes (MP4) não prova track de áudio real — só bytes "parecidos".
+   **Correção:** exige adicionalmente uma declaração de track de áudio real —
+   `Tracks` > `TrackEntry` com `TrackType` = áudio e `CodecID` conhecido (`A_OPUS`/
+   `A_VORBIS`/`A_PCM`) no WebM; uma sample entry de áudio (`mp4a`/`alac`/etc.) no MP4.
+   **Limite honesto, documentado no código:** isto não prova que os bytes decodificam de
+   fato (exigiria um decoder real, fora de escopo rodar sem essa dependência num runtime
+   serverless) — mas fabricar Tracks+CodecID plausíveis junto de um Cluster de tamanho
+   real deixa de ser "trocar 4 bytes de assinatura".
+3. **A janela curta não contava retry.** Medir por `created_at` OU por `started_at`
+   sofre do mesmo problema: um retry reaproveita a MESMA linha (`item-guard.ts`), então
+   contar LINHAS que batem num filtro de tempo continua dando 1, não quantas vezes a
+   rota foi de fato chamada — 5 retries do mesmo slot em menos de 1s não acionavam o
+   limite. **Correção real:** parou de contar linhas de resposta pra isso. Nova coluna
+   `simulation_attempts.last_submission_at`, atualizada via **compare-and-swap** em TODA
+   submissão (inclusive retry) — só deixa passar 1 a cada
+   `MIN_SUBMISSION_INTERVAL_SECONDS` (2s), não importa se é slot novo ou retry do mesmo
+   slot. Mede a taxa de envio em si, não um proxy indireto por linha de resultado.
+
 ### O que o M2 garante (visão geral, já com as correções acima)
 
 Escopo: as duas route handlers de envio de áudio da entrevista simulada
@@ -112,33 +154,42 @@ sem áudio enviado pelo candidato) fica de fora.
   corrida real — a perdedora de uma corrida recebe `409` sem tocar storage/IA.
 - **Validação de arquivo** (`src/lib/audio/validate.ts`) — `Content-Length` antes de ler o
   corpo, tamanho real calibrado (~3,75 MB, dentro do limite da Vercel), MIME numa
-  allowlist, assinatura real dos bytes, **payload estrutural real** (Cluster/mdat — item 4
-  acima), e duração (parser EBML/ISO-BMFF próprio — limitação real documentada: o
-  `MediaRecorder` normalmente não grava Duration em WebM/streaming, então o teto de bytes é
-  quem segura esse caso, não a duração exata).
-- **Rate limit** (`src/lib/simulations/rate-limit.ts`) — janela curta por `started_at`
-  (cobre retries), teto por tentativa, teto diário agregado por usuário, tudo fail-closed.
+  allowlist, assinatura real dos bytes, **parser EBML de verdade** (navega pai→filho, não
+  busca sequência de bytes — 2ª rodada da revisão), **payload estrutural real + track de
+  áudio declarada** (Cluster+Tracks/CodecID no WebM, mdat+sample entry no MP4), e
+  **duração sempre exigida** (elemento Duration quando o arquivo foi finalizado, timecode
+  do último Cluster + margem de segurança como fallback quando não foi — `null` não é
+  mais aceito). Testado contra fixtures de áudio reais geradas com `ffmpeg`
+  (`src/lib/audio/fixtures/`), não só bytes sintéticos.
+- **Rate limit** (`src/lib/simulations/rate-limit.ts`) — cooldown por compare-and-swap em
+  `simulation_attempts.last_submission_at` (mede taxa de envio de verdade, cobre retry do
+  mesmo slot — 2ª rodada da revisão), teto por tentativa, teto diário agregado por
+  usuário, tudo fail-closed.
 
 ### Arquivos novos
 
 | Arquivo | O quê |
 |---|---|
 | `src/lib/simulations/item-guard.ts` | guard de item + `reserveResponseSlot` (idempotência/corrida, slot validado) |
-| `src/lib/simulations/rate-limit.ts` | rate limit por tentativa/usuário/janela, fail-closed |
-| `src/lib/audio/validate.ts` | validação de arquivo (tamanho/formato/assinatura/payload real/duração) |
+| `src/lib/simulations/rate-limit.ts` | rate limit por cooldown (CAS)/tentativa/usuário, fail-closed |
+| `src/lib/audio/validate.ts` | validação de arquivo — parser EBML/ISO-BMFF real, payload+track de áudio, duração sempre exigida |
+| `src/lib/audio/fixtures/` | áudio real (WebM/Opus finalizado e em stream, MP4/AAC) gerado com `ffmpeg`, usado pelos testes |
 | `src/services/simulations/phase2/response-stages.ts` | sequência de estágios de resposta por parte (Fase 2) |
 | `src/services/simulations/pilot/response-stages.ts` | idem, trilha do piloto (com o caso `narrative` x2) |
 | `supabase/migrations/20260911000000_response_item_slot.sql` | coluna `item_slot` + índice único |
-| `supabase/migrations/20260911010000_m2_review_fixes.sql` | `item_sequence` (simulation_attempts) + `retry_count` (respostas) |
+| `supabase/migrations/20260911010000_m2_review_fixes.sql` | `item_sequence` + `last_submission_at` (simulation_attempts), `retry_count` (respostas) |
 
 ### Testes
 
-`item-guard.test.ts` (17), `rate-limit.test.ts` (5), `audio/validate.test.ts` (25),
-`submit-response/route.test.ts` das duas trilhas (14 + 11) — cobrindo, além do fluxo
-normal: prompt de outra tentativa, slot fora de ordem, conflito/replay, retry além do
-teto, corpo maior que o limite antes de autenticar, autenticação antes do parse do
-corpo, sequência persistida sendo usada, arquivo corrompido (EBML/mdat sem payload),
-falha fechada nas consultas de limite. **171/171 vitest, `tsc`/`eslint` (0
+`item-guard.test.ts` (17), `rate-limit.test.ts` (7), `audio/validate.test.ts` (29, incl.
+fixtures reais de ffmpeg), `submit-response/route.test.ts` das duas trilhas (14 + 11) —
+cobrindo, além do fluxo normal: prompt de outra tentativa, slot fora de ordem,
+conflito/replay, retry além do teto, corpo maior que o limite antes de autenticar,
+autenticação antes do parse do corpo, sequência persistida sendo usada, arquivo
+corrompido de verdade (EBML sem Cluster/Track, mdat sem sample entry), áudio real de
+baixo bitrate excedendo a duração mesmo dentro do teto de bytes, cooldown de envio
+cobrindo retry do mesmo slot, falha fechada em toda consulta/CAS de limite. **177/177
+vitest, `tsc`/`eslint` (0
 erros/warnings)/`build` limpos.**
 
 ## Retomada — 2026-09-10 (Plano de correção — Milestone 1: autorização, RLS e status)

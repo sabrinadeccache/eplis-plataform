@@ -6,28 +6,34 @@
 // memória entre instâncias, então um limitador em memória não seguraria
 // nada de verdade.
 //
-// **Achado da revisão (2026-09-11): usar `created_at` pra medir a janela
-// deixava retry de fora** — um retry reaproveita a MESMA linha (só muda
-// `processing_status`/`started_at`/`retry_count`, `item-guard.ts`), então
-// uma sequência de retries rápidos nunca criava linha nova e não contava
-// pra janela curta. Trocado pra `started_at`, que o guard atualiza em TODO
-// retry. Todas as consultas falham FECHADO: erro de leitura no banco vira
-// rejeição (503), nunca "assume que está tudo bem" (achado real: a versão
-// anterior devolvia `count ?? 0`, ou seja, uma falha na consulta liberava a
-// requisição sem checagem nenhuma).
+// **Achado da revisão (2026-09-11, 2ª rodada): medir a janela contando
+// LINHAS não funciona pra retry, nem trocando pra `started_at`** — um
+// retry reaproveita a MESMA linha (`item-guard.ts`), então o número de
+// linhas que batem num filtro de tempo continua sendo 1 (a linha), não
+// quantas vezes ela foi de fato reenviada — 5 retries seguidos do mesmo
+// slot em 1 segundo continuavam contando como "1" nesse esquema. A
+// correção de verdade é medir a TAXA DE ENVIO em si, não linhas de
+// resultado: `assertSubmissionCooldown` faz um UPDATE condicional
+// (compare-and-swap) num timestamp dedicado em `simulation_attempts`
+// (`last_submission_at`, migration `20260911010000_m2_review_fixes.sql`) —
+// TODA submissão (inclusive retry) precisa passar por essa trava antes de
+// tocar em qualquer linha de resposta, e o CAS só deixa passar 1 a cada
+// `MIN_SUBMISSION_INTERVAL_SECONDS`, não importa se é slot novo ou retry do
+// mesmo slot.
 import { ItemGuardError, type ItemGuardTable } from "@/lib/simulations/item-guard";
 import type { SupabaseServerClient } from "@/lib/simulations/attempt-guards";
+import type { createAdminClient } from "@/lib/supabase/admin";
 
-// Janela curta: uma resposta por vez é o fluxo real (o candidato só grava e
-// envia depois que a anterior terminou de processar) — 2 no intervalo dá
-// folga pra 1 retry legítimo do próprio cliente sem travar uso normal.
-const BURST_WINDOW_SECONDS = 5;
-const MAX_SUBMISSIONS_PER_BURST_WINDOW = 2;
+// Intervalo mínimo entre duas submissões da MESMA tentativa, contando
+// retries — o fluxo real do candidato é gravar, esperar processar, só
+// então enviar de novo, então isto não trava uso normal.
+const MIN_SUBMISSION_INTERVAL_SECONDS = 2;
 
 // Teto de linhas por tentativa: o máximo de slots reais é 30 (Fase 2) / 36
-// (SDEA) — ver response-stages.ts de cada trilha. 60 dá margem generosa sem
-// deixar uma tentativa acumular volume ilimitado (retries não contam aqui —
-// eles têm o próprio teto em item-guard.ts).
+// (SDEA) — ver response-stages.ts de cada trilha. 60 dá margem generosa
+// sobre isso (retries não engordam esse número — eles reusam a linha e têm
+// teto próprio em item-guard.ts; este teto é defesa contra volume de itens
+// NOVOS anômalo, não contra retry).
 const MAX_RESPONSES_PER_ATTEMPT = 60;
 
 // Teto agregado por usuário/dia — independente do teto diário de
@@ -36,10 +42,6 @@ const MAX_RESPONSES_PER_ATTEMPT = 60;
 // respostas. Generoso o bastante pra cobrir o teto de tentativas × o máximo
 // real de slots por tentativa (5 × 36 = 180) com folga.
 const MAX_RESPONSES_PER_USER_PER_DAY = 250;
-
-function windowStartIso(seconds: number): string {
-  return new Date(Date.now() - seconds * 1000).toISOString();
-}
 
 function startOfTodayIso(): string {
   const now = new Date();
@@ -57,23 +59,44 @@ async function countOrFail(
   return count ?? 0;
 }
 
+// CAS num timestamp dedicado da própria tentativa — não depende de linhas
+// de resposta existirem, então mede a taxa de envio de verdade, inclusive
+// retries do mesmo slot. `.or(...)` cobre a 1ª submissão da tentativa
+// (`last_submission_at` ainda `null`) e qualquer submissão depois do
+// intervalo mínimo; o `update` só afeta 1 linha quando alguma dessas
+// condições bate, então duas requisições simultâneas nunca passam as duas —
+// a que perde a corrida do UPDATE recebe `data: null` de volta.
+async function assertSubmissionCooldown(
+  admin: ReturnType<typeof createAdminClient>,
+  attemptId: string,
+): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const cutoffIso = new Date(Date.now() - MIN_SUBMISSION_INTERVAL_SECONDS * 1000).toISOString();
+
+  const { data, error } = await admin
+    .from("simulation_attempts")
+    .update({ last_submission_at: nowIso })
+    .eq("id", attemptId)
+    .or(`last_submission_at.is.null,last_submission_at.lte.${cutoffIso}`)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    throw new ItemGuardError("Não foi possível verificar o limite de envio. Tente novamente.", 503);
+  }
+  if (!data) {
+    throw new ItemGuardError("Aguarde alguns segundos antes de enviar de novo.", 429);
+  }
+}
+
 export async function assertSubmissionRate(
   supabase: SupabaseServerClient,
+  admin: ReturnType<typeof createAdminClient>,
   table: ItemGuardTable,
   attemptId: string,
   userId: string,
 ): Promise<void> {
-  const burstCount = await countOrFail(
-    supabase
-      .from(table)
-      .select("id", { count: "exact", head: true })
-      .eq("simulation_attempt_id", attemptId)
-      .gte("started_at", windowStartIso(BURST_WINDOW_SECONDS)),
-    "Não foi possível verificar o limite de envio. Tente novamente.",
-  );
-  if (burstCount >= MAX_SUBMISSIONS_PER_BURST_WINDOW) {
-    throw new ItemGuardError("Aguarde alguns segundos antes de enviar de novo.", 429);
-  }
+  await assertSubmissionCooldown(admin, attemptId);
 
   const attemptCount = await countOrFail(
     supabase
@@ -97,7 +120,7 @@ export async function assertSubmissionRate(
       .from(table)
       .select("id, simulation_attempts!inner(user_id)", { count: "exact", head: true })
       .eq("simulation_attempts.user_id", userId)
-      .gte("started_at", startOfTodayIso()) as unknown as PromiseLike<{
+      .gte("created_at", startOfTodayIso()) as unknown as PromiseLike<{
       count: number | null;
       error: { message: string } | null;
     }>,

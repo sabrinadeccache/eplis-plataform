@@ -16,3 +16,12 @@ alter table public.simulation_attempts add column if not exists item_sequence js
 -- falha (Whisper indisponível etc.) não tinham teto nenhum.
 alter table public.phase2_responses add column if not exists retry_count smallint not null default 0;
 alter table public.pilot_responses add column if not exists retry_count smallint not null default 0;
+
+-- 3. Timestamp de cooldown por tentativa — a janela curta de rate limit
+-- (src/lib/simulations/rate-limit.ts) tentou primeiro contar LINHAS de
+-- resposta por `created_at`/`started_at`, mas um retry reusa a mesma linha
+-- (item 2 acima), então nenhuma contagem de linhas reflete quantas vezes a
+-- rota foi de fato chamada. `last_submission_at` é atualizado (via
+-- compare-and-swap) em TODA submissão, inclusive retries — é a única forma
+-- de medir taxa de envio independente de quantas linhas de resposta existem.
+alter table public.simulation_attempts add column if not exists last_submission_at timestamptz;

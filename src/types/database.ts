@@ -101,6 +101,11 @@ export type SimulationAttemptRow = {
   // (migration 20260911010000) — nesse caso o código cai no recálculo
   // antigo, ver comentário em queries.ts.
   item_sequence: Record<string, string[]> | null;
+  // Timestamp do último envio de resposta aceito (qualquer slot, inclusive
+  // retry) — usado só pelo rate limit (src/lib/simulations/rate-limit.ts)
+  // como trava de cooldown via compare-and-swap; não tem relação com
+  // `elapsed_seconds` nem com o cronômetro exibido ao candidato.
+  last_submission_at: string | null;
   started_at: string;
   finished_at: string | null;
 };
