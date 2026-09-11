@@ -176,6 +176,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | simulation_attempt_id | uuid → simulation_attempts | |
 | prompt_id | uuid → phase2_prompts | |
 | response_stage | enum | **[ALTERADO]** agora cobre todos os sub-estágios da state machine: `main`, `situation_intro`, `situation_check`, `suggestion` (Parte 2), `image_observation`, `image_description`, `story_preparation`, `story_telling` (Parte 4) |
+| item_slot | smallint, nullable | **[NOVO, 2026-09-11 — Milestone 2]** posição (0-based) da resposta dentro da sequência de estágios do item (ver `src/services/simulations/phase2/response-stages.ts`). Não é redundante com `response_stage`: é a chave de posição/idempotência que o guard de item usa (`src/lib/simulations/item-guard.ts`) — `response_stage` sozinho não é único dentro de um item em toda trilha (a Parte 4 do SDEA repete `narrative` duas vezes). Índice único em `(simulation_attempt_id, prompt_id, item_slot)`, migration `20260911000000_response_item_slot.sql`. `null` só em linhas anteriores a essa migration. |
 | audio_url | text, nullable | |
 | transcript | text, nullable | |
 | ai_feedback | text, nullable | feedback curto em inglês por resposta. `practice`: preenchido em tempo real (mostrado ao candidato após cada resposta). `official`: **[2026-08-27]** preenchido só na finalização (`advanceState`, em lote), para o demonstrativo por parte da tela de resultado — nunca mostrado durante a prova |
@@ -260,9 +261,12 @@ separadas):
 | created_at | timestamp | |
 
 **`pilot_responses`** — mesmas colunas de `phase2_responses` (`simulation_attempt_id`,
-`prompt_id` → `pilot_prompts`, `audio_url`, `transcript`, `ai_feedback`, `ai_provider`,
-`model_version`, `processing_status`, `repetition_count`, `started_at`, `finished_at`,
-`created_at`), só trocando `response_stage` pelo enum `pilot_response_stage` (ver abaixo).
+`prompt_id` → `pilot_prompts`, `item_slot`, `audio_url`, `transcript`, `ai_feedback`,
+`ai_provider`, `model_version`, `processing_status`, `repetition_count`, `started_at`,
+`finished_at`, `created_at`), só trocando `response_stage` pelo enum `pilot_response_stage`
+(ver abaixo). `item_slot` é onde a Parte 4 usa de verdade a distinção por posição: os dois
+estágios `narrative` do mesmo item (hipótese de antes / hipótese de depois) só são
+diferenciáveis pelo `item_slot`, não pelo nome do estágio.
 
 **Composição por tentativa** (`PART_SIZES` em `src/services/simulations/pilot/state-machine.ts`,
 diferente do controlador):

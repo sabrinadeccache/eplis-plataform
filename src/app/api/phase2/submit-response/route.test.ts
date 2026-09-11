@@ -1,0 +1,238 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+// Módulos mockados na fronteira de cada responsabilidade — o objetivo destes
+// testes é o FLUXO da rota (o que ela chama, em que ordem, e o que devolve
+// pra cada desfecho do guard), não redemonstrar a lógica interna de
+// `reserveResponseSlot` (isso já é coberto por
+// src/lib/simulations/item-guard.test.ts) nem de `validateAudioUpload`
+// (src/lib/audio/validate.test.ts).
+
+const authorize = vi.fn();
+vi.mock("@/lib/auth/authorize", async (importOriginal) => {
+  const actual = (await importOriginal()) as object;
+  return { ...actual, authorize };
+});
+
+const assertOwnAttemptInProgress = vi.fn();
+vi.mock("@/services/simulations/phase2/actions", () => ({ assertOwnAttemptInProgress }));
+
+const getSequenceForAttempt = vi.fn();
+vi.mock("@/services/simulations/phase2/queries", () => ({ getSequenceForAttempt }));
+
+const validateAudioUpload = vi.fn();
+vi.mock("@/lib/audio/validate", () => ({ validateAudioUpload }));
+
+const reserveResponseSlot = vi.fn();
+vi.mock("@/lib/simulations/item-guard", async (importOriginal) => {
+  const actual = (await importOriginal()) as object;
+  return { ...actual, reserveResponseSlot };
+});
+
+const assertSubmissionRate = vi.fn();
+vi.mock("@/lib/simulations/rate-limit", () => ({ assertSubmissionRate }));
+
+const transcribeAudio = vi.fn();
+vi.mock("@/lib/ai/openai", () => ({ transcribeAudio }));
+
+const generateResponseFeedback = vi.fn();
+vi.mock("@/lib/ai/anthropic", () => ({
+  generateResponseFeedback,
+  MODEL_VERSION: "test-model",
+}));
+
+const storageUpload = vi.fn();
+const adminUpdate = vi.fn();
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from() {
+      return {
+        update(payload: Record<string, unknown>) {
+          adminUpdate(payload);
+          return this;
+        },
+        eq() {
+          return this;
+        },
+        then(resolve: (v: { data: null; error: null }) => void) {
+          resolve({ data: null, error: null });
+        },
+      };
+    },
+  }),
+}));
+
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({
+    storage: {
+      from() {
+        return {
+          upload: storageUpload,
+          getPublicUrl: () => ({ data: { publicUrl: "https://cdn.test/audio.webm" } }),
+        };
+      },
+    },
+    from() {
+      return {
+        select() {
+          return this;
+        },
+        eq() {
+          return this;
+        },
+        single: async () => ({ data: { prompt_text: "Describe the situation." } }),
+      };
+    },
+  }),
+}));
+
+const { POST } = await import("./route");
+
+// Monta um "Request" que só sabe responder `.formData()` — a rota nunca lê
+// o corpo bruto, só chama `request.formData()`. Evita montar um Request de
+// verdade com FormData/File como corpo: jsdom (ambiente destes testes) e o
+// runtime de fetch do Node (undici) têm implementações de FormData/File de
+// realms diferentes, e serializar uma pela outra falha na checagem WebIDL
+// (`webidl.is.File`) — problema só do harness de teste, não da rota.
+function makeRequest(
+  overrides: Partial<Record<string, string>> = {},
+  audio: Blob | null = new Blob(["fake"], { type: "audio/webm" }),
+): Request {
+  const formData = new FormData();
+  formData.set("attemptId", overrides.attemptId ?? "attempt-1");
+  formData.set("promptId", overrides.promptId ?? "prompt-1");
+  formData.set("stage", overrides.stage ?? "situation_check");
+  formData.set("repetitionCount", overrides.repetitionCount ?? "0");
+  if (audio) formData.set("audio", audio, "audio.webm");
+  return { formData: async () => formData } as unknown as Request;
+}
+
+const attempt = {
+  id: "attempt-1",
+  user_id: "user-1",
+  phase: "phase2",
+  status: "in_progress",
+  mode: "practice",
+  current_part: "part2",
+  current_item_index: 0,
+};
+
+const sequence = {
+  part1: [],
+  part2: [{ id: "prompt-1", part: "part2", promptText: "x", imageUrl: null, expectedDurationSeconds: 30 }],
+  part3: [],
+  part4: [],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  authorize.mockResolvedValue({ user: { id: "user-1", operational_profile: "APP" } });
+  assertOwnAttemptInProgress.mockResolvedValue(attempt);
+  getSequenceForAttempt.mockResolvedValue(sequence);
+  validateAudioUpload.mockReturnValue({ ok: true, container: "webm", durationSeconds: 12 });
+  assertSubmissionRate.mockResolvedValue(undefined);
+  storageUpload.mockResolvedValue({ error: null });
+  transcribeAudio.mockResolvedValue("I see a runway incursion.");
+  generateResponseFeedback.mockResolvedValue("Good job.");
+});
+
+describe("POST /api/phase2/submit-response", () => {
+  it("rejeita requisição sem os campos obrigatórios, sem chamar nenhum guard", async () => {
+    const formData = new FormData();
+    formData.set("attemptId", "attempt-1");
+    const res = await POST({ formData: async () => formData } as unknown as Request);
+    expect(res.status).toBe(400);
+    expect(authorize).not.toHaveBeenCalled();
+  });
+
+  it("rejeita áudio inválido (vazio/MIME forjado/duração excedida) antes de guard, storage ou IA", async () => {
+    validateAudioUpload.mockReturnValue({ ok: false, reason: "Áudio vazio." });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(422);
+    expect(reserveResponseSlot).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).not.toHaveBeenCalled();
+  });
+
+  it("rejeita item de outra tentativa / fora de ordem (promptId não bate com o item corrente), sem gastar storage nem IA", async () => {
+    const res = await POST(makeRequest({ promptId: "prompt-de-outra-tentativa" }));
+    expect(res.status).toBe(403);
+    expect(reserveResponseSlot).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).not.toHaveBeenCalled();
+  });
+
+  it("rejeita item futuro/inexistente na sequência (posição corrente sem prompt correspondente)", async () => {
+    getSequenceForAttempt.mockResolvedValue({ part1: [], part2: [], part3: [], part4: [] });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(500);
+  });
+
+  it("respeita o rate limit antes de tocar em guard/storage/IA", async () => {
+    const { ItemGuardError } = await import("@/lib/simulations/item-guard");
+    assertSubmissionRate.mockRejectedValue(new ItemGuardError("Aguarde alguns segundos.", 429));
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(429);
+    expect(reserveResponseSlot).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("devolve 409 sem chamar storage/IA quando o guard sinaliza conflito (corrida/duplicata em voo)", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "conflict" });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(409);
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).not.toHaveBeenCalled();
+  });
+
+  it("devolve o resultado em cache sem chamar Whisper/Claude de novo quando o guard sinaliza replay (idempotência)", async () => {
+    reserveResponseSlot.mockResolvedValue({
+      kind: "replay",
+      response: { transcript: "cached transcript", ai_feedback: "cached feedback" },
+    });
+    const res = await POST(makeRequest());
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ transcript: "cached transcript", feedback: "cached feedback" });
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).not.toHaveBeenCalled();
+    expect(generateResponseFeedback).not.toHaveBeenCalled();
+  });
+
+  it("fluxo normal: reserva o slot, sobe o áudio, transcreve e gera feedback (practice)", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    const res = await POST(makeRequest());
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(storageUpload).toHaveBeenCalledOnce();
+    expect(transcribeAudio).toHaveBeenCalledOnce();
+    expect(generateResponseFeedback).toHaveBeenCalledOnce();
+    expect(body).toEqual({ transcript: "I see a runway incursion.", feedback: "Good job." });
+  });
+
+  it("modo official não chama geração de feedback (só transcreve)", async () => {
+    assertOwnAttemptInProgress.mockResolvedValue({ ...attempt, mode: "official" });
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    const res = await POST(makeRequest());
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(generateResponseFeedback).not.toHaveBeenCalled();
+    expect(body).toEqual({ transcript: "I see a runway incursion.", feedback: null });
+  });
+
+  it("marca a linha como erro e devolve 502 quando a transcrição falha, sem gerar feedback", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    transcribeAudio.mockRejectedValue(new Error("Whisper indisponível"));
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(502);
+    expect(generateResponseFeedback).not.toHaveBeenCalled();
+    expect(adminUpdate).toHaveBeenCalledWith(expect.objectContaining({ processing_status: "error" }));
+  });
+
+  it("rejeita tentativa inválida/já finalizada sem gastar guard/storage/IA", async () => {
+    assertOwnAttemptInProgress.mockRejectedValue(new Error("Tentativa inválida ou já finalizada."));
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(403);
+    expect(reserveResponseSlot).not.toHaveBeenCalled();
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+});

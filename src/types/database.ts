@@ -147,6 +147,14 @@ export type Phase2ResponseRow = {
   simulation_attempt_id: string;
   prompt_id: string;
   response_stage: ResponseStage;
+  // Posição (0-based) da resposta dentro da sequência de estágios do item —
+  // ver src/services/simulations/phase2/response-stages.ts. Necessário
+  // porque `response_stage` sozinho não é único dentro de um item em todo
+  // lugar (a Parte 4 do SDEA repete "narrative"); é o `item_slot`, não o
+  // nome do estágio, que o guard de item usa como chave de posição/idempotência
+  // (Milestone 2, docs/project-status.md). `null` = linha antiga, de antes
+  // dessa coluna existir (ver migration 20260911000000).
+  item_slot: number | null;
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
@@ -186,6 +194,8 @@ export type PilotResponseRow = {
   simulation_attempt_id: string;
   prompt_id: string;
   response_stage: PilotResponseStage;
+  // Ver comentário equivalente em Phase2ResponseRow.item_slot.
+  item_slot: number | null;
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;

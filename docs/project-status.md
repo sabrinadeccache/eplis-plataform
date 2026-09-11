@@ -13,6 +13,78 @@ conteúdo próprio, baseado nas especificações públicas do exame.
 
 Responsável: Sabrina Deccache.
 
+## Retomada — 2026-09-11 (Plano de correção — Milestone 2: guards de item/áudio/custo)
+
+### Estado atual (ponto de retomada)
+
+- **M2 implementado na branch `security/attempt-audio-guards`, aguardando revisão da
+  Sabrina antes de merge em `main`** (mesmo processo do M1: PR → revisão → M2.1 se
+  achar algo → merge). `tsc`/`lint`/`test` (149/149, +50 desde o M1.1)/`build` limpos.
+  **Migration `20260911000000_response_item_slot.sql` ainda NÃO aplicada em produção** —
+  é aditiva/segura (coluna nullable + índice único que ignora `NULL`), então pode ir
+  **antes** do merge/deploy do código (ordem invertida em relação ao M1 — ver cabeçalho
+  da própria migration pro motivo).
+- **Próximo passo, depois da revisão:** aplicar a migration em produção, mergear a
+  branch, e então Milestone 3 (gravações privadas, retenção e LGPD).
+
+### O que o M2 garante
+
+Escopo: as duas route handlers de envio de áudio da entrevista simulada
+(`/api/phase2/submit-response`, `/api/sdea/submit-response`) — Fase 1 (múltipla escolha,
+sem áudio enviado pelo candidato) fica de fora.
+
+- **Guard autoritativo de item** (`src/lib/simulations/item-guard.ts`,
+  `assertCurrentPrompt`) — o `promptId` do formulário nunca é fonte de verdade: o servidor
+  recalcula o item corrente a partir de `attempt.current_part`/`current_item_index`
+  (persistidos, não vêm do cliente) + `getSequenceForAttempt` (determinística por
+  `attemptId`) e só aceita a requisição se o `promptId` enviado bater com o item corrente.
+  Cobre de uma vez "prompt de outra tentativa" e "item anterior/futuro".
+- **Idempotência + corrida** (`reserveResponseSlot`, mesmo arquivo) — cada resposta ocupa
+  um `item_slot` (posição 0-based na sequência de estágios do item, não o nome do estágio
+  — a Parte 4 do SDEA repete `narrative` duas vezes no mesmo item, ver
+  `docs/database-schema.md` → `phase2_responses`). Replay do mesmo request (retry de rede,
+  ou reenvio depois de um erro) reaproveita a mesma linha (CAS via
+  `processing_status='error'`) ou devolve o resultado já pronto em cache, sem 2ª chamada
+  de Whisper/Claude; duas requisições concorrentes pro mesmo slot só deixam uma passar — a
+  outra recebe `409` sem tocar storage/IA. A trava de banco (`item_slot` + índice único,
+  migration `20260911000000`) é o backstop contra corrida real; a checagem em memória do
+  guard cobre o caminho comum sem precisar da migration ainda estar aplicada.
+- **Validação de arquivo** (`src/lib/audio/validate.ts`, `validateAudioUpload`) — antes de
+  qualquer I/O: tamanho (`MAX_AUDIO_BYTES` = 15 MB), MIME declarado numa allowlist
+  (`audio/webm`, `audio/mp4` — os dois formatos reais do `MediaRecorder`), **assinatura
+  real dos bytes** (magic bytes EBML/WebM e `ftyp`/MP4 — não só o MIME declarado, que é
+  falsificável por quem chama a rota direto), arquivo vazio/corrompido, e duração (parser
+  EBML/ISO-BMFF próprio, sem depender de `ffmpeg` no runtime serverless — **limitação real
+  documentada no código**: o `MediaRecorder` do navegador normalmente NÃO grava o elemento
+  Duration em WebM/streaming, então a duração exata só costuma ser extraível no MP4
+  (Safari); o teto de bytes é quem protege o caso comum do WebM).
+- **Rate limit** (`src/lib/simulations/rate-limit.ts`, `assertSubmissionRate`) — consultado
+  no banco (não em memória do processo — funções serverless da Vercel não compartilham
+  memória entre instâncias): janela curta por tentativa (2 envios / 5s) + teto agregado de
+  linhas por tentativa (60, folga generosa sobre o máximo real de 30/36 slots
+  Fase 2/SDEA) — cobre "limitar retentativas" sem precisar de uma coluna de contador
+  dedicada. O teto diário por usuário já existia (`DAILY_ATTEMPT_LIMIT`/
+  `PILOT_DAILY_ATTEMPT_LIMIT`, Fase 1).
+
+### Arquivos novos
+
+| Arquivo | O quê |
+|---|---|
+| `src/lib/simulations/item-guard.ts` | guard de item + `reserveResponseSlot` (idempotência/corrida) |
+| `src/lib/simulations/rate-limit.ts` | rate limit por tentativa/janela, consultado no banco |
+| `src/lib/audio/validate.ts` | validação de arquivo (tamanho/formato/assinatura/duração) |
+| `src/services/simulations/phase2/response-stages.ts` | sequência de estágios de resposta por parte (Fase 2) |
+| `src/services/simulations/pilot/response-stages.ts` | idem, trilha do piloto (com o caso `narrative` x2) |
+| `supabase/migrations/20260911000000_response_item_slot.sql` | coluna `item_slot` + índice único (aditiva, segura antes do deploy) |
+
+### Testes
+
+`item-guard.test.ts` (11 — retry/corrida/replay/ordem/caso `narrative` x2),
+`rate-limit.test.ts` (3), `audio/validate.test.ts` (17 — vazio/gigante/MIME
+forjado/duração), `submit-response/route.test.ts` das duas trilhas (11 + 8 — fluxo
+completo de cada rota, incl. prompt de outra tentativa, conflito, replay, erro de
+transcrição). **149/149 vitest, `tsc`/`eslint`/`build` limpos.**
+
 ## Retomada — 2026-09-10 (Plano de correção — Milestone 1: autorização, RLS e status)
 
 ### Estado atual (ponto de retomada)
