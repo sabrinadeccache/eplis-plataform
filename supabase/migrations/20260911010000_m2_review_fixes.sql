@@ -1,6 +1,22 @@
 -- Correções da revisão do Milestone 2 (ver docs/project-status.md).
--- Aditiva/segura em qualquer ordem de deploy (colunas nullable/com default;
--- nenhuma trava nova pra escrita que o código antigo já fazia).
+--
+-- ORDEM DE DEPLOY: esta migration precisa ir ANTES do deploy do código desta
+-- branch — é a ordem padrão do resto do projeto (ver
+-- 20260910000000_lock_privileged_writes.sql), NÃO a ordem invertida usada em
+-- 20260911000000_response_item_slot.sql. Motivo: o código novo
+-- (assertSubmissionCooldown, src/lib/simulations/rate-limit.ts) faz
+-- `UPDATE simulation_attempts SET last_submission_at = ...` em TODA
+-- submissão de resposta, incondicionalmente — se a coluna não existir ainda,
+-- esse UPDATE falha (PostgREST não conhece a coluna), e o código trata
+-- qualquer erro nessa consulta como falha FECHADA (retorna 503, nunca
+-- libera sem checar) — ou seja, toda submissão de resposta quebraria até a
+-- migration ser aplicada. As outras duas mudanças aqui (`item_sequence`,
+-- `retry_count`) são, em si, aditivas e seguras em qualquer ordem, mas por
+-- estarem no mesmo arquivo que `last_submission_at`, a migration inteira
+-- segue a ordem mais restritiva: migration primeiro, deploy depois.
+-- (Achado da revisão: a versão anterior deste comentário dizia "segura em
+-- qualquer ordem" pra este arquivo inteiro — a Sabrina apontou que isso
+-- estava errado especificamente por causa do item 3 abaixo.)
 
 -- 1. Sequência da tentativa persistida no momento da criação — antes,
 -- `getSequenceForAttempt` recalculava a sequência a cada chamada a partir do

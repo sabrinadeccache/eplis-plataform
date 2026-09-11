@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
   const mimeType = audio.type || "audio/webm";
   const buffer = Buffer.from(await audio.arrayBuffer());
-  const validation = validateAudioUpload(buffer, mimeType);
+  const validation = await validateAudioUpload(buffer, mimeType);
   if (!validation.ok) {
     return NextResponse.json({ error: validation.reason }, { status: 422 });
   }
