@@ -12,6 +12,7 @@ import {
   type FeedbackStage,
 } from "@/lib/ai/anthropic";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
+import { drawSequenceForAttempt, sequenceToItemIds } from "@/services/simulations/phase2/queries";
 import { DAILY_ATTEMPT_LIMIT, countAttemptsToday } from "@/services/simulations/phase2/limits";
 import {
   assertOwnAttemptInProgress as assertOwnAttemptInProgressShared,
@@ -30,12 +31,23 @@ export async function startAttempt(mode: SimulationMode) {
     );
   }
 
+  // A sequência de prompts é sorteada AGORA e persistida junto da tentativa
+  // (item_sequence) — não recalculada a cada carregamento da tela. Sem isso,
+  // desativar/editar conteúdo do pool ou mudar o perfil operacional do
+  // usuário no meio de uma tentativa em andamento podia trocar qual prompt é
+  // "o item corrente" debaixo do guard (achado da revisão do M2, ver
+  // docs/project-status.md). O id é gerado aqui, antes do INSERT, porque a
+  // seed do sorteio é o próprio attemptId.
+  const attemptId = crypto.randomUUID();
+  const sequence = await drawSequenceForAttempt(attemptId, user.operational_profile);
+
   // Criação da tentativa (incl. posição/estado inicial) vem do servidor via
   // service_role — `authenticated` não escreve em simulation_attempts.
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("simulation_attempts")
     .insert({
+      id: attemptId,
       user_id: user.id,
       phase: "phase2",
       mode,
@@ -43,6 +55,7 @@ export async function startAttempt(mode: SimulationMode) {
       current_part: "part1",
       current_item_index: 0,
       current_state: "PART_1_INTRO",
+      item_sequence: sequenceToItemIds(sequence),
     })
     .select("id")
     .single();

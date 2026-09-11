@@ -15,11 +15,39 @@
 
 export type AudioContainer = "webm" | "mp4";
 
-// Teto de tamanho: acima disso não é resposta de entrevista (30-90s de fala
-// comprimida em Opus/AAC fica bem abaixo de 5 MB) — é abuso/erro. Generoso o
-// bastante pra não travar a Parte 4 do practice (história sem limite de
-// tempo, já documentado em CLAUDE.md).
-export const MAX_AUDIO_BYTES = 15 * 1024 * 1024; // 15 MB
+// Teto de duração de uma resposta — existe pra rejeitar áudio absurdamente
+// longo (ex.: um arquivo trocado de propósito), generoso o bastante pra
+// cobrir a Parte 4 do practice (história sem limite de tempo na gravação em
+// si, já documentado em CLAUDE.md). Declarado ANTES do teto de bytes porque
+// o teto de bytes é DERIVADO dele — ver comentário abaixo.
+export const MAX_RESPONSE_DURATION_SECONDS = 8 * 60; // 8 min
+
+// **Achado da revisão (2026-09-11): o teto de bytes precisa ser o
+// mecanismo REAL de limite de duração**, não só um número redondo — a
+// duração exata (`parseWebmDurationSeconds`) costuma vir `null` em
+// gravações de verdade do Chrome/Firefox (o MediaRecorder normalmente não
+// escreve o elemento Duration num stream ao vivo — ver comentário na função
+// abaixo), então quando ela falta o teto de bytes É a única coisa que
+// segura a duração. 15 MB soltos não faziam esse trabalho (um WebM/Opus de
+// voz roda a ~24-32 kbps; 15 MB caberiam ~1h+ de áudio). Calibrado aqui a
+// partir de um teto de BITRATE generoso (8 KB/s — bem acima de qualquer
+// codec de voz real usado pelo MediaRecorder) vezes o teto de duração acima,
+// então o teto de bytes bloqueia sozinho qualquer coisa que, no bitrate
+// máximo assumido, já ultrapassaria `MAX_RESPONSE_DURATION_SECONDS`.
+// Também alinhado ao limite real de corpo de requisição das Vercel
+// Functions (4,5 MB) — um teto maior que isso nunca seria alcançável em
+// produção de qualquer forma (ver también src/app/api/*/submit-response/route.ts,
+// que checa `Content-Length` ANTES de materializar o corpo).
+const MAX_BITRATE_BYTES_PER_SECOND = 8 * 1024; // 8 KB/s
+export const MAX_AUDIO_BYTES = MAX_BITRATE_BYTES_PER_SECOND * MAX_RESPONSE_DURATION_SECONDS; // ~3,75 MB
+
+// Teto do CORPO DA REQUISIÇÃO inteiro (áudio + os outros campos do
+// multipart + overhead de boundary) — checado via header `Content-Length`
+// ANTES de ler o corpo (`assertContentLengthWithinLimit`,
+// src/lib/simulations/item-guard.ts), pra nunca materializar em memória um
+// payload que já sabemos que vai ser rejeitado. Folga pequena sobre
+// `MAX_AUDIO_BYTES` só pros campos de texto/boundary do multipart.
+export const MAX_REQUEST_BODY_BYTES = MAX_AUDIO_BYTES + 64 * 1024;
 
 // WebM/Matroska: cabeçalho EBML fixo. MP4/ISO-BMFF: os 4 bytes em 4..8 do
 // arquivo são sempre "ftyp" (box type), independente da caixa 'size' inicial.
@@ -178,6 +206,57 @@ function findMvhdDuration(buffer: Buffer, start: number, end: number): number | 
   return null;
 }
 
+// **Achado da revisão (2026-09-11): magic bytes sozinhos não provam que há
+// áudio de verdade no arquivo** — um buffer com só o cabeçalho EBML seguido
+// de zeros passava no `sniffAudioContainer` (assinatura bate) mesmo sem
+// nenhum dado codificado. Isto verifica a ESTRUTURA mínima que um WebM
+// real, gerado pelo MediaRecorder, sempre tem: um `Segment` (0x18538067)
+// contendo pelo menos um `Cluster` (0x1F43B675) — é dentro do Cluster que o
+// áudio codificado de verdade mora (`SimpleBlock`/`BlockGroup`). Um arquivo
+// sem Cluster nenhum não tem payload de áudio, seja qual for a causa
+// (truncado, forjado, corrompido).
+const CLUSTER_ID = Buffer.from([0x1f, 0x43, 0xb6, 0x75]);
+// Tamanho mínimo de um Cluster real (ID + VINT de tamanho + pelo menos um
+// timecode + um SimpleBlock minúsculo) — só pra descartar um Cluster "vazio"
+// colado no fim do arquivo de propósito.
+const MIN_CLUSTER_TAIL_BYTES = 16;
+
+export function hasWebmAudioPayload(buffer: Buffer): boolean {
+  const SEGMENT_ID = Buffer.from([0x18, 0x53, 0x80, 0x67]);
+  const segmentAt = buffer.indexOf(SEGMENT_ID);
+  if (segmentAt === -1) return false;
+  const clusterAt = buffer.indexOf(CLUSTER_ID, segmentAt);
+  if (clusterAt === -1) return false;
+  return buffer.length - clusterAt >= CLUSTER_ID.length + MIN_CLUSTER_TAIL_BYTES;
+}
+
+// Equivalente pra MP4/ISO-BMFF: exige um box `mdat` (onde o áudio
+// codificado de verdade fica) com tamanho de payload não-trivial — não só
+// os boxes de metadado (`ftyp`/`moov`).
+const MIN_MDAT_PAYLOAD_BYTES = 64;
+
+export function hasMp4AudioPayload(buffer: Buffer): boolean {
+  let offset = 0;
+  while (offset + 8 <= buffer.length) {
+    const boxSize = buffer.readUInt32BE(offset);
+    const boxType = buffer.toString("ascii", offset + 4, offset + 8);
+    if (boxSize < 8) break;
+    if (boxType === "mdat" && boxSize - 8 >= MIN_MDAT_PAYLOAD_BYTES) {
+      return true;
+    }
+    offset += boxSize;
+  }
+  return false;
+}
+
+export function hasAudioPayload(buffer: Buffer, container: AudioContainer): boolean {
+  try {
+    return container === "mp4" ? hasMp4AudioPayload(buffer) : hasWebmAudioPayload(buffer);
+  } catch {
+    return false;
+  }
+}
+
 export function getAudioDurationSeconds(buffer: Buffer, container: AudioContainer): number | null {
   try {
     return container === "mp4" ? parseMp4DurationSeconds(buffer) : parseWebmDurationSeconds(buffer);
@@ -187,14 +266,6 @@ export function getAudioDurationSeconds(buffer: Buffer, container: AudioContaine
     return null;
   }
 }
-
-// Teto de duração generoso o bastante pra cobrir a Parte 4 do practice (sem
-// limite de tempo na gravação em si) sem travar uso legítimo — existe só
-// pra rejeitar áudio absurdamente longo (ex.: um arquivo trocado de
-// propósito). Só é aplicado quando a duração real foi extraída com sucesso
-// (ver limitação do WebM documentada acima); quando não dá pra extrair, o
-// teto de bytes é quem protege.
-export const MAX_RESPONSE_DURATION_SECONDS = 8 * 60; // 8 min
 
 export type AudioValidationResult =
   | { ok: true; container: AudioContainer; durationSeconds: number | null }
@@ -225,6 +296,13 @@ export function validateAudioUpload(buffer: Buffer, declaredMimeType: string): A
     // Content-Type de um multipart é livremente escolhido por quem manda a
     // requisição, então isto é a defesa real contra MIME forjado.
     return { ok: false, reason: "O conteúdo do arquivo não corresponde ao formato declarado." };
+  }
+
+  if (!hasAudioPayload(buffer, sniffed)) {
+    // Assinatura de container válida, mas sem Cluster (WebM) / mdat (MP4)
+    // com payload de verdade — cabeçalho seguido de lixo/zeros, achado real
+    // da revisão (ver hasWebmAudioPayload/hasMp4AudioPayload acima).
+    return { ok: false, reason: "Arquivo de áudio corrompido ou em formato não reconhecido." };
   }
 
   const durationSeconds = getAudioDurationSeconds(buffer, sniffed);

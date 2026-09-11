@@ -18,7 +18,7 @@ export async function assertOwnAttemptInProgress(
 ) {
   const { data: attempt } = await supabase
     .from("simulation_attempts")
-    .select("id, user_id, phase, status, mode, current_part, current_item_index")
+    .select("id, user_id, phase, status, mode, current_part, current_item_index, item_sequence")
     .eq("id", attemptId)
     .single();
 

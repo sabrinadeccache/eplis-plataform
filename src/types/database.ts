@@ -92,6 +92,15 @@ export type SimulationAttemptRow = {
   current_part: Part | null;
   current_item_index: number | null;
   elapsed_seconds: number;
+  // Sequência de prompts sorteada pro candidato, congelada no momento da
+  // criação da tentativa — { part1: string[], part2: string[], ... } (ids de
+  // phase2_prompts/pilot_prompts, na ordem em que aparecem no simulado). Sem
+  // isso, `getSequenceForAttempt` recalculava a cada chamada a partir do
+  // pool ativo e do perfil atual do usuário, que podem mudar no meio de uma
+  // tentativa em andamento. `null` só em tentativas anteriores a essa coluna
+  // (migration 20260911010000) — nesse caso o código cai no recálculo
+  // antigo, ver comentário em queries.ts.
+  item_sequence: Record<string, string[]> | null;
   started_at: string;
   finished_at: string | null;
 };
@@ -155,6 +164,11 @@ export type Phase2ResponseRow = {
   // (Milestone 2, docs/project-status.md). `null` = linha antiga, de antes
   // dessa coluna existir (ver migration 20260911000000).
   item_slot: number | null;
+  // Quantas vezes esta MESMA linha (mesmo item_slot) foi reprocessada depois
+  // de um erro — ver reserveResponseSlot em src/lib/simulations/item-guard.ts.
+  // Existe porque um retry reusa a linha (só muda processing_status/started_at),
+  // então a contagem de LINHAS por tentativa não reflete retries.
+  retry_count: number;
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
@@ -194,8 +208,9 @@ export type PilotResponseRow = {
   simulation_attempt_id: string;
   prompt_id: string;
   response_stage: PilotResponseStage;
-  // Ver comentário equivalente em Phase2ResponseRow.item_slot.
+  // Ver comentários equivalentes em Phase2ResponseRow.item_slot/retry_count.
   item_slot: number | null;
+  retry_count: number;
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
@@ -240,9 +255,13 @@ type UserInsert = Partial<Omit<UserRow, "id" | "created_at">> &
   Pick<UserRow, "id" | "name" | "email">;
 
 type SimulationAttemptInsert = Partial<
-  Omit<SimulationAttemptRow, "id" | "started_at" | "status">
+  Omit<SimulationAttemptRow, "started_at" | "status">
 > &
   Pick<SimulationAttemptRow, "user_id" | "phase" | "mode"> & {
+    // Opcional: startAttempt() gera o id explicitamente (crypto.randomUUID())
+    // quando precisa computar+persistir `item_sequence` no mesmo INSERT (a
+    // seed da sequência é o próprio attemptId — ver queries.ts).
+    id?: string;
     status?: AttemptStatus;
   };
 

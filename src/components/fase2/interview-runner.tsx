@@ -520,6 +520,16 @@ export function InterviewRunner({
         formData.append("attemptId", attemptId);
         formData.append("promptId", currentPrompt.id);
         formData.append("stage", currentStep.stage as ResponseStage);
+        // Posição desta resposta dentro do item (0-based, só contando os
+        // estágios que de fato geram uma resposta — ver
+        // src/services/simulations/phase2/response-stages.ts). O servidor
+        // VALIDA isto contra a sequência autoritativa; existe pra dar uma
+        // identidade estável a um retry (mesmo slot de novo) distinta de uma
+        // submissão nova (próximo slot) — sem isso, um retry de um estágio já
+        // concluído era ambíguo com uma submissão nova do mesmo nome de
+        // estágio (achado da revisão do M2: a Parte 4 do SDEA repete
+        // "narrative" duas vezes no mesmo item).
+        formData.append("slot", String(steps.slice(0, stepIndex).filter((s) => s.kind === "response").length));
         formData.append("repetitionCount", String(repetitionCount));
         formData.append("audio", blob, `audio.${blob.type.includes("mp4") ? "mp4" : "webm"}`);
 

@@ -20,7 +20,10 @@ const getSequenceForAttempt = vi.fn();
 vi.mock("@/services/simulations/phase2/queries", () => ({ getSequenceForAttempt }));
 
 const validateAudioUpload = vi.fn();
-vi.mock("@/lib/audio/validate", () => ({ validateAudioUpload }));
+vi.mock("@/lib/audio/validate", async (importOriginal) => {
+  const actual = (await importOriginal()) as object;
+  return { ...actual, validateAudioUpload };
+});
 
 const reserveResponseSlot = vi.fn();
 vi.mock("@/lib/simulations/item-guard", async (importOriginal) => {
@@ -87,23 +90,28 @@ vi.mock("@/lib/supabase/server", () => ({
 
 const { POST } = await import("./route");
 
-// Monta um "Request" que só sabe responder `.formData()` — a rota nunca lê
-// o corpo bruto, só chama `request.formData()`. Evita montar um Request de
-// verdade com FormData/File como corpo: jsdom (ambiente destes testes) e o
-// runtime de fetch do Node (undici) têm implementações de FormData/File de
-// realms diferentes, e serializar uma pela outra falha na checagem WebIDL
-// (`webidl.is.File`) — problema só do harness de teste, não da rota.
+// Monta um "Request" que só sabe responder `.formData()`/`headers.get()` —
+// a rota nunca lê o corpo bruto, só chama `request.formData()`. Evita
+// montar um Request de verdade com FormData/File como corpo: jsdom
+// (ambiente destes testes) e o runtime de fetch do Node (undici) têm
+// implementações de FormData/File de realms diferentes, e serializar uma
+// pela outra falha na checagem WebIDL (`webidl.is.File`) — problema só do
+// harness de teste, não da rota.
 function makeRequest(
   overrides: Partial<Record<string, string>> = {},
-  audio: Blob | null = new Blob(["fake"], { type: "audio/webm" }),
+  { audio = new Blob(["fake"], { type: "audio/webm" }), contentLength }: { audio?: Blob | null; contentLength?: string } = {},
 ): Request {
   const formData = new FormData();
   formData.set("attemptId", overrides.attemptId ?? "attempt-1");
   formData.set("promptId", overrides.promptId ?? "prompt-1");
   formData.set("stage", overrides.stage ?? "situation_check");
+  formData.set("slot", overrides.slot ?? "0");
   formData.set("repetitionCount", overrides.repetitionCount ?? "0");
   if (audio) formData.set("audio", audio, "audio.webm");
-  return { formData: async () => formData } as unknown as Request;
+  return {
+    formData: async () => formData,
+    headers: { get: (name: string) => (name.toLowerCase() === "content-length" ? contentLength ?? null : null) },
+  } as unknown as Request;
 }
 
 const attempt = {
@@ -114,6 +122,7 @@ const attempt = {
   mode: "practice",
   current_part: "part2",
   current_item_index: 0,
+  item_sequence: null,
 };
 
 const sequence = {
@@ -136,12 +145,35 @@ beforeEach(() => {
 });
 
 describe("POST /api/phase2/submit-response", () => {
-  it("rejeita requisição sem os campos obrigatórios, sem chamar nenhum guard", async () => {
+  it("rejeita corpo maior que o limite pelo Content-Length, sem sequer autenticar (achado da revisão)", async () => {
+    const res = await POST(makeRequest({}, { contentLength: String(50 * 1024 * 1024) }));
+    expect(res.status).toBe(413);
+    expect(authorize).not.toHaveBeenCalled();
+  });
+
+  it("autentica ANTES de ler o corpo (achado da revisão: formData() materializava antes de authorize())", async () => {
+    const { AuthError } = await import("@/lib/auth/authorize");
+    authorize.mockRejectedValue(new AuthError("unauthenticated", "Sessão expirada."));
+    const formDataSpy = vi.fn();
+    const request = {
+      formData: formDataSpy,
+      headers: { get: () => null },
+    } as unknown as Request;
+    const res = await POST(request);
+    expect(res.status).toBe(401);
+    expect(formDataSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejeita requisição sem os campos obrigatórios (depois de autenticar), sem chamar guard/storage/IA", async () => {
     const formData = new FormData();
     formData.set("attemptId", "attempt-1");
-    const res = await POST({ formData: async () => formData } as unknown as Request);
+    const res = await POST({
+      formData: async () => formData,
+      headers: { get: () => null },
+    } as unknown as Request);
     expect(res.status).toBe(400);
-    expect(authorize).not.toHaveBeenCalled();
+    expect(authorize).toHaveBeenCalledOnce();
+    expect(reserveResponseSlot).not.toHaveBeenCalled();
   });
 
   it("rejeita áudio inválido (vazio/MIME forjado/duração excedida) antes de guard, storage ou IA", async () => {
@@ -165,6 +197,14 @@ describe("POST /api/phase2/submit-response", () => {
     getSequenceForAttempt.mockResolvedValue({ part1: [], part2: [], part3: [], part4: [] });
     const res = await POST(makeRequest());
     expect(res.status).toBe(500);
+  });
+
+  it("passa a sequência PERSISTIDA da tentativa (item_sequence) pra getSequenceForAttempt, não recalcula do zero", async () => {
+    const persisted = { part1: [], part2: ["prompt-1"], part3: [], part4: [] };
+    assertOwnAttemptInProgress.mockResolvedValue({ ...attempt, item_sequence: persisted });
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    await POST(makeRequest());
+    expect(getSequenceForAttempt).toHaveBeenCalledWith("attempt-1", "APP", persisted);
   });
 
   it("respeita o rate limit antes de tocar em guard/storage/IA", async () => {

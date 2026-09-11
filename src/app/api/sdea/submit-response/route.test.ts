@@ -19,7 +19,10 @@ const getSequenceForAttempt = vi.fn();
 vi.mock("@/services/simulations/pilot/queries", () => ({ getSequenceForAttempt }));
 
 const validateAudioUpload = vi.fn();
-vi.mock("@/lib/audio/validate", () => ({ validateAudioUpload }));
+vi.mock("@/lib/audio/validate", async (importOriginal) => {
+  const actual = (await importOriginal()) as object;
+  return { ...actual, validateAudioUpload };
+});
 
 const reserveResponseSlot = vi.fn();
 vi.mock("@/lib/simulations/item-guard", async (importOriginal) => {
@@ -87,18 +90,23 @@ vi.mock("@/lib/supabase/server", () => ({
 const { POST } = await import("./route");
 
 // Ver comentário equivalente em route.test.ts da Fase 2 sobre por que o
-// corpo é um fake `.formData()` em vez de um Request real com FormData/File.
+// corpo é um fake `.formData()`/`headers.get()` em vez de um Request real
+// com FormData/File.
 function makeRequest(
   overrides: Partial<Record<string, string>> = {},
-  audio: Blob | null = new Blob(["fake"], { type: "audio/webm" }),
+  { audio = new Blob(["fake"], { type: "audio/webm" }), contentLength }: { audio?: Blob | null; contentLength?: string } = {},
 ): Request {
   const formData = new FormData();
   formData.set("attemptId", overrides.attemptId ?? "attempt-1");
   formData.set("promptId", overrides.promptId ?? "prompt-1");
   formData.set("stage", overrides.stage ?? "picture_description");
+  formData.set("slot", overrides.slot ?? "0");
   formData.set("repetitionCount", overrides.repetitionCount ?? "0");
   if (audio) formData.set("audio", audio, "audio.webm");
-  return { formData: async () => formData } as unknown as Request;
+  return {
+    formData: async () => formData,
+    headers: { get: (name: string) => (name.toLowerCase() === "content-length" ? contentLength ?? null : null) },
+  } as unknown as Request;
 }
 
 const attempt = {
@@ -109,6 +117,7 @@ const attempt = {
   mode: "practice",
   current_part: "part4",
   current_item_index: 0,
+  item_sequence: null,
 };
 
 const sequence = {
@@ -152,11 +161,34 @@ beforeEach(() => {
 });
 
 describe("POST /api/sdea/submit-response", () => {
+  it("rejeita corpo maior que o limite pelo Content-Length, sem autenticar", async () => {
+    const res = await POST(makeRequest({}, { contentLength: String(50 * 1024 * 1024) }));
+    expect(res.status).toBe(413);
+    expect(authorize).not.toHaveBeenCalled();
+  });
+
+  it("autentica ANTES de ler o corpo", async () => {
+    const { AuthError } = await import("@/lib/auth/authorize");
+    authorize.mockRejectedValue(new AuthError("unauthenticated", "Sessão expirada."));
+    const formDataSpy = vi.fn();
+    const res = await POST({ formData: formDataSpy, headers: { get: () => null } } as unknown as Request);
+    expect(res.status).toBe(401);
+    expect(formDataSpy).not.toHaveBeenCalled();
+  });
+
   it("rejeita item de outra tentativa, sem gastar storage nem IA", async () => {
     const res = await POST(makeRequest({ promptId: "prompt-de-outra-tentativa" }));
     expect(res.status).toBe(403);
     expect(reserveResponseSlot).not.toHaveBeenCalled();
     expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("passa a sequência PERSISTIDA da tentativa (item_sequence) pra getSequenceForAttempt", async () => {
+    const persisted = { part1: [], part2: [], part3: [], part4: ["prompt-1"] };
+    assertOwnAttemptInProgress.mockResolvedValue({ ...attempt, item_sequence: persisted });
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    await POST(makeRequest());
+    expect(getSequenceForAttempt).toHaveBeenCalledWith("attempt-1", "fixed_wing", persisted);
   });
 
   it("devolve 409 sem gastar storage/IA quando o guard sinaliza conflito", async () => {
@@ -178,12 +210,12 @@ describe("POST /api/sdea/submit-response", () => {
     expect(transcribeAudio).not.toHaveBeenCalled();
   });
 
-  it("Parte 4: envia a 2ª ocorrência de 'narrative' passando a mesma promptId/estágio — o guard (não a rota) decide o slot", async () => {
+  it("Parte 4: envia a 2ª ocorrência de 'narrative' com slot=2 — o servidor valida, não infere", async () => {
     reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-2", slot: 2 });
-    const res = await POST(makeRequest({ stage: "narrative" }));
+    const res = await POST(makeRequest({ stage: "narrative", slot: "2" }));
     expect(res.status).toBe(200);
     expect(reserveResponseSlot).toHaveBeenCalledWith(
-      expect.objectContaining({ promptId: "prompt-1", stage: "narrative" }),
+      expect.objectContaining({ promptId: "prompt-1", stage: "narrative", slot: 2 }),
     );
   });
 

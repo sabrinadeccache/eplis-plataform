@@ -17,17 +17,85 @@ Responsável: Sabrina Deccache.
 
 ### Estado atual (ponto de retomada)
 
-- **M2 implementado na branch `security/attempt-audio-guards`, aguardando revisão da
-  Sabrina antes de merge em `main`** (mesmo processo do M1: PR → revisão → M2.1 se
-  achar algo → merge). `tsc`/`lint`/`test` (149/149, +50 desde o M1.1)/`build` limpos.
-  **Migration `20260911000000_response_item_slot.sql` ainda NÃO aplicada em produção** —
-  é aditiva/segura (coluna nullable + índice único que ignora `NULL`), então pode ir
-  **antes** do merge/deploy do código (ordem invertida em relação ao M1 — ver cabeçalho
-  da própria migration pro motivo).
-- **Próximo passo, depois da revisão:** aplicar a migration em produção, mergear a
-  branch, e então Milestone 3 (gravações privadas, retenção e LGPD).
+- **M2 implementado na branch `security/attempt-audio-guards`, com a 1ª rodada de
+  revisão adversarial da Sabrina já incorporada.** Ela apontou 5 bloqueadores
+  funcionais (P0/P1) na 1ª versão — nenhum viable pra merge — e todos foram corrigidos
+  na mesma sessão. **Aguardando 2ª rodada de revisão antes de merge em `main`** (mesmo
+  processo do M1: PR → revisão → correção → revisão de novo → merge).
+  `tsc`/`eslint` (**0 erros, 0 warnings** — a 1ª versão tinha 2 warnings, apontado pela
+  Sabrina como "não literalmente limpo", corrigido)/`test` (171/171)/`build` limpos.
+- **2 migrations aditivas, ainda NÃO aplicadas em produção** — seguras em qualquer
+  ordem de deploy (ver "Achados da revisão" abaixo, item da janela de deploy):
+  `20260911000000_response_item_slot.sql` (coluna `item_slot` + índice único) e
+  `20260911010000_m2_review_fixes.sql` (`item_sequence` em `simulation_attempts`,
+  `retry_count` nas duas tabelas de resposta).
+- **Próximo passo, depois da 2ª revisão:** aplicar as 2 migrations em produção, mergear
+  a branch, e então Milestone 3 (gravações privadas, retenção e LGPD).
+- **Achado à parte, fora do escopo do código:** ao testar o deploy de preview desta
+  branch na Vercel, descobri que as 7 env vars de produção (`OPENAI_API_KEY` etc.)
+  só existiam no ambiente **Production** da Vercel — todo preview de PR sempre quebrava
+  o build por causa disso (`src/lib/ai/openai.ts` cria o client da OpenAI no topo do
+  módulo). Cheguei a copiar as 7 pro ambiente **Preview** pra destravar o build, mas a
+  Sabrina apontou (corretamente) que isso expõe `SUPABASE_SERVICE_ROLE_KEY` e as chaves
+  de IA de produção a qualquer branch de preview — **revertido na mesma sessão**
+  (`vercel env rm ... preview` nas 7). Fica em aberto: preview de PR vai continuar
+  quebrando até existir um Supabase/staging + chaves de IA separadas pra esse ambiente —
+  decisão de infra da Sabrina, não implementada ainda.
 
-### O que o M2 garante
+### Achados da revisão adversarial (2026-09-11) e como foram corrigidos
+
+1. **Idempotência incorreta.** A 1ª versão só procurava "replay" quando TODOS os slots
+   do item já tinham linha — antes disso, reenviar um estágio já concluído dava `403`
+   ("fora de ordem"), e no SDEA (Parte 4, `narrative` aparece 2x no mesmo item) um retry
+   do 1º `narrative` podia ser confundido com uma submissão nova do 2º, duplicando
+   upload e chamada de IA. **Correção:** o `slot` (posição 0-based na sequência de
+   estágios do item) passou a ser **mandado pelo cliente** (que já sabe seu próprio
+   `stepIndex`) e **validado pelo servidor** contra a sequência autoritativa
+   (`assertValidSlot`) — um retry sempre chega com o MESMO slot da tentativa anterior,
+   nunca mais ambíguo com uma submissão nova de posição diferente. Ver
+   `reserveResponseSlot` em `src/lib/simulations/item-guard.ts`.
+2. **Rate limit e teto de retries burláveis.** A janela/teto contavam linhas por
+   `created_at`, mas um retry reaproveita a MESMA linha (só muda `started_at`) — retries
+   falhos ilimitados não engordavam contador nenhum; também não havia teto agregado por
+   usuário, e erro na consulta de contagem liberava a requisição (`count ?? 0`).
+   **Correção:** nova coluna `retry_count` por linha (teto próprio,
+   `MAX_RETRIES_PER_SLOT = 5`, em `item-guard.ts`); janela curta trocada pra medir por
+   `started_at` (que o retry atualiza); teto diário agregado por usuário adicionado
+   (`MAX_RESPONSES_PER_USER_PER_DAY`); toda consulta de contagem agora **falha fechado**
+   (erro de leitura → `ItemGuardError` 503, nunca "assume que está tudo bem"). Ver
+   `src/lib/simulations/rate-limit.ts`.
+3. **Multipart materializado antes de autenticação/limite.** `request.formData()`
+   rodava antes de `authorize()`, e o teto declarado (`MAX_AUDIO_BYTES` = 15 MB) nunca
+   seria alcançável de qualquer forma — o corpo de uma Vercel Function tem um limite
+   real de ~4,5 MB. **Correção:** `Content-Length` é checado (`assertContentLengthWithinLimit`)
+   ANTES de tocar no corpo — nem chama `formData()`; `authorize()` passou pra ANTES do
+   parse do formulário; `MAX_AUDIO_BYTES` recalibrado (~3,75 MB, derivado de um bitrate
+   máximo assumido × o teto de duração de uma resposta, não mais um número solto) —
+   dentro do limite real da Vercel.
+4. **Validação aceitava arquivo corrompido.** Um WebM era considerado válido só por
+   começar com os 4 magic bytes do EBML, mesmo sem nenhum dado codificado depois
+   (`EBML + zeros` passava). **Correção:** `hasWebmAudioPayload`/`hasMp4AudioPayload`
+   (`src/lib/audio/validate.ts`) verificam a estrutura mínima real — um `Cluster` dentro
+   do `Segment` (WebM) ou um box `mdat` com payload não-trivial (MP4) — é onde o áudio
+   codificado de verdade mora; um arquivo sem isso é rejeitado como corrompido.
+5. **Sequência não persistida.** `getSequenceForAttempt` recalculava o sorteio a cada
+   chamada a partir do pool ATIVO e do perfil ATUAL — desativar/editar conteúdo ou mudar
+   o perfil operacional no meio de uma tentativa em andamento podia trocar qual prompt é
+   "o item corrente" debaixo do guard. **Correção:** nova coluna
+   `simulation_attempts.item_sequence` (jsonb) congela o sorteio no momento da criação
+   da tentativa (`startAttempt` gera o id antes do INSERT — a seed do sorteio é o
+   próprio attemptId — e persiste os ids junto); `getSequenceForAttempt` recarrega por
+   id quando existe, só caindo no sorteio ao vivo (`drawSequenceForAttempt`) pra
+   tentativas de antes dessa coluna existir.
+6. **Ordem de deploy da migration do `item_slot`, questionada pela revisão.** A
+   preocupação: aplicar a migration antes do deploy deixaria uma janela em que o código
+   antigo cria linhas com `item_slot = NULL`, e o guard novo ignoraria essas linhas ao
+   calcular o próximo slot livre, arriscando duplicar. **Correção:** em vez de depender
+   de sincronizar migration e deploy com precisão, o guard ficou auto-suficiente —
+   `assignSlots()` em `item-guard.ts` atribui posição sintética (pela ordem de criação)
+   a qualquer linha antiga sem `item_slot`, então a ordem de deploy deixou de importar.
+
+### O que o M2 garante (visão geral, já com as correções acima)
 
 Escopo: as duas route handlers de envio de áudio da entrevista simulada
 (`/api/phase2/submit-response`, `/api/sdea/submit-response`) — Fase 1 (múltipla escolha,
@@ -35,55 +103,43 @@ sem áudio enviado pelo candidato) fica de fora.
 
 - **Guard autoritativo de item** (`src/lib/simulations/item-guard.ts`,
   `assertCurrentPrompt`) — o `promptId` do formulário nunca é fonte de verdade: o servidor
-  recalcula o item corrente a partir de `attempt.current_part`/`current_item_index`
-  (persistidos, não vêm do cliente) + `getSequenceForAttempt` (determinística por
-  `attemptId`) e só aceita a requisição se o `promptId` enviado bater com o item corrente.
-  Cobre de uma vez "prompt de outra tentativa" e "item anterior/futuro".
-- **Idempotência + corrida** (`reserveResponseSlot`, mesmo arquivo) — cada resposta ocupa
-  um `item_slot` (posição 0-based na sequência de estágios do item, não o nome do estágio
-  — a Parte 4 do SDEA repete `narrative` duas vezes no mesmo item, ver
-  `docs/database-schema.md` → `phase2_responses`). Replay do mesmo request (retry de rede,
-  ou reenvio depois de um erro) reaproveita a mesma linha (CAS via
-  `processing_status='error'`) ou devolve o resultado já pronto em cache, sem 2ª chamada
-  de Whisper/Claude; duas requisições concorrentes pro mesmo slot só deixam uma passar — a
-  outra recebe `409` sem tocar storage/IA. A trava de banco (`item_slot` + índice único,
-  migration `20260911000000`) é o backstop contra corrida real; a checagem em memória do
-  guard cobre o caminho comum sem precisar da migration ainda estar aplicada.
-- **Validação de arquivo** (`src/lib/audio/validate.ts`, `validateAudioUpload`) — antes de
-  qualquer I/O: tamanho (`MAX_AUDIO_BYTES` = 15 MB), MIME declarado numa allowlist
-  (`audio/webm`, `audio/mp4` — os dois formatos reais do `MediaRecorder`), **assinatura
-  real dos bytes** (magic bytes EBML/WebM e `ftyp`/MP4 — não só o MIME declarado, que é
-  falsificável por quem chama a rota direto), arquivo vazio/corrompido, e duração (parser
-  EBML/ISO-BMFF próprio, sem depender de `ffmpeg` no runtime serverless — **limitação real
-  documentada no código**: o `MediaRecorder` do navegador normalmente NÃO grava o elemento
-  Duration em WebM/streaming, então a duração exata só costuma ser extraível no MP4
-  (Safari); o teto de bytes é quem protege o caso comum do WebM).
-- **Rate limit** (`src/lib/simulations/rate-limit.ts`, `assertSubmissionRate`) — consultado
-  no banco (não em memória do processo — funções serverless da Vercel não compartilham
-  memória entre instâncias): janela curta por tentativa (2 envios / 5s) + teto agregado de
-  linhas por tentativa (60, folga generosa sobre o máximo real de 30/36 slots
-  Fase 2/SDEA) — cobre "limitar retentativas" sem precisar de uma coluna de contador
-  dedicada. O teto diário por usuário já existia (`DAILY_ATTEMPT_LIMIT`/
-  `PILOT_DAILY_ATTEMPT_LIMIT`, Fase 1).
+  compara contra `item_sequence` (persistido na criação da tentativa — item 5 acima) na
+  posição `current_part`/`current_item_index`. Cobre "prompt de outra tentativa" e "item
+  anterior/futuro" mesmo se o pool de conteúdo mudar no meio da tentativa.
+- **Idempotência + corrida** (`reserveResponseSlot`) — `item_slot`, mandado pelo cliente e
+  validado pelo servidor (item 1 acima), com teto de retry por linha (item 2) e trava de
+  banco (índice único `(simulation_attempt_id, prompt_id, item_slot)`) como backstop de
+  corrida real — a perdedora de uma corrida recebe `409` sem tocar storage/IA.
+- **Validação de arquivo** (`src/lib/audio/validate.ts`) — `Content-Length` antes de ler o
+  corpo, tamanho real calibrado (~3,75 MB, dentro do limite da Vercel), MIME numa
+  allowlist, assinatura real dos bytes, **payload estrutural real** (Cluster/mdat — item 4
+  acima), e duração (parser EBML/ISO-BMFF próprio — limitação real documentada: o
+  `MediaRecorder` normalmente não grava Duration em WebM/streaming, então o teto de bytes é
+  quem segura esse caso, não a duração exata).
+- **Rate limit** (`src/lib/simulations/rate-limit.ts`) — janela curta por `started_at`
+  (cobre retries), teto por tentativa, teto diário agregado por usuário, tudo fail-closed.
 
 ### Arquivos novos
 
 | Arquivo | O quê |
 |---|---|
-| `src/lib/simulations/item-guard.ts` | guard de item + `reserveResponseSlot` (idempotência/corrida) |
-| `src/lib/simulations/rate-limit.ts` | rate limit por tentativa/janela, consultado no banco |
-| `src/lib/audio/validate.ts` | validação de arquivo (tamanho/formato/assinatura/duração) |
+| `src/lib/simulations/item-guard.ts` | guard de item + `reserveResponseSlot` (idempotência/corrida, slot validado) |
+| `src/lib/simulations/rate-limit.ts` | rate limit por tentativa/usuário/janela, fail-closed |
+| `src/lib/audio/validate.ts` | validação de arquivo (tamanho/formato/assinatura/payload real/duração) |
 | `src/services/simulations/phase2/response-stages.ts` | sequência de estágios de resposta por parte (Fase 2) |
 | `src/services/simulations/pilot/response-stages.ts` | idem, trilha do piloto (com o caso `narrative` x2) |
-| `supabase/migrations/20260911000000_response_item_slot.sql` | coluna `item_slot` + índice único (aditiva, segura antes do deploy) |
+| `supabase/migrations/20260911000000_response_item_slot.sql` | coluna `item_slot` + índice único |
+| `supabase/migrations/20260911010000_m2_review_fixes.sql` | `item_sequence` (simulation_attempts) + `retry_count` (respostas) |
 
 ### Testes
 
-`item-guard.test.ts` (11 — retry/corrida/replay/ordem/caso `narrative` x2),
-`rate-limit.test.ts` (3), `audio/validate.test.ts` (17 — vazio/gigante/MIME
-forjado/duração), `submit-response/route.test.ts` das duas trilhas (11 + 8 — fluxo
-completo de cada rota, incl. prompt de outra tentativa, conflito, replay, erro de
-transcrição). **149/149 vitest, `tsc`/`eslint`/`build` limpos.**
+`item-guard.test.ts` (17), `rate-limit.test.ts` (5), `audio/validate.test.ts` (25),
+`submit-response/route.test.ts` das duas trilhas (14 + 11) — cobrindo, além do fluxo
+normal: prompt de outra tentativa, slot fora de ordem, conflito/replay, retry além do
+teto, corpo maior que o limite antes de autenticar, autenticação antes do parse do
+corpo, sequência persistida sendo usada, arquivo corrompido (EBML/mdat sem payload),
+falha fechada nas consultas de limite. **171/171 vitest, `tsc`/`eslint` (0
+erros/warnings)/`build` limpos.**
 
 ## Retomada — 2026-09-10 (Plano de correção — Milestone 1: autorização, RLS e status)
 

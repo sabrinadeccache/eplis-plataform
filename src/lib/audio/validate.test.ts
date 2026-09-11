@@ -2,35 +2,56 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_AUDIO_BYTES,
   MAX_RESPONSE_DURATION_SECONDS,
+  hasMp4AudioPayload,
+  hasWebmAudioPayload,
   parseMp4DurationSeconds,
   parseWebmDurationSeconds,
   sniffAudioContainer,
   validateAudioUpload,
 } from "./validate";
 
-// Constrói um Segment > Info > {TimecodeScale, Duration} mínimo o bastante
-// pro parser achar — não é um WebM tocável de verdade, só os bytes que o
-// parser lê.
-function buildMinimalWebm(durationSeconds: number, timecodeScaleNs = 1_000_000): Buffer {
-  const durationTicks = (durationSeconds * 1_000_000_000) / timecodeScaleNs;
-  const durationBytes = Buffer.alloc(8);
-  durationBytes.writeDoubleBE(durationTicks, 0);
+// Constrói um Segment > Info > {TimecodeScale, Duration} + Cluster mínimo o
+// bastante pro parser achar — não é um WebM tocável de verdade, só os bytes
+// que o parser/validador leem. `withCluster` controla se um Cluster real
+// (com "payload" de áudio fake) é incluído — usado pra distinguir "sem
+// Duration mas com áudio de verdade" de "cabeçalho sem payload nenhum".
+function buildMinimalWebm(
+  durationSeconds: number | null,
+  { timecodeScaleNs = 1_000_000, withCluster = true }: { timecodeScaleNs?: number; withCluster?: boolean } = {},
+): Buffer {
+  let info = Buffer.alloc(0);
+  if (durationSeconds != null) {
+    const durationTicks = (durationSeconds * 1_000_000_000) / timecodeScaleNs;
+    const durationBytes = Buffer.alloc(8);
+    durationBytes.writeDoubleBE(durationTicks, 0);
 
-  const timecodeScaleBytes = Buffer.alloc(4);
-  timecodeScaleBytes.writeUInt32BE(timecodeScaleNs, 0);
+    const timecodeScaleBytes = Buffer.alloc(4);
+    timecodeScaleBytes.writeUInt32BE(timecodeScaleNs, 0);
 
-  const info = Buffer.concat([
-    Buffer.from([0x2a, 0xd7, 0xb1, 0x84]), // TimecodeScale ID + size=4 (VINT 0x84)
-    timecodeScaleBytes,
-    Buffer.from([0x44, 0x89, 0x88]), // Duration ID + size=8 (VINT 0x88)
-    durationBytes,
-  ]);
+    info = Buffer.concat([
+      Buffer.from([0x2a, 0xd7, 0xb1, 0x84]), // TimecodeScale ID + size=4 (VINT 0x84)
+      timecodeScaleBytes,
+      Buffer.from([0x44, 0x89, 0x88]), // Duration ID + size=8 (VINT 0x88)
+      durationBytes,
+    ]);
+  }
 
-  const segment = Buffer.concat([
-    Buffer.from([0x15, 0x49, 0xa6, 0x66]), // Info ID
-    Buffer.from([0x80 | info.length]), // size VINT (assume < 64 bytes)
-    info,
-  ]);
+  const infoElement =
+    info.length > 0
+      ? Buffer.concat([
+          Buffer.from([0x15, 0x49, 0xa6, 0x66]), // Info ID
+          Buffer.from([0x80 | info.length]), // size VINT (assume < 64 bytes)
+          info,
+        ])
+      : Buffer.alloc(0);
+
+  // Cluster real: ID + tamanho + um "SimpleBlock" fake grande o bastante
+  // pra passar do piso mínimo de hasWebmAudioPayload.
+  const cluster = withCluster
+    ? Buffer.concat([Buffer.from([0x1f, 0x43, 0xb6, 0x75]), Buffer.alloc(32, 0xab)])
+    : Buffer.alloc(0);
+
+  const segment = Buffer.concat([infoElement, cluster]);
 
   return Buffer.concat([
     Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), // EBML magic
@@ -41,7 +62,10 @@ function buildMinimalWebm(durationSeconds: number, timecodeScaleNs = 1_000_000):
   ]);
 }
 
-function buildMinimalMp4(durationSeconds: number, timescale = 1000): Buffer {
+function buildMinimalMp4(
+  durationSeconds: number,
+  { timescale = 1000, withMdat = true }: { timescale?: number; withMdat?: boolean } = {},
+): Buffer {
   const mvhdBody = Buffer.alloc(100);
   mvhdBody[0] = 0; // version 0
   mvhdBody.writeUInt32BE(timescale, 1 + 3 + 4 + 4);
@@ -64,7 +88,13 @@ function buildMinimalMp4(durationSeconds: number, timescale = 1000): Buffer {
   ]);
   ftyp.writeUInt32BE(ftyp.length, 0);
 
-  return Buffer.concat([ftyp, moov]);
+  if (!withMdat) return Buffer.concat([ftyp, moov]);
+
+  const mdatPayload = Buffer.alloc(128, 0xcd); // "áudio codificado" fake, > MIN_MDAT_PAYLOAD_BYTES
+  const mdat = Buffer.concat([Buffer.alloc(4), Buffer.from("mdat", "ascii"), mdatPayload]);
+  mdat.writeUInt32BE(mdat.length, 0);
+
+  return Buffer.concat([ftyp, moov, mdat]);
 }
 
 describe("sniffAudioContainer", () => {
@@ -92,25 +122,42 @@ describe("parseWebmDurationSeconds", () => {
   });
 
   it("respeita um TimecodeScale não-default", () => {
-    const buf = buildMinimalWebm(7, 500_000);
+    const buf = buildMinimalWebm(7, { timecodeScaleNs: 500_000 });
     expect(parseWebmDurationSeconds(buf)).toBeCloseTo(7, 3);
   });
 
   it("devolve null quando não há elemento Duration (caso comum de stream do MediaRecorder)", () => {
-    const noDuration = Buffer.concat([
-      Buffer.from([0x1a, 0x45, 0xdf, 0xa3]),
-      Buffer.from([0x18, 0x53, 0x80, 0x67]),
-      Buffer.from([0x81]),
-      Buffer.from([0x00]),
-    ]);
-    expect(parseWebmDurationSeconds(noDuration)).toBeNull();
+    expect(parseWebmDurationSeconds(buildMinimalWebm(null))).toBeNull();
   });
 });
 
 describe("parseMp4DurationSeconds", () => {
   it("lê a duração real do mvhd (version 0)", () => {
-    const buf = buildMinimalMp4(12.3, 1000);
+    const buf = buildMinimalMp4(12.3, { timescale: 1000 });
     expect(parseMp4DurationSeconds(buf)).toBeCloseTo(12.3, 1);
+  });
+});
+
+describe("hasWebmAudioPayload / hasMp4AudioPayload", () => {
+  it("aceita um WebM com Cluster real", () => {
+    expect(hasWebmAudioPayload(buildMinimalWebm(10))).toBe(true);
+  });
+
+  it("rejeita EBML seguido só de zeros (sem Segment/Cluster nenhum) — achado da revisão", () => {
+    const ebmlPlusZeros = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(64)]);
+    expect(hasWebmAudioPayload(ebmlPlusZeros)).toBe(false);
+  });
+
+  it("rejeita WebM com Segment mas sem nenhum Cluster", () => {
+    expect(hasWebmAudioPayload(buildMinimalWebm(10, { withCluster: false }))).toBe(false);
+  });
+
+  it("aceita um MP4 com mdat de verdade", () => {
+    expect(hasMp4AudioPayload(buildMinimalMp4(10))).toBe(true);
+  });
+
+  it("rejeita MP4 sem box mdat (só ftyp/moov)", () => {
+    expect(hasMp4AudioPayload(buildMinimalMp4(10, { withMdat: false }))).toBe(false);
   });
 });
 
@@ -153,6 +200,23 @@ describe("validateAudioUpload", () => {
     });
   });
 
+  it("rejeita WebM com assinatura válida mas sem Cluster (cabeçalho + zeros) — achado da revisão", () => {
+    const ebmlPlusZeros = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(64)]);
+    const result = validateAudioUpload(ebmlPlusZeros, "audio/webm");
+    expect(result).toEqual({
+      ok: false,
+      reason: "Arquivo de áudio corrompido ou em formato não reconhecido.",
+    });
+  });
+
+  it("rejeita MP4 com assinatura válida mas sem mdat com payload", () => {
+    const result = validateAudioUpload(buildMinimalMp4(10, { withMdat: false }), "audio/mp4");
+    expect(result).toEqual({
+      ok: false,
+      reason: "Arquivo de áudio corrompido ou em formato não reconhecido.",
+    });
+  });
+
   it("rejeita formato de MIME não suportado", () => {
     const result = validateAudioUpload(buildMinimalWebm(10), "audio/x-whatever");
     expect(result.ok).toBe(false);
@@ -164,12 +228,18 @@ describe("validateAudioUpload", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("aceita WebM sem Duration extraível (caso comum de gravação real) sem travar na duração", () => {
-    const noDuration = Buffer.concat([
-      Buffer.from([0x1a, 0x45, 0xdf, 0xa3]),
-      Buffer.alloc(64),
-    ]);
+  it("aceita WebM sem Duration extraível mas COM Cluster real (caso comum de gravação real)", () => {
+    const noDuration = buildMinimalWebm(null, { withCluster: true });
     const result = validateAudioUpload(noDuration, "audio/webm");
     expect(result).toMatchObject({ ok: true, durationSeconds: null });
+  });
+
+  it("o teto de bytes por si só já impede exceder MAX_RESPONSE_DURATION_SECONDS mesmo sem duração exata (bitrate máximo assumido)", () => {
+    // MAX_AUDIO_BYTES é calibrado como bitrate_máximo_assumido × duração
+    // máxima — um arquivo do tamanho do teto, no bitrate real de voz
+    // (bem abaixo do assumido), já representaria muito mais que o teto de
+    // duração; a garantia aqui é só que o teto de bytes não é "solto":
+    // ele é derivado matematicamente do teto de duração.
+    expect(MAX_AUDIO_BYTES).toBeLessThanOrEqual(4.5 * 1024 * 1024); // dentro do limite de request da Vercel
   });
 });

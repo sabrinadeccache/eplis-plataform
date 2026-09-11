@@ -19,14 +19,18 @@ export default async function Fase2EntrevistaPage({
   const supabase = await createClient();
   const { data: attempt } = await supabase
     .from("simulation_attempts")
-    .select("id, user_id, phase, status, mode, current_part, current_item_index, elapsed_seconds")
+    .select("id, user_id, phase, status, mode, current_part, current_item_index, elapsed_seconds, item_sequence")
     .eq("id", attemptId)
     .single();
 
   if (!attempt || attempt.user_id !== user.id || attempt.phase !== "phase2") notFound();
   if (attempt.status !== "in_progress") redirect(`/fase2/resultado/${attemptId}`);
 
-  const sequence = await getSequenceForAttempt(attemptId, user.operational_profile);
+  const sequence = await getSequenceForAttempt(
+    attemptId,
+    user.operational_profile,
+    attempt.item_sequence as Record<Part, string[]> | null,
+  );
 
   if (!sequenceHasEnoughItems(sequence)) {
     return (

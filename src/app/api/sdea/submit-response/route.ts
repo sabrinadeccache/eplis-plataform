@@ -6,11 +6,16 @@ import { transcribeAudio } from "@/lib/ai/openai";
 import { generatePilotResponseFeedback, MODEL_VERSION, type PilotFeedbackStage } from "@/lib/ai/pilot-track";
 import { pilotResponseContext } from "@/services/simulations/pilot/context";
 import { assertOwnAttemptInProgress } from "@/services/simulations/pilot/actions";
-import { getSequenceForAttempt } from "@/services/simulations/pilot/queries";
+import { getSequenceForAttempt, type PilotItemSequence } from "@/services/simulations/pilot/queries";
 import { responseStagesForPilotItem } from "@/services/simulations/pilot/response-stages";
 import { sdeaAircraftType } from "@/lib/auth/roles";
-import { validateAudioUpload } from "@/lib/audio/validate";
-import { assertCurrentPrompt, reserveResponseSlot, ItemGuardError } from "@/lib/simulations/item-guard";
+import { validateAudioUpload, MAX_REQUEST_BODY_BYTES } from "@/lib/audio/validate";
+import {
+  assertCurrentPrompt,
+  assertContentLengthWithinLimit,
+  reserveResponseSlot,
+  ItemGuardError,
+} from "@/lib/simulations/item-guard";
 import { assertSubmissionRate } from "@/lib/simulations/rate-limit";
 import type { Part, PilotResponseStage } from "@/types/database";
 
@@ -18,22 +23,16 @@ import type { Part, PilotResponseStage } from "@/types/database";
 // equivalente da Fase 2 (route handler comum, não Server Action, por causa do
 // limite "Maximum array nesting exceeded" do protocolo Flight com áudio longo
 // em base64; ver src/app/api/phase2/submit-response/route.ts) e mesmo guard
-// de item/idempotência do Milestone 2 (src/lib/simulations/item-guard.ts).
+// de item/idempotência/ordem do Milestone 2
+// (src/lib/simulations/item-guard.ts, revisado em 2026-09-11).
 export async function POST(request: Request) {
-  const formData = await request.formData();
-  const attemptId = formData.get("attemptId");
-  const promptId = formData.get("promptId");
-  const stage = formData.get("stage") as PilotResponseStage | null;
-  const repetitionCount = Number(formData.get("repetitionCount") ?? 0);
-  const audio = formData.get("audio");
-
-  if (
-    typeof attemptId !== "string" ||
-    typeof promptId !== "string" ||
-    typeof stage !== "string" ||
-    !(audio instanceof Blob)
-  ) {
-    return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
+  try {
+    assertContentLengthWithinLimit(request, MAX_REQUEST_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof ItemGuardError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    throw error;
   }
 
   const supabase = await createClient();
@@ -49,6 +48,25 @@ export async function POST(request: Request) {
     }
     throw error;
   }
+
+  const formData = await request.formData();
+  const attemptId = formData.get("attemptId");
+  const promptId = formData.get("promptId");
+  const stage = formData.get("stage") as PilotResponseStage | null;
+  const slotRaw = formData.get("slot");
+  const repetitionCount = Number(formData.get("repetitionCount") ?? 0);
+  const audio = formData.get("audio");
+
+  if (
+    typeof attemptId !== "string" ||
+    typeof promptId !== "string" ||
+    typeof stage !== "string" ||
+    typeof slotRaw !== "string" ||
+    !(audio instanceof Blob)
+  ) {
+    return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
+  }
+  const slot = Number(slotRaw);
 
   let attempt;
   try {
@@ -68,11 +86,15 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
 
   try {
-    await assertSubmissionRate(supabase, "pilot_responses", attemptId);
+    await assertSubmissionRate(supabase, "pilot_responses", attemptId, userId);
 
     const currentPart = attempt.current_part as Part;
     const currentItemIndex = attempt.current_item_index ?? 0;
-    const sequence = await getSequenceForAttempt(attemptId, aircraftType);
+    const sequence = await getSequenceForAttempt(
+      attemptId,
+      aircraftType,
+      attempt.item_sequence as PilotItemSequence | null,
+    );
     const expectedPrompt = sequence[currentPart]?.[currentItemIndex];
     assertCurrentPrompt(expectedPrompt?.id, promptId);
 
@@ -83,6 +105,7 @@ export async function POST(request: Request) {
       attemptId,
       promptId,
       stage,
+      slot,
       expectedStages: responseStagesForPilotItem(currentPart, currentItemIndex),
     });
 
