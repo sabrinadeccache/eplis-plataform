@@ -552,6 +552,12 @@ export function PilotInterviewRunner({
         formData.append("attemptId", attemptId);
         formData.append("promptId", currentPrompt.id);
         formData.append("stage", currentStep.stage as PilotResponseStage);
+        // Ver comentário equivalente em src/components/fase2/interview-runner.tsx
+        // — posição desta resposta dentro do item, validada pelo servidor.
+        // Essencial aqui: a Parte 4 repete o estágio "narrative" duas vezes
+        // no mesmo item (hipótese de antes / de depois) e só o slot as
+        // distingue sem ambiguidade num retry.
+        formData.append("slot", String(steps.slice(0, stepIndex).filter((s) => s.kind === "response").length));
         formData.append("repetitionCount", String(repetitionCount));
         formData.append("audio", blob, `audio.${blob.type.includes("mp4") ? "mp4" : "webm"}`);
 

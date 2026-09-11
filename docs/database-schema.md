@@ -93,6 +93,8 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | current_state | enum, nullable | **[NOVO]** espelha os estados da state machine (ver seção "Estados da Fase 2" abaixo). Permite retomar uma tentativa `official` interrompida sem reconstruir a posição a partir das respostas já gravadas |
 | current_part | enum, nullable | **[NOVO]** `part1`..`part4` — parte atual da entrevista |
 | current_item_index | int, nullable | **[NOVO]** índice do item dentro da parte atual (ex: 3ª de 10 situações da Parte 2) |
+| item_sequence | jsonb, nullable | **[NOVO, 2026-09-11 — revisão do M2]** sequência de prompts sorteada pro candidato (Fase 2/SDEA), **congelada no momento da criação da tentativa** — `{ part1: [id, ...], part2: [...], ... }` (ids de `phase2_prompts`/`pilot_prompts`, já na ordem em que aparecem). Antes, `getSequenceForAttempt` recalculava o sorteio a cada carregamento de tela a partir do pool ATIVO e do perfil ATUAL do usuário — se o conteúdo fosse desativado/editado ou o perfil operacional mudasse no meio de uma tentativa em andamento, o "item corrente" podia mudar debaixo do guard de item. `null` só em tentativas de Fase 1 (não usa) ou de antes da migration `20260911010000_m2_review_fixes.sql` — nesse caso o código cai no sorteio ao vivo antigo (`drawSequenceForAttempt`). |
+| last_submission_at | timestamptz, nullable | **[NOVO, 2026-09-11 — revisão do M2, 2ª rodada]** timestamp do último envio de resposta aceito (qualquer slot, inclusive retry), usado só pelo rate limit (`src/lib/simulations/rate-limit.ts`) como cooldown via compare-and-swap. Existe porque contar LINHAS de resposta (por `created_at` ou `started_at`) não reflete retry — um retry reaproveita a mesma linha (`item_slot`), então a contagem de linhas nunca cresce com ele; só um timestamp dedicado, atualizado em toda submissão, mede a taxa de envio de verdade. |
 | started_at | timestamp | |
 | finished_at | timestamp, nullable | |
 
@@ -176,6 +178,8 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | simulation_attempt_id | uuid → simulation_attempts | |
 | prompt_id | uuid → phase2_prompts | |
 | response_stage | enum | **[ALTERADO]** agora cobre todos os sub-estágios da state machine: `main`, `situation_intro`, `situation_check`, `suggestion` (Parte 2), `image_observation`, `image_description`, `story_preparation`, `story_telling` (Parte 4) |
+| item_slot | smallint, nullable | **[NOVO, 2026-09-11 — Milestone 2]** posição (0-based) da resposta dentro da sequência de estágios do item (ver `src/services/simulations/phase2/response-stages.ts`), **mandada pelo cliente e validada pelo servidor** contra essa sequência (revisão de 2026-09-11 — antes o servidor tentava inferir a posição só a partir de quantos slots já tinham linha, o que era ambíguo pra estágios repetidos). Não é redundante com `response_stage`: é a chave de posição/idempotência que o guard de item usa (`src/lib/simulations/item-guard.ts`) — `response_stage` sozinho não é único dentro de um item em toda trilha (a Parte 4 do SDEA repete `narrative` duas vezes). Índice único em `(simulation_attempt_id, prompt_id, item_slot)`, migration `20260911000000_response_item_slot.sql`. `null` só em linhas anteriores a essa migration ou de uma janela de deploy sem o `item_slot` ainda — o guard reconhece essas linhas e atribui posição pela ordem de criação, ver `assignSlots` em `item-guard.ts`. |
+| retry_count | smallint, default 0 | **[NOVO, 2026-09-11 — revisão do M2]** quantas vezes esta MESMA linha (mesmo `item_slot`) foi reprocessada depois de um erro. Um retry reaproveita a linha (não cria outra), então a contagem de LINHAS por tentativa não refletia retries — este contador é o teto (`MAX_RETRIES_PER_SLOT` = 5) que fecha essa brecha. |
 | audio_url | text, nullable | |
 | transcript | text, nullable | |
 | ai_feedback | text, nullable | feedback curto em inglês por resposta. `practice`: preenchido em tempo real (mostrado ao candidato após cada resposta). `official`: **[2026-08-27]** preenchido só na finalização (`advanceState`, em lote), para o demonstrativo por parte da tela de resultado — nunca mostrado durante a prova |
@@ -260,9 +264,12 @@ separadas):
 | created_at | timestamp | |
 
 **`pilot_responses`** — mesmas colunas de `phase2_responses` (`simulation_attempt_id`,
-`prompt_id` → `pilot_prompts`, `audio_url`, `transcript`, `ai_feedback`, `ai_provider`,
-`model_version`, `processing_status`, `repetition_count`, `started_at`, `finished_at`,
-`created_at`), só trocando `response_stage` pelo enum `pilot_response_stage` (ver abaixo).
+`prompt_id` → `pilot_prompts`, `item_slot`, `audio_url`, `transcript`, `ai_feedback`,
+`ai_provider`, `model_version`, `processing_status`, `repetition_count`, `started_at`,
+`finished_at`, `created_at`), só trocando `response_stage` pelo enum `pilot_response_stage`
+(ver abaixo). `item_slot` é onde a Parte 4 usa de verdade a distinção por posição: os dois
+estágios `narrative` do mesmo item (hipótese de antes / hipótese de depois) só são
+diferenciáveis pelo `item_slot`, não pelo nome do estágio.
 
 **Composição por tentativa** (`PART_SIZES` em `src/services/simulations/pilot/state-machine.ts`,
 diferente do controlador):

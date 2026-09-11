@@ -12,7 +12,9 @@ import {
   type PilotFeedbackStage,
 } from "@/lib/ai/pilot-track";
 import { computeNextPosition, PART_INTRO_STATE } from "@/services/simulations/pilot/state-machine";
+import { drawSequenceForAttempt, sequenceToItemIds } from "@/services/simulations/pilot/queries";
 import { pilotResponseContext } from "@/services/simulations/pilot/context";
+import { sdeaAircraftType } from "@/lib/auth/roles";
 import { isDevTester } from "@/lib/auth/dev-testers";
 import { PILOT_DAILY_ATTEMPT_LIMIT, countAttemptsToday } from "@/services/simulations/pilot/limits";
 import {
@@ -59,11 +61,18 @@ export async function startAttempt(mode: SimulationMode, startPart?: Part) {
     }
   }
 
+  // Sequência sorteada agora e persistida junto da tentativa — ver
+  // comentário equivalente em src/services/simulations/phase2/actions.ts.
+  const attemptId = crypto.randomUUID();
+  const aircraftType = sdeaAircraftType(user.operational_profile);
+  const sequence = await drawSequenceForAttempt(attemptId, aircraftType);
+
   // Criação da tentativa (incl. posição/estado inicial) vem do servidor via
   // service_role — `authenticated` não escreve em simulation_attempts.
   const { data, error } = await admin
     .from("simulation_attempts")
     .insert({
+      id: attemptId,
       user_id: user.id,
       phase: "pilot_interview",
       mode,
@@ -71,6 +80,7 @@ export async function startAttempt(mode: SimulationMode, startPart?: Part) {
       current_part: part,
       current_item_index: 0,
       current_state: PART_INTRO_STATE[part],
+      item_sequence: sequenceToItemIds(sequence),
     })
     .select("id")
     .single();

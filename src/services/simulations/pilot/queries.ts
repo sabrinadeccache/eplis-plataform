@@ -106,7 +106,42 @@ const PROMPT_COLUMNS =
   "expected_confirmation, dialogue_audio_url, discussion_question, discussion_question_2, image_url, " +
   "agree_disagree_statement, expected_duration_seconds, order_index";
 
-export async function getSequenceForAttempt(
+// Ver comentário equivalente em src/services/simulations/phase2/queries.ts —
+// mesmo padrão de persistência de sequência (Milestone 2, revisão de
+// 2026-09-11): `simulation_attempts.item_sequence` congela o sorteio no
+// momento da criação da tentativa; `getSequenceForAttempt` recarrega por id
+// quando existe, e só cai no sorteio ao vivo (`drawSequenceForAttempt`) pra
+// tentativas de antes dessa coluna existir.
+export type PilotItemSequence = Record<Part, string[]>;
+
+export function sequenceToItemIds(sequence: PilotSequence): PilotItemSequence {
+  return {
+    part1: sequence.part1.map((p) => p.id),
+    part2: sequence.part2.map((p) => p.id),
+    part3: sequence.part3.map((p) => p.id),
+    part4: sequence.part4.map((p) => p.id),
+  };
+}
+
+async function loadPersistedSequence(persisted: PilotItemSequence): Promise<PilotSequence> {
+  const supabase = await createClient();
+  const allIds = [...persisted.part1, ...persisted.part2, ...persisted.part3, ...persisted.part4];
+  const { data } = await supabase.from("pilot_prompts").select(PROMPT_COLUMNS).in("id", allIds);
+  const byId = new Map(((data as PromptRow[] | null) ?? []).map((row) => [row.id, toPrompt(row)]));
+
+  function resolve(ids: string[]): PilotPrompt[] {
+    return ids.map((id) => byId.get(id)).filter((p): p is PilotPrompt => p != null);
+  }
+
+  return {
+    part1: resolve(persisted.part1),
+    part2: resolve(persisted.part2),
+    part3: resolve(persisted.part3),
+    part4: resolve(persisted.part4),
+  };
+}
+
+export async function drawSequenceForAttempt(
   attemptId: string,
   aircraftType: PilotAircraftType,
 ): Promise<PilotSequence> {
@@ -148,6 +183,17 @@ export async function getSequenceForAttempt(
   const part4 = seededShuffle(pool4, rng).slice(0, PART_SIZES.part4).map(toPrompt);
 
   return { part1, part2, part3, part4 };
+}
+
+export async function getSequenceForAttempt(
+  attemptId: string,
+  aircraftType: PilotAircraftType,
+  persistedSequence?: PilotItemSequence | null,
+): Promise<PilotSequence> {
+  if (persistedSequence) {
+    return loadPersistedSequence(persistedSequence);
+  }
+  return drawSequenceForAttempt(attemptId, aircraftType);
 }
 
 export function sequenceHasEnoughItems(sequence: PilotSequence): boolean {
