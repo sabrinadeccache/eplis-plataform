@@ -27,7 +27,7 @@ pedido pela Sabrina: **as 2 migrations primeiro, o código depois.**
 
 Histórico de migrations em produção: 22 → **24**.
 
-### O que foi verificado em produção (não em teste local)
+### O que foi verificado em produção — Fase 2 (controlador/APP)
 
 Usuário de QA descartável (controlador/APP), sessão real, tentativa criada pela **Server
 Action real** (`startAttempt` via POST do form, sem JS) — `item_sequence` gravado com
@@ -44,6 +44,37 @@ Action real** (`startAttempt` via POST do form, sem JS) — `item_sequence` grav
 Dados de QA removidos ao final (usuário, tentativa, respostas, 2 gravações no bucket);
 conteúdo intacto (646 `phase2_prompts` ativos). Credenciais de produção **seguem fora do
 ambiente Preview** (`vercel env ls`: as 7 vars só em Production).
+
+### Homologação da trilha SDEA (piloto) — 2026-09-12
+
+A 1ª rodada de homologação cobriu só Fase 2 (controlador/APP). Apontado pela Sabrina
+como pendência pra fechar as DUAS trilhas, feito no mesmo dia — com foco no caso que
+motivou todo o desenho do `item_slot`: **a Parte 4 registra `narrative` DUAS vezes no
+mesmo item** (hipótese de antes / hipótese de depois), com o mesmo `prompt_id` e o mesmo
+`response_stage`.
+
+Usuário de QA descartável (piloto/`fixed_wing`), sessão real, tentativa posicionada na
+Parte 4 (equivalente ao atalho de QA do `/sdea`), `item_sequence` com prompts reais:
+
+| Verificação | Resultado |
+|---|---|
+| slot 0 · `picture_description` (**WebM** real) | `200` |
+| slot 1 · `narrative`, 1ª ocorrência (**WebM** real) | `200` |
+| slot 2 · `narrative`, 2ª ocorrência (**MP4** real) | `200` |
+| Persistência | **3 linhas**, slots 0/1/2, **duas com `response_stage = narrative`**, mesmo `prompt_id` — o índice único aceita as duas porque a chave é o `item_slot`, não o estágio |
+| **Replay do slot 1** | devolveu **o cache do slot 1** |
+| **Replay do slot 2** | devolveu **o cache do slot 2** |
+| Troca entre os dois slots `narrative` | **não houve** — nenhum `finished_at`/`ai_feedback` alterado, nenhuma linha nova, `retry_count` intacto |
+| **Retry** do slot 1 (marcado `error`, reenviado) | `200` reaproveitando a **mesma linha** (`retry_count` 0 → 1), sem criar linha nova e sem afetar o slot 2 |
+
+É exatamente o cenário que a 1ª versão do guard errava (um retry da 1ª `narrative` podia
+ser confundido com uma submissão nova da 2ª, duplicando upload e chamada de IA) — agora
+verificado no ambiente implantado, não só em teste.
+
+Dados de QA removidos ao final (usuário, tentativa, 3 respostas, 4 gravações em
+`pilot-recordings`).
+
+**Homologação do M2 fechada nas duas trilhas.**
 
 ### Dois achados REAIS que só a homologação pegou
 
