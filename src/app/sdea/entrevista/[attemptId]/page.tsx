@@ -3,8 +3,10 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import { PilotInterviewRunner } from "@/components/sdea/pilot-interview-runner";
+import { RecordingConsentGate } from "@/components/consent/recording-consent-gate";
 import { getSequenceForAttempt, sequenceHasEnoughItems, type PilotAircraftType } from "@/services/simulations/pilot/queries";
 import { canUsePilotTrack, isPilotProfile, sdeaAircraftType } from "@/lib/auth/roles";
+import { getConsentStatus } from "@/lib/simulations/consent";
 import type { Part, SimulationMode } from "@/types/database";
 
 export default async function SdeaEntrevistaPage({
@@ -33,6 +35,17 @@ export default async function SdeaEntrevistaPage({
 
   if (!attempt || attempt.user_id !== user.id || attempt.phase !== "pilot_interview") notFound();
   if (attempt.status !== "in_progress") redirect(`/sdea/resultado/${attemptId}`);
+
+  // Milestone 3.3: bloqueia a entrevista (não só avisa) até o consentimento
+  // de gravação estar registrado — quem chega aqui ainda não gravou nada.
+  const consent = await getConsentStatus(supabase, user.id);
+  if (!consent.accepted) {
+    return (
+      <AppShell user={user}>
+        <RecordingConsentGate />
+      </AppShell>
+    );
+  }
 
   const sequence = await getSequenceForAttempt(
     attemptId,

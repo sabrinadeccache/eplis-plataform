@@ -321,6 +321,18 @@ type PilotPromptInsert = Partial<Omit<PilotPromptRow, "id" | "created_at">> &
 type PilotResponseInsert = Partial<Omit<PilotResponseRow, "id" | "created_at">> &
   Pick<PilotResponseRow, "simulation_attempt_id" | "prompt_id" | "response_stage">;
 
+// Registro do aceite de consentimento pra gravação de voz — M3.3 (migration
+// 20260912040000). Imutável por design: sem update/delete pra
+// `authenticated`, ver src/lib/simulations/consent.ts.
+export type RecordingConsentRow = {
+  id: string;
+  user_id: string;
+  consent_version: string;
+  accepted_at: string;
+  created_at: string;
+};
+type RecordingConsentInsert = Pick<RecordingConsentRow, "user_id" | "consent_version">;
+
 export type Database = {
   public: {
     Tables: {
@@ -334,6 +346,7 @@ export type Database = {
       pilot_prompts: TableDef<PilotPromptRow, PilotPromptInsert>;
       pilot_responses: TableDef<PilotResponseRow, PilotResponseInsert>;
       simulation_feedbacks: TableDef<SimulationFeedbackRow, SimulationFeedbackInsert>;
+      recording_consents: TableDef<RecordingConsentRow, RecordingConsentInsert>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

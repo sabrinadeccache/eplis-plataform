@@ -3,7 +3,9 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import { InterviewRunner } from "@/components/fase2/interview-runner";
+import { RecordingConsentGate } from "@/components/consent/recording-consent-gate";
 import { getSequenceForAttempt, sequenceHasEnoughItems } from "@/services/simulations/phase2/queries";
+import { getConsentStatus } from "@/lib/simulations/consent";
 import type { Part, SimulationMode } from "@/types/database";
 
 export default async function Fase2EntrevistaPage({
@@ -25,6 +27,17 @@ export default async function Fase2EntrevistaPage({
 
   if (!attempt || attempt.user_id !== user.id || attempt.phase !== "phase2") notFound();
   if (attempt.status !== "in_progress") redirect(`/fase2/resultado/${attemptId}`);
+
+  // Milestone 3.3: bloqueia a entrevista (não só avisa) até o consentimento
+  // de gravação estar registrado — quem chega aqui ainda não gravou nada.
+  const consent = await getConsentStatus(supabase, user.id);
+  if (!consent.accepted) {
+    return (
+      <AppShell user={user}>
+        <RecordingConsentGate />
+      </AppShell>
+    );
+  }
 
   const sequence = await getSequenceForAttempt(
     attemptId,

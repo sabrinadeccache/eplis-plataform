@@ -34,6 +34,12 @@ vi.mock("@/lib/simulations/item-guard", async (importOriginal) => {
 const assertSubmissionRate = vi.fn();
 vi.mock("@/lib/simulations/rate-limit", () => ({ assertSubmissionRate }));
 
+const getConsentStatus = vi.fn();
+vi.mock("@/lib/simulations/consent", async (importOriginal) => {
+  const actual = (await importOriginal()) as object;
+  return { ...actual, getConsentStatus };
+});
+
 const transcribeAudio = vi.fn();
 vi.mock("@/lib/ai/openai", () => ({ transcribeAudio }));
 
@@ -157,12 +163,22 @@ beforeEach(() => {
   validateAudioContainer.mockReturnValue({ ok: true, container: "webm" });
   validateDecodedAudio.mockResolvedValue({ ok: true, container: "webm", durationSeconds: 12 });
   assertSubmissionRate.mockResolvedValue(undefined);
+  getConsentStatus.mockResolvedValue({ accepted: true, version: "test", acceptedAt: "2026-01-01T00:00:00Z" });
   storageUpload.mockResolvedValue({ error: null });
   transcribeAudio.mockResolvedValue("This is a picture of an airport.");
   generatePilotResponseFeedback.mockResolvedValue("Nice description.");
 });
 
 describe("POST /api/sdea/submit-response", () => {
+  it("rejeita quando o consentimento de gravação ainda não foi aceito — Milestone 3.3, antes até de parsear o formulário", async () => {
+    getConsentStatus.mockResolvedValue({ accepted: false, version: "test", acceptedAt: null });
+    const formDataSpy = vi.fn();
+    const res = await POST({ formData: formDataSpy, headers: { get: () => null } } as unknown as Request);
+    expect(res.status).toBe(403);
+    expect(formDataSpy).not.toHaveBeenCalled();
+    expect(reserveResponseSlot).not.toHaveBeenCalled();
+  });
+
   it("rejeita corpo maior que o limite pelo Content-Length, sem autenticar", async () => {
     const res = await POST(makeRequest({}, { contentLength: String(50 * 1024 * 1024) }));
     expect(res.status).toBe(413);

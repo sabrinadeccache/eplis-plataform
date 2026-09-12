@@ -19,6 +19,7 @@ import {
 import { assertSubmissionRate } from "@/lib/simulations/rate-limit";
 import { buildRecordingPath } from "@/lib/simulations/recording-access";
 import { recordingExpiresAt } from "@/lib/simulations/retention";
+import { getConsentStatus } from "@/lib/simulations/consent";
 import type { Part, PilotResponseStage, SimulationMode } from "@/types/database";
 
 // Envio da resposta gravada da trilha do piloto/SDEA — mesmo motivo da rota
@@ -51,6 +52,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;
+  }
+
+  // Milestone 3.3: ver comentário equivalente na rota da Fase 2 — o gate na
+  // tela é UX, esta é a checagem que de fato impede a gravação.
+  const consent = await getConsentStatus(supabase, userId);
+  if (!consent.accepted) {
+    return NextResponse.json({ error: "Consentimento de gravação ainda não registrado." }, { status: 403 });
   }
 
   const formData = await request.formData();

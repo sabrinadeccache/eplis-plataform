@@ -17,6 +17,7 @@ import {
 import { assertSubmissionRate } from "@/lib/simulations/rate-limit";
 import { buildRecordingPath } from "@/lib/simulations/recording-access";
 import { recordingExpiresAt } from "@/lib/simulations/retention";
+import { getConsentStatus } from "@/lib/simulations/consent";
 import type { Part, ResponseStage, SimulationMode } from "@/types/database";
 
 // Envio da resposta gravada da entrevista simulada (Fase 2). Isto é uma
@@ -73,6 +74,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;
+  }
+
+  // Milestone 3.3: o gate na tela da entrevista é UX (bloqueia antes de
+  // mostrar a IHM) — esta é a checagem que de fato impede a gravação, igual
+  // ao proxy não substituir authorize() (M1): ninguém grava sem
+  // consentimento registrado, mesmo chamando a rota direto.
+  const consent = await getConsentStatus(supabase, userId);
+  if (!consent.accepted) {
+    return NextResponse.json({ error: "Consentimento de gravação ainda não registrado." }, { status: 403 });
   }
 
   const formData = await request.formData();
