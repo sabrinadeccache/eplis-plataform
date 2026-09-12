@@ -28,6 +28,47 @@ const nextConfig: NextConfig = {
     "/api/phase2/submit-response": ["./node_modules/@ffmpeg-installer/**"],
     "/api/sdea/submit-response": ["./node_modules/@ffmpeg-installer/**"],
   },
+  // **Achado real, M3 (2026-09-12):** o mesmo `require()` dinâmico do
+  // `@ffmpeg-installer` acima faz o rastreamento de arquivos do Next
+  // desistir de traçar só o necessário e incluir o REPOSITÓRIO INTEIRO no
+  // bundle dessas duas rotas — confirmado inspecionando
+  // `.next/server/app/api/*/submit-response/route.js.nft.json` depois do
+  // build: 241 arquivos fora de `node_modules`, entre eles
+  // `certificates/localhost-key.pem` (uma CHAVE PRIVADA indo pro bundle de
+  // produção), todas as migrations, todo `docs/`, todo `scripts/`, e os
+  // arquivos de teste. Turbopack avisa isso no build ("Encountered
+  // unexpected file in NFT list"). `.env.local` (segredos reais do
+  // projeto) NÃO foi varrido — confirmado por grep no manifesto — mas o
+  // padrão é perigoso por natureza: qualquer arquivo novo na raiz do repo
+  // vira candidato a vazar pro bundle público até isto ser corrigido.
+  outputFileTracingExcludes: {
+    "/api/phase2/submit-response": [
+      "./certificates/**",
+      "./docs/**",
+      "./scripts/**",
+      "./supabase/**",
+      "./public/**",
+      "./*.md",
+      "./package-lock.json",
+      "./tsconfig.tsbuildinfo",
+      "./src/**/*.test.ts",
+      "./src/**/*.test.tsx",
+      "./src/lib/audio/fixtures/**",
+    ],
+    "/api/sdea/submit-response": [
+      "./certificates/**",
+      "./docs/**",
+      "./scripts/**",
+      "./supabase/**",
+      "./public/**",
+      "./*.md",
+      "./package-lock.json",
+      "./tsconfig.tsbuildinfo",
+      "./src/**/*.test.ts",
+      "./src/**/*.test.tsx",
+      "./src/lib/audio/fixtures/**",
+    ],
+  },
 };
 
 export default withSentryConfig(nextConfig, {
