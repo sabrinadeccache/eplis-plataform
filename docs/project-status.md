@@ -13,9 +13,76 @@ conteúdo próprio, baseado nas especificações públicas do exame.
 
 Responsável: Sabrina Deccache.
 
+## Homologação do M2 em produção — 2026-09-12 (CONCLUÍDA)
+
+**M2 mergeado em `main` e homologado no ambiente implantado.** Ordem seguida, conforme
+pedido pela Sabrina: **as 2 migrations primeiro, o código depois.**
+
+### Migrations (aplicadas ANTES do deploy)
+
+| Migration | Verificação |
+|---|---|
+| `20260911000000_response_item_slot.sql` | `item_slot` em `phase2_responses`/`pilot_responses` + 2 índices únicos `(simulation_attempt_id, prompt_id, item_slot)` — conferidos em `information_schema.columns`/`pg_indexes` |
+| `20260911010000_m2_review_fixes.sql` | `item_sequence` (jsonb) e `last_submission_at` (timestamptz) em `simulation_attempts`; `retry_count` (smallint, default 0) nas duas tabelas de resposta |
+
+Histórico de migrations em produção: 22 → **24**.
+
+### O que foi verificado em produção (não em teste local)
+
+Usuário de QA descartável (controlador/APP), sessão real, tentativa criada pela **Server
+Action real** (`startAttempt` via POST do form, sem JS) — `item_sequence` gravado com
+4/10/4/1 prompts, provando que o código novo está no ar:
+
+| Verificação | Resultado |
+|---|---|
+| **Envio real de WebM** | `200` — ffmpeg decodificou, Whisper transcreveu, Claude devolveu feedback |
+| **Envio real de MP4** | `200` — `audio_url` gravado com extensão `.mp4` |
+| **Replay** (reenvio idêntico do mesmo slot) | `200` com resultado em cache; **nenhuma linha nova**, `retry_count` inalterado e `finished_at` inalterado → não reprocessou nem gastou IA de novo |
+| **Retry** (slot marcado `error`, reenvio) | `200` reaproveitando a **mesma linha** (mesmo `id`, mesmo `item_slot`), `retry_count` 2 → 3, `finished_at` atualizado |
+| **Ataque de duração forjada** (MP4 de 540s reais com `mvhd` declarando 2s) | `422` "Áudio mais longo que o limite permitido" — a duração usada é a **decodificada**, não a do metadado |
+
+Dados de QA removidos ao final (usuário, tentativa, respostas, 2 gravações no bucket);
+conteúdo intacto (646 `phase2_prompts` ativos). Credenciais de produção **seguem fora do
+ambiente Preview** (`vercel env ls`: as 7 vars só em Production).
+
+### Dois achados REAIS que só a homologação pegou
+
+1. **O binário do ffmpeg não existia na função da Vercel.** O 1º envio real deu `spawn
+   ENOENT` em `/ROOT/node_modules/ffmpeg-static/ffmpeg`. Causa confirmada no log de build:
+   a política `allow-scripts` do npm **bloqueia scripts de instalação de dependências**, e
+   o `ffmpeg-static` baixa o binário justamente num script `install` — o pacote ia pro
+   bundle, o binário não. Todo o trabalho de validação por decode real estava inerte em
+   produção, e o `nft.json` local não revelava isso (lá o binário existia).
+   **Corrigido:** trocado por `@ffmpeg-installer/ffmpeg`, que entrega o binário como
+   CONTEÚDO de pacotes por plataforma (`optionalDependencies` com `os`/`cpu`;
+   `@ffmpeg-installer/linux-x64` está no `package-lock.json`), sem script nenhum. Exigiu
+   também `serverExternalPackages` (o pacote resolve o binário com `require()` dinâmico e
+   o Turbopack falhava com "Can't resolve <dynamic>") e um fallback de permissão: se o
+   binário não estiver executável, o probe copia pro `/tmp` e dá `chmod` lá.
+2. **`exit code 0` não é o mesmo que "decodificou áudio".** A troca de binário (ffmpeg 6/9
+   → 4.4) expôs que o WebM de Cluster zerado faz o ffmpeg 4.4 terminar com exit 0
+   reportando `out_time_us=0` — nada decodificado — e a versão anterior aceitava como
+   "duração 0s, válido". As versões mais novas abortavam com erro no mesmo arquivo, o que
+   mascarava a lacuna. **Corrigido** exigindo duração decodificada acima de um mínimo,
+   critério que não depende da versão do binário.
+
+E um defeito de diagnosticabilidade corrigido no meio disso: o `catch` do probe tratava
+QUALQUER falha como culpa do arquivo, então uma falha de infraestrutura aparecia pro
+candidato como "seu áudio está corrompido" (e sem nenhum sinal da causa nos logs). Agora
+`ProbeResult` carrega `kind`: `undecodable` (arquivo, → 422) vs `unavailable` (nosso, →
+503), e falha de spawn loga `code`/`errno`/`syscall` + estado do binário no caminho
+resolvido.
+
+### Próximo passo
+
+**Milestone 3** — gravações privadas, retenção e LGPD.
+
 ## Retomada — 2026-09-11 (Plano de correção — Milestone 2: guards de item/áudio/custo)
 
 ### Estado atual (ponto de retomada)
+
+> **Estado desta seção: histórico.** O M2 foi mergeado em `main` e homologado em
+> produção — ver "Homologação do M2 em produção — 2026-09-12" acima.
 
 - **M2 implementado na branch `security/attempt-audio-guards`, com QUATRO rodadas de
   revisão adversarial da Sabrina já incorporadas.** 1ª rodada: 5 bloqueadores funcionais
