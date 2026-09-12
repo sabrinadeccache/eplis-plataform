@@ -16,7 +16,8 @@ import {
 } from "@/lib/simulations/item-guard";
 import { assertSubmissionRate } from "@/lib/simulations/rate-limit";
 import { buildRecordingPath } from "@/lib/simulations/recording-access";
-import type { Part, ResponseStage } from "@/types/database";
+import { recordingExpiresAt } from "@/lib/simulations/retention";
+import type { Part, ResponseStage, SimulationMode } from "@/types/database";
 
 // Envio da resposta gravada da entrevista simulada (Fase 2). Isto é uma
 // route handler comum, NÃO uma Server Action — respostas mais longas (ex.: a
@@ -190,7 +191,14 @@ export async function POST(request: Request) {
     // de confirmar autorização — ver createRecordingSignedUrl.
     await admin
       .from("phase2_responses")
-      .update({ audio_path: path, repetition_count: repetitionCount })
+      .update({
+        audio_path: path,
+        repetition_count: repetitionCount,
+        // Prazo de retenção da GRAVAÇÃO (M3.2): practice 30 dias, official
+        // 180. Gravado explicitamente pra a retenção ser auditável — ver
+        // src/lib/simulations/retention.ts.
+        expires_at: recordingExpiresAt(attempt.mode as SimulationMode),
+      })
       .eq("id", responseId);
 
     let transcript: string;

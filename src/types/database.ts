@@ -83,7 +83,12 @@ export type UserRow = {
 
 export type SimulationAttemptRow = {
   id: string;
-  user_id: string;
+  // Anulável desde a migration 20260912030000 (`on delete set null`): ao
+  // excluir a conta, a tentativa sobrevive ANONIMIZADA (sem dono) pra
+  // estatística agregada — ver M3.2 em docs/project-status.md. As checagens
+  // de posse (`attempt.user_id !== user.id`) e os filtros
+  // `.eq("user_id", ...)` rejeitam nulo naturalmente.
+  user_id: string | null;
   phase: Phase;
   mode: SimulationMode;
   status: AttemptStatus;
@@ -179,6 +184,10 @@ export type Phase2ResponseRow = {
   // não existe URL estável, o acesso é por URL assinada de vida curta
   // gerada sob demanda (src/lib/simulations/recording-access.ts).
   audio_path: string | null;
+  // Quando a GRAVAÇÃO vence e passa a ser apagada pelo processo de retenção
+  // (M3.2, migration 20260912020000): practice 30 dias, official 180.
+  // Transcrição, feedback e notas não expiram — só o áudio.
+  expires_at: string | null;
   // **Legado.** Guardava a URL PÚBLICA da gravação, de quando os buckets
   // eram públicos — as URLs gravadas aqui deixaram de funcionar quando os
   // buckets viraram privados (migration 20260912000000), o que era o
@@ -227,6 +236,7 @@ export type PilotResponseRow = {
   item_slot: number | null;
   retry_count: number;
   audio_path: string | null;
+  expires_at: string | null;
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
@@ -273,7 +283,11 @@ type UserInsert = Partial<Omit<UserRow, "id" | "created_at">> &
 type SimulationAttemptInsert = Partial<
   Omit<SimulationAttemptRow, "started_at" | "status">
 > &
-  Pick<SimulationAttemptRow, "user_id" | "phase" | "mode"> & {
+  Pick<SimulationAttemptRow, "phase" | "mode"> & {
+    // `user_id` é anulável na LINHA (anonimização pós-exclusão de conta),
+    // mas obrigatório no INSERT: criar tentativa sem dono nunca é o
+    // caminho válido — o desvínculo só acontece via `on delete set null`.
+    user_id: string;
     // Opcional: startAttempt() gera o id explicitamente (crypto.randomUUID())
     // quando precisa computar+persistir `item_sequence` no mesmo INSERT (a
     // seed da sequência é o próprio attemptId — ver queries.ts).

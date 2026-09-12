@@ -18,7 +18,8 @@ import {
 } from "@/lib/simulations/item-guard";
 import { assertSubmissionRate } from "@/lib/simulations/rate-limit";
 import { buildRecordingPath } from "@/lib/simulations/recording-access";
-import type { Part, PilotResponseStage } from "@/types/database";
+import { recordingExpiresAt } from "@/lib/simulations/retention";
+import type { Part, PilotResponseStage, SimulationMode } from "@/types/database";
 
 // Envio da resposta gravada da trilha do piloto/SDEA — mesmo motivo da rota
 // equivalente da Fase 2 (route handler comum, não Server Action, por causa do
@@ -165,7 +166,14 @@ export async function POST(request: Request) {
     // de confirmar autorização — ver createRecordingSignedUrl.
     await admin
       .from("pilot_responses")
-      .update({ audio_path: path, repetition_count: repetitionCount })
+      .update({
+        audio_path: path,
+        repetition_count: repetitionCount,
+        // Prazo de retenção da GRAVAÇÃO (M3.2): practice 30 dias, official
+        // 180. Gravado explicitamente pra a retenção ser auditável — ver
+        // src/lib/simulations/retention.ts.
+        expires_at: recordingExpiresAt(attempt.mode as SimulationMode),
+      })
       .eq("id", responseId);
 
     let transcript: string;
