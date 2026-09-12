@@ -15,6 +15,7 @@ import {
   ItemGuardError,
 } from "@/lib/simulations/item-guard";
 import { assertSubmissionRate } from "@/lib/simulations/rate-limit";
+import { buildRecordingPath } from "@/lib/simulations/recording-access";
 import type { Part, ResponseStage } from "@/types/database";
 
 // Envio da resposta gravada da entrevista simulada (Fase 2). Isto é uma
@@ -169,7 +170,9 @@ export async function POST(request: Request) {
     }
 
     const ext = validation.container === "mp4" ? "mp4" : "webm";
-    const path = `${attemptId}/${promptId}-${stage}-${Date.now()}.${ext}`;
+    // Caminho privado, com o dono no prefixo e sufixo aleatório — ver
+    // buildRecordingPath em src/lib/simulations/recording-access.ts (M3.1).
+    const path = buildRecordingPath({ userId, attemptId, promptId, stage, slot, ext });
 
     const { error: uploadError } = await supabase.storage
       .from("phase2-recordings")
@@ -182,12 +185,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Falha ao enviar o áudio: ${uploadError.message}` }, { status: 500 });
     }
 
-    const { data: publicUrlData } = supabase.storage.from("phase2-recordings").getPublicUrl(path);
-    const audioUrl = publicUrlData.publicUrl;
-
+    // Bucket privado (M3.1): guarda o CAMINHO do objeto, não uma URL
+    // pública. O acesso é por URL assinada de vida curta, gerada só depois
+    // de confirmar autorização — ver createRecordingSignedUrl.
     await admin
       .from("phase2_responses")
-      .update({ audio_url: audioUrl, repetition_count: repetitionCount })
+      .update({ audio_path: path, repetition_count: repetitionCount })
       .eq("id", responseId);
 
     let transcript: string;

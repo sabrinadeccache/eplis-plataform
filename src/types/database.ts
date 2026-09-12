@@ -174,6 +174,15 @@ export type Phase2ResponseRow = {
   // Existe porque um retry reusa a linha (só muda processing_status/started_at),
   // então a contagem de LINHAS por tentativa não reflete retries.
   retry_count: number;
+  // Caminho do objeto no bucket PRIVADO (M3.1, migration 20260912010000) —
+  // `{userId}/{attemptId}/{...}`. Substitui `audio_url`: com bucket privado
+  // não existe URL estável, o acesso é por URL assinada de vida curta
+  // gerada sob demanda (src/lib/simulations/recording-access.ts).
+  audio_path: string | null;
+  // **Legado.** Guardava a URL PÚBLICA da gravação, de quando os buckets
+  // eram públicos — as URLs gravadas aqui deixaram de funcionar quando os
+  // buckets viraram privados (migration 20260912000000), o que era o
+  // objetivo. O código novo não escreve mais nesta coluna.
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
@@ -213,9 +222,11 @@ export type PilotResponseRow = {
   simulation_attempt_id: string;
   prompt_id: string;
   response_stage: PilotResponseStage;
-  // Ver comentários equivalentes em Phase2ResponseRow.item_slot/retry_count.
+  // Ver comentários equivalentes em Phase2ResponseRow (item_slot,
+  // retry_count, audio_path, audio_url).
   item_slot: number | null;
   retry_count: number;
+  audio_path: string | null;
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
