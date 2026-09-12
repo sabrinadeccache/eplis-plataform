@@ -37,16 +37,26 @@
 //    final.
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { statSync } from "node:fs";
-import { unlink, writeFile } from "node:fs/promises";
+import { accessSync, constants, statSync } from "node:fs";
+import { chmod, copyFile, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import ffmpegPath from "ffmpeg-static";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 
 // Mensagem única pro caso "o validador não rodou" — a rota mapeia ela
 // pra 503 (falha de servidor), nunca pra 422 (arquivo do candidato).
 export const AUDIO_PROBE_UNAVAILABLE_REASON =
   "Não foi possível validar o áudio agora. Tente novamente em instantes.";
+
+// **Achado da homologação (2026-09-12):** "o ffmpeg saiu com código 0" não
+// é o mesmo que "decodificou áudio". O WebM com Cluster zerado faz o ffmpeg
+// 4.4 (o do @ffmpeg-installer) terminar com exit 0 reportando
+// `out_time_us=0` — ou seja, NADA foi decodificado — e a versão anterior
+// aceitava isso como "duração 0s, válido". Versões mais novas do ffmpeg
+// abortavam com erro no mesmo arquivo, o que mascarava a lacuna. O critério
+// correto não depende da versão: só vale se o decoder produziu áudio de
+// verdade.
+const MIN_DECODED_DURATION_SECONDS = 0.1;
 
 const PROBE_TIMEOUT_MS = 15_000;
 // Corpo já é limitado por MAX_AUDIO_BYTES (validate.ts) antes de chegar
@@ -96,15 +106,61 @@ function parseDecodedDurationSeconds(progressOutput: string): number | null {
   return null;
 }
 
-export async function probeAudioDecodable(buffer: Buffer, ext: "webm" | "mp4"): Promise<ProbeResult> {
-  if (!ffmpegPath) {
-    // Binário ausente pra essa plataforma/arquitetura — falha fechado (nunca
-    // aceita sem decodificar de verdade).
-    console.error("[audio-probe] ffmpeg-static não resolveu um caminho de binário nesta plataforma");
-    return { ok: false, kind: "unavailable", reason: AUDIO_PROBE_UNAVAILABLE_REASON };
+// **Achado da homologação em produção (2026-09-12):** a 1ª tentativa usou o
+// pacote `ffmpeg-static`, que baixa o binário num script de INSTALAÇÃO — e a
+// política `allow-scripts` do npm bloqueia scripts de dependências tanto aqui
+// quanto no build da Vercel. Resultado: o pacote ia pro bundle, o binário
+// não, e todo envio real morria com `spawn ENOENT`. Trocado por
+// `@ffmpeg-installer/ffmpeg`, que entrega o binário como CONTEÚDO de um
+// pacote por plataforma (optionalDependencies com `os`/`cpu`), sem script
+// nenhum — o `linux-x64` está no package-lock.json e é instalado
+// normalmente no build da Vercel.
+//
+// O único script que sobra nesses pacotes é um `chmod u+x` — também
+// bloqueado pela mesma política. Por isso o fallback abaixo: se o binário
+// não estiver executável (ou o FS do bundle for somente-leitura), copia pro
+// /tmp (único diretório gravável numa função serverless) e dá permissão lá.
+// Resolvido uma vez por processo e memorizado (cold start paga, invocações
+// seguintes não).
+let cachedExecutablePath: string | null = null;
+
+async function resolveFfmpegExecutable(): Promise<string | null> {
+  if (cachedExecutablePath) return cachedExecutablePath;
+
+  const bundledPath: string | undefined = ffmpegInstaller?.path;
+  if (!bundledPath) {
+    console.error("[audio-probe] @ffmpeg-installer não resolveu um binário para esta plataforma");
+    return null;
   }
 
-  const ffmpegBinaryPath: string = ffmpegPath;
+  try {
+    accessSync(bundledPath, constants.X_OK);
+    cachedExecutablePath = bundledPath;
+    return cachedExecutablePath;
+  } catch {
+    // Sem bit de execução — copia pro /tmp e marca como executável.
+  }
+
+  try {
+    const target = join(tmpdir(), "ffmpeg-audio-probe");
+    await copyFile(bundledPath, target);
+    await chmod(target, 0o755);
+    cachedExecutablePath = target;
+    console.warn(`[audio-probe] binário sem permissão de execução em ${bundledPath}; copiado para ${target}`);
+    return cachedExecutablePath;
+  } catch (error) {
+    console.error("[audio-probe] não foi possível preparar o binário do ffmpeg:", error);
+    return null;
+  }
+}
+
+export async function probeAudioDecodable(buffer: Buffer, ext: "webm" | "mp4"): Promise<ProbeResult> {
+  const ffmpegBinaryPath = await resolveFfmpegExecutable();
+  if (!ffmpegBinaryPath) {
+    // Sem binário utilizável — falha fechado (nunca aceita sem decodificar
+    // de verdade) e como falha NOSSA, não do arquivo do candidato.
+    return { ok: false, kind: "unavailable", reason: AUDIO_PROBE_UNAVAILABLE_REASON };
+  }
   const tmpPath = join(tmpdir(), `audio-probe-${randomBytes(8).toString("hex")}.${ext}`);
   await writeFile(tmpPath, buffer);
 
@@ -142,6 +198,16 @@ export async function probeAudioDecodable(buffer: Buffer, ext: "webm" | "mp4"): 
         ok: false,
         kind: "undecodable",
         reason: "Não foi possível determinar a duração real do áudio.",
+      };
+    }
+    if (durationSeconds < MIN_DECODED_DURATION_SECONDS) {
+      // O processo terminou "bem", mas sem produzir áudio nenhum — arquivo
+      // sem conteúdo decodificável (ver comentário em
+      // MIN_DECODED_DURATION_SECONDS).
+      return {
+        ok: false,
+        kind: "undecodable",
+        reason: "Arquivo de áudio corrompido ou não decodificável.",
       };
     }
     return { ok: true, durationSeconds };
