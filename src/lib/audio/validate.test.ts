@@ -122,6 +122,7 @@ describe("validateDecodedAudio (decode real, depois da reserva de slot)", () => 
       expect(buf.length).toBeLessThan(MAX_AUDIO_BYTES);
       await expect(validateDecodedAudio(buf, "webm")).resolves.toEqual({
         ok: false,
+        kind: "undecodable",
         reason: "Áudio mais longo que o limite permitido para uma resposta.",
       });
     },
@@ -133,6 +134,7 @@ describe("validateDecodedAudio (decode real, depois da reserva de slot)", () => 
     async () => {
       await expect(validateDecodedAudio(fixture("forged-duration-2s.mp4"), "mp4")).resolves.toEqual({
         ok: false,
+        kind: "undecodable",
         reason: "Áudio mais longo que o limite permitido para uma resposta.",
       });
     },
@@ -157,6 +159,15 @@ describe("validateDecodedAudio (decode real, depois da reserva de slot)", () => 
     "rejeita MP4 só de vídeo (sem faixa de áudio) — achado da 4ª rodada da revisão",
     async () => {
       await expect(validateDecodedAudio(fixture("video-only.mp4"), "mp4")).resolves.toMatchObject({ ok: false });
+    },
+    PROBE_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "classifica arquivo ruim como `undecodable` (erro do candidato), nunca como `unavailable` — o 2º vira 503 na rota, não 422 (achado da homologação em produção)",
+    async () => {
+      const result = await validateDecodedAudio(fixture("zeroed-mdat.mp4"), "mp4");
+      expect(result).toMatchObject({ ok: false, kind: "undecodable" });
     },
     PROBE_TEST_TIMEOUT_MS,
   );

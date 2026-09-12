@@ -23,7 +23,7 @@
 // (MediaRecorder) são WebM/Opus (Chrome/Firefox) e MP4/AAC (Safari) — mesmos
 // dois que src/app/api/phase2/submit-response/route.ts e .../sdea/... já
 // distinguem por `audio.type` pra escolher a extensão do upload.
-import { probeAudioDecodable } from "@/lib/audio/probe";
+import { probeAudioDecodable, type ProbeFailureKind } from "@/lib/audio/probe";
 
 export type AudioContainer = "webm" | "mp4";
 
@@ -94,7 +94,10 @@ export type AudioContainerCheck =
 
 export type AudioValidationResult =
   | { ok: true; container: AudioContainer; durationSeconds: number }
-  | { ok: false; reason: string };
+  // `kind` distingue "o arquivo do candidato não presta" (`undecodable`) de
+  // "o nosso validador não conseguiu rodar" (`unavailable`) — a rota mapeia
+  // o 2º pra 503, nunca pra 422. Ver src/lib/audio/probe.ts.
+  | { ok: false; kind: ProbeFailureKind; reason: string };
 
 // **Achado da revisão (2026-09-11, 4ª rodada): o decode real (ffmpeg) é caro
 // e não pode rodar antes do rate limit / da reserva atômica de item** —
@@ -153,10 +156,14 @@ export function validateAudioContainer(buffer: Buffer, declaredMimeType: string)
 export async function validateDecodedAudio(buffer: Buffer, container: AudioContainer): Promise<AudioValidationResult> {
   const probe = await probeAudioDecodable(buffer, container);
   if (!probe.ok) {
-    return { ok: false, reason: probe.reason };
+    return { ok: false, kind: probe.kind, reason: probe.reason };
   }
   if (probe.durationSeconds > MAX_RESPONSE_DURATION_SECONDS) {
-    return { ok: false, reason: "Áudio mais longo que o limite permitido para uma resposta." };
+    return {
+      ok: false,
+      kind: "undecodable",
+      reason: "Áudio mais longo que o limite permitido para uma resposta.",
+    };
   }
 
   return { ok: true, container, durationSeconds: probe.durationSeconds };

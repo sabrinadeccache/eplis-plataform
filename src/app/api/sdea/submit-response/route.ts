@@ -135,7 +135,12 @@ export async function POST(request: Request) {
     const validation = await validateDecodedAudio(buffer, containerCheck.container);
     if (!validation.ok) {
       await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
-      return NextResponse.json({ error: validation.reason }, { status: 422 });
+      // 503 quando o problema é NOSSO (o validador não rodou) — só 422
+      // quando o arquivo do candidato é que não presta. Sem essa distinção,
+      // uma falha de infraestrutura aparecia pro candidato como "seu áudio
+      // está corrompido" (achado da homologação em produção).
+      const status = validation.kind === "unavailable" ? 503 : 422;
+      return NextResponse.json({ error: validation.reason }, { status });
     }
 
     const ext = validation.container === "mp4" ? "mp4" : "webm";

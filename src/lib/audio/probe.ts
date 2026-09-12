@@ -37,17 +37,45 @@
 //    final.
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { statSync } from "node:fs";
 import { unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegPath from "ffmpeg-static";
+
+// Mensagem única pro caso "o validador não rodou" — a rota mapeia ela
+// pra 503 (falha de servidor), nunca pra 422 (arquivo do candidato).
+export const AUDIO_PROBE_UNAVAILABLE_REASON =
+  "Não foi possível validar o áudio agora. Tente novamente em instantes.";
 
 const PROBE_TIMEOUT_MS = 15_000;
 // Corpo já é limitado por MAX_AUDIO_BYTES (validate.ts) antes de chegar
 // aqui — folga generosa só pro texto de progresso/erro do próprio ffmpeg.
 const MAX_FFMPEG_OUTPUT_BYTES = 4 * 1024 * 1024;
 
-export type ProbeResult = { ok: true; durationSeconds: number } | { ok: false; reason: string };
+// `kind` separa DUAS falhas que não podem ser confundidas (achado da
+// homologação em produção, 2026-09-12): "o arquivo que o candidato mandou
+// não presta" (`undecodable`) e "o nosso validador não conseguiu rodar"
+// (`unavailable` — binário do ffmpeg ausente/sem permissão, timeout,
+// qualquer falha de spawn). A 1ª versão devolvia a mesma mensagem de
+// "arquivo corrompido" pros dois casos: no 1º envio real em produção o
+// ffmpeg nem executou, e a resposta dizia ao candidato que o áudio DELE
+// estava corrompido — mascarando uma falha de infraestrutura como erro do
+// usuário, e escondendo a causa de quem fosse investigar.
+export type ProbeFailureKind = "undecodable" | "unavailable";
+export type ProbeResult =
+  | { ok: true; durationSeconds: number }
+  | { ok: false; kind: ProbeFailureKind; reason: string };
+
+// Erro de spawn (o processo nem chegou a rodar) tem `code` em STRING
+// (ENOENT = binário não encontrado, EACCES/EPERM = sem bit de execução);
+// erro de decodificação tem `code` NUMÉRICO (o exit code do ffmpeg).
+function isSpawnFailure(error: unknown): boolean {
+  const e = error as { code?: unknown; killed?: boolean } | null;
+  if (!e) return false;
+  if (e.killed) return true; // timeout — também é falha nossa, não do arquivo
+  return typeof e.code === "string";
+}
 
 // `ffmpeg -progress pipe:1` emite periodicamente linhas `chave=valor` no
 // stdout enquanto decodifica de verdade — `out_time_us` (microssegundos) é
@@ -72,7 +100,8 @@ export async function probeAudioDecodable(buffer: Buffer, ext: "webm" | "mp4"): 
   if (!ffmpegPath) {
     // Binário ausente pra essa plataforma/arquitetura — falha fechado (nunca
     // aceita sem decodificar de verdade).
-    return { ok: false, reason: "Não foi possível validar o áudio neste ambiente." };
+    console.error("[audio-probe] ffmpeg-static não resolveu um caminho de binário nesta plataforma");
+    return { ok: false, kind: "unavailable", reason: AUDIO_PROBE_UNAVAILABLE_REASON };
   }
 
   const ffmpegBinaryPath: string = ffmpegPath;
@@ -109,13 +138,42 @@ export async function probeAudioDecodable(buffer: Buffer, ext: "webm" | "mp4"): 
 
     const durationSeconds = parseDecodedDurationSeconds(stdout);
     if (durationSeconds == null) {
-      return { ok: false, reason: "Não foi possível determinar a duração real do áudio." };
+      return {
+        ok: false,
+        kind: "undecodable",
+        reason: "Não foi possível determinar a duração real do áudio.",
+      };
     }
     return { ok: true, durationSeconds };
-  } catch {
-    // Timeout, exit code != 0 (dados inválidos, container corrompido) ou
-    // qualquer outra falha do processo — nunca aceita sem decode limpo.
-    return { ok: false, reason: "Arquivo de áudio corrompido ou não decodificável." };
+  } catch (error) {
+    if (isSpawnFailure(error)) {
+      // O ffmpeg NÃO rodou (binário ausente/sem permissão, ou timeout). Não é
+      // culpa do arquivo do candidato — loga o suficiente pra diagnosticar
+      // (sem nada do conteúdo do áudio) e devolve uma falha de servidor.
+      const e = error as { code?: unknown; errno?: unknown; syscall?: unknown; killed?: boolean };
+      let binaryState = "desconhecido";
+      try {
+        const st = statSync(ffmpegBinaryPath);
+        binaryState = `existe, mode=${(st.mode & 0o777).toString(8)}, ${st.size} bytes`;
+      } catch {
+        binaryState = "arquivo inexistente no caminho resolvido";
+      }
+      console.error(
+        "[audio-probe] ffmpeg não pôde ser executado:",
+        JSON.stringify({
+          code: e.code,
+          errno: e.errno,
+          syscall: e.syscall,
+          killed: e.killed ?? false,
+          ffmpegBinaryPath,
+          binaryState,
+        }),
+      );
+      return { ok: false, kind: "unavailable", reason: AUDIO_PROBE_UNAVAILABLE_REASON };
+    }
+    // Exit code != 0 do próprio ffmpeg: dados inválidos, sem faixa de áudio,
+    // corrupção parcial (-xerror) — aí sim é o arquivo.
+    return { ok: false, kind: "undecodable", reason: "Arquivo de áudio corrompido ou não decodificável." };
   } finally {
     await unlink(tmpPath).catch(() => {});
   }
