@@ -35,7 +35,7 @@ describe("CONSENT_SECTIONS", () => {
     expect(all).toMatch(/claude|anthropic/);
     expect(all).toMatch(/30 dias/);
     expect(all).toMatch(/180 dias/);
-    expect(all).toMatch(/e-mail/);
+    expect(all).toMatch(/sdeccache@gmail\.com/);
   });
 
   it("não fica vazio", () => {

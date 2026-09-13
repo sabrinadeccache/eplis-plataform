@@ -154,11 +154,13 @@ export async function POST(request: Request) {
     }
 
     const ext = validation.container === "mp4" ? "mp4" : "webm";
-    // Caminho privado, com o dono no prefixo e sufixo aleatório — ver
-    // buildRecordingPath em src/lib/simulations/recording-access.ts (M3.1).
-    const path = buildRecordingPath({ userId, attemptId, promptId, stage, slot, ext });
+    // Caminho DETERMINÍSTICO por responseId (M3, revisão 2026-09-12) — ver
+    // comentário equivalente na rota da Fase 2 e em recording-access.ts.
+    const path = buildRecordingPath({ userId, attemptId, responseId });
 
-    const { error: uploadError } = await supabase.storage
+    // Bucket privado, sem policy nenhuma pra `authenticated` (migration
+    // 20260912050000) — o upload é SÓ por service_role.
+    const { error: uploadError } = await admin.storage
       .from("pilot-recordings")
       .upload(path, buffer, { contentType: mimeType, upsert: true });
     if (uploadError) {
@@ -172,7 +174,7 @@ export async function POST(request: Request) {
     // Bucket privado (M3.1): guarda o CAMINHO do objeto, não uma URL
     // pública. O acesso é por URL assinada de vida curta, gerada só depois
     // de confirmar autorização — ver createRecordingSignedUrl.
-    await admin
+    const { error: pathUpdateError } = await admin
       .from("pilot_responses")
       .update({
         audio_path: path,
@@ -183,6 +185,13 @@ export async function POST(request: Request) {
         expires_at: recordingExpiresAt(attempt.mode as SimulationMode),
       })
       .eq("id", responseId);
+    if (pathUpdateError) {
+      // Ver comentário equivalente na rota da Fase 2 — falha rápido em vez
+      // de seguir com a linha em estado inconsistente; um retry encontra o
+      // MESMO objeto (caminho determinístico) e corrige sozinho.
+      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
+      return NextResponse.json({ error: "Não foi possível registrar a gravação." }, { status: 500 });
+    }
 
     let transcript: string;
     try {

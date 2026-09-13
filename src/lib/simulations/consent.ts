@@ -9,7 +9,7 @@
 // antigos (quem aceitou uma versão anterior precisa aceitar de novo) sem
 // apagar o histórico: as linhas antigas em `recording_consents` continuam
 // provando o que foi aceito e quando.
-export const CONSENT_VERSION = "2026-09-12";
+export const CONSENT_VERSION = "2026-09-12.2";
 
 // Estrutura de dados, não texto solto: cada seção mapeia direto num item do
 // plano de correção (finalidade, serviços, armazenamento/prazo,
@@ -57,9 +57,10 @@ export const CONSENT_SECTIONS: { title: string; body: string }[] = [
     title: "Como pedir a exclusão dos seus dados",
     body:
       "Você pode pedir a exclusão da sua conta e dos seus dados a qualquer momento, " +
-      "escrevendo para o e-mail de contato da plataforma. Ao excluir a conta, suas " +
-      "gravações são apagadas; o histórico de uso (notas e critérios, sem a gravação nem a " +
-      "transcrição) é mantido de forma anônima, sem identificar você.",
+      "escrevendo para sdeccache@gmail.com. Ao excluir a conta, suas gravações e as " +
+      "transcrições das suas respostas são apagadas; o histórico de uso (notas e critérios, " +
+      "sem a gravação, a transcrição nem o texto do feedback) é mantido de forma anônima, " +
+      "sem identificar você.",
   },
 ];
 

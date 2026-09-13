@@ -333,6 +333,18 @@ export type RecordingConsentRow = {
 };
 type RecordingConsentInsert = Pick<RecordingConsentRow, "user_id" | "consent_version">;
 
+// Auditoria de acesso ADMINISTRATIVO a uma gravação (item 3.2 do plano de
+// correção) — só metadado, nunca conteúdo. Escrita/leitura só por
+// service_role (migration 20260912060000).
+export type RecordingAccessLogRow = {
+  id: string;
+  admin_user_id: string;
+  track: "phase2" | "pilot";
+  response_id: string;
+  accessed_at: string;
+};
+type RecordingAccessLogInsert = Pick<RecordingAccessLogRow, "admin_user_id" | "track" | "response_id">;
+
 export type Database = {
   public: {
     Tables: {
@@ -347,6 +359,7 @@ export type Database = {
       pilot_responses: TableDef<PilotResponseRow, PilotResponseInsert>;
       simulation_feedbacks: TableDef<SimulationFeedbackRow, SimulationFeedbackInsert>;
       recording_consents: TableDef<RecordingConsentRow, RecordingConsentInsert>;
+      recording_access_log: TableDef<RecordingAccessLogRow, RecordingAccessLogInsert>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

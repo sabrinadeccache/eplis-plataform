@@ -180,7 +180,9 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | response_stage | enum | **[ALTERADO]** agora cobre todos os sub-estágios da state machine: `main`, `situation_intro`, `situation_check`, `suggestion` (Parte 2), `image_observation`, `image_description`, `story_preparation`, `story_telling` (Parte 4) |
 | item_slot | smallint, nullable | **[NOVO, 2026-09-11 — Milestone 2]** posição (0-based) da resposta dentro da sequência de estágios do item (ver `src/services/simulations/phase2/response-stages.ts`), **mandada pelo cliente e validada pelo servidor** contra essa sequência (revisão de 2026-09-11 — antes o servidor tentava inferir a posição só a partir de quantos slots já tinham linha, o que era ambíguo pra estágios repetidos). Não é redundante com `response_stage`: é a chave de posição/idempotência que o guard de item usa (`src/lib/simulations/item-guard.ts`) — `response_stage` sozinho não é único dentro de um item em toda trilha (a Parte 4 do SDEA repete `narrative` duas vezes). Índice único em `(simulation_attempt_id, prompt_id, item_slot)`, migration `20260911000000_response_item_slot.sql`. `null` só em linhas anteriores a essa migration ou de uma janela de deploy sem o `item_slot` ainda — o guard reconhece essas linhas e atribui posição pela ordem de criação, ver `assignSlots` em `item-guard.ts`. |
 | retry_count | smallint, default 0 | **[NOVO, 2026-09-11 — revisão do M2]** quantas vezes esta MESMA linha (mesmo `item_slot`) foi reprocessada depois de um erro. Um retry reaproveita a linha (não cria outra), então a contagem de LINHAS por tentativa não refletia retries — este contador é o teto (`MAX_RETRIES_PER_SLOT` = 5) que fecha essa brecha. |
-| audio_url | text, nullable | |
+| audio_path | text, nullable | **[NOVO, 2026-09-12 — Milestone 3.1]** caminho do objeto no bucket PRIVADO — `{userId}/{attemptId}/{responseId}`, **determinístico pelo id da própria linha** (revisão de 2026-09-12: a 1ª versão usava um sufixo aleatório por chamada, e um retry criava um objeto novo, deixando o anterior órfão — sem extensão de arquivo no caminho de propósito, pra um retry que troca de formato ainda sobrescrever o MESMO objeto via `upsert: true`). Substitui `audio_url`; acesso só por URL assinada de 120s gerada sob demanda (`src/lib/simulations/recording-access.ts`), nunca por leitura/URL pública direta (bucket sem policy nenhuma pra `authenticated`, migration `20260912050000`). |
+| expires_at | timestamptz, nullable | **[NOVO, 2026-09-12 — Milestone 3.2]** quando a GRAVAÇÃO vence: 30 dias (`practice`) ou 180 dias (`official`), gravado explicitamente no upload (não calculado on-the-fly) pra a retenção ser auditável. Só o áudio expira — transcrição/feedback/nota não. |
+| audio_url | text, nullable | **[LEGADO]** guardava a URL PÚBLICA da gravação, de quando o bucket era público — parou de funcionar quando o bucket virou privado (migration `20260912000000`, intencional). O código novo não escreve mais aqui. |
 | transcript | text, nullable | |
 | ai_feedback | text, nullable | feedback curto em inglês por resposta. `practice`: preenchido em tempo real (mostrado ao candidato após cada resposta). `official`: **[2026-08-27]** preenchido só na finalização (`advanceState`, em lote), para o demonstrativo por parte da tela de resultado — nunca mostrado durante a prova |
 | ai_provider | text, nullable | ex: `anthropic` |
@@ -304,6 +306,48 @@ critérios. Por isso os prompts de IA da trilha do piloto (`src/lib/ai/pilot-tra
 avaliam fraseologia, mesmo na Parte 2 (readback/reação/confirmação) — mesma disciplina
 "o que este estágio especificamente avalia" já usada nos prompts do controlador, e a mesma
 regra inegociável de nota final = menor dos 6 critérios (nunca média).
+
+---
+
+## 10. `recording_consents` e `recording_access_log` **[NOVO, 2026-09-12 — Milestone 3]**
+
+Duas tabelas de auditoria pra gravação de voz — bloqueio prévio (consentimento) e
+rastro de acesso administrativo depois do fato.
+
+**`recording_consents`** — aceite do consentimento de gravação (M3.3, texto e versão em
+`src/lib/simulations/consent.ts`), exigido antes da 1ª gravação de qualquer trilha.
+
+| Campo | Tipo | Observações |
+|---|---|---|
+| id | uuid | |
+| user_id | uuid → users | |
+| consent_version | text | identifica qual versão do texto foi aceita — muda junto quando o texto muda de forma relevante |
+| accepted_at | timestamptz | |
+| created_at | timestamptz | |
+
+Imutável por design: sem policy de update/delete pra `authenticated`. **[2026-09-12,
+revisão]** INSERT também revogado de `authenticated` — a policy original só checava
+`auth.uid() = user_id`, sem restringir `consent_version`/`accepted_at`, então o cliente
+podia mandar uma versão inventada ou um timestamp retroativo direto pra PostgREST. Só
+`service_role` escreve agora (a Server Action `acceptRecordingConsent` usa o client
+admin depois de `authorize()`); SELECT continua liberado pro titular (`getConsentStatus`
+só lê, sem risco de forjar registro passado).
+
+**`recording_access_log`** — registro de acesso ADMINISTRATIVO a uma gravação (item 3.2
+do plano de correção: "registrar acesso administrativo sem conteúdo sensível").
+
+| Campo | Tipo | Observações |
+|---|---|---|
+| id | uuid | |
+| admin_user_id | uuid → users | |
+| track | text | `phase2` \| `pilot` |
+| response_id | uuid | id da linha em `phase2_responses`/`pilot_responses`, conforme `track` |
+| accessed_at | timestamptz | |
+
+Só metadado — nunca a URL assinada nem o áudio. Escrito por
+`src/lib/simulations/recording-access.ts` sempre que um admin assina a gravação de OUTRO
+titular (não quando acessa a própria). Só `service_role` lê/escreve — não é dado do
+titular da gravação, é trilha de auditoria interna.
 
 ---
 

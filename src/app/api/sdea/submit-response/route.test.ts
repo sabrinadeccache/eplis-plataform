@@ -67,19 +67,18 @@ vi.mock("@/lib/supabase/admin", () => ({
         },
       };
     },
+    // Upload das gravações passou a ser SÓ pelo client admin (service_role)
+    // desde a revisão do M3 — ver comentário equivalente na suíte da Fase 2.
+    storage: {
+      from() {
+        return { upload: storageUpload };
+      },
+    },
   }),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    storage: {
-      from() {
-        return {
-          upload: storageUpload,
-          getPublicUrl: () => ({ data: { publicUrl: "https://cdn.test/audio.webm" } }),
-        };
-      },
-    },
     from() {
       return {
         select() {

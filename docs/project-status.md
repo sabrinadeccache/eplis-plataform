@@ -13,6 +13,84 @@ conteúdo próprio, baseado nas especificações públicas do exame.
 
 Responsável: Sabrina Deccache.
 
+## Milestone 3 — gravações privadas, retenção e LGPD — em revisão (2026-09-12)
+
+Branch `privacy/private-recordings-consent`, aguardando aprovação da Sabrina antes do
+merge e da aplicação das migrations. Escopo: 3.1 (storage privado), 3.2 (retenção +
+anonimização na exclusão de conta), 3.3 (consentimento). Uma rodada de revisão
+adversarial já incorporada — achados P0 reais, não só cobertura de teste.
+
+### Achados da revisão (2026-09-12) e como foram corrigidos
+
+1. **O Storage contornava toda a API.** As policies da 1ª versão concediam INSERT e
+   SELECT diretos ao role `authenticated` nos dois buckets de gravação, checando só
+   posse da tentativa — o candidato podia subir áudio (ou baixar/assinar fora do limite
+   de 120s) direto pelo client, sem passar por consentimento, guard de item, decode real
+   ou carimbo de retenção. Comportamento documentado do Supabase: RLS em
+   `storage.objects` dá acesso rw direto ao objeto, independente de regra de aplicação.
+   **Correção:** migration `20260912050000` revoga as duas policies — zero acesso de
+   `authenticated` nesses buckets. As duas rotas de submit-response passaram a subir com
+   `admin.storage` (service_role), nunca `supabase.storage`.
+2. **Retry deixava gravação órfã.** Cada upload gerava um caminho novo com sufixo
+   aleatório; um retry (mesma linha de resposta) criava outro objeto e sobrescrevia
+   `audio_path`, deixando o anterior sem nenhuma referência — invisível pros scripts de
+   retenção/exclusão, que só olhavam `audio_path`. Também não havia checagem de erro na
+   escrita de `audio_path` depois do upload. **Correção:** `buildRecordingPath` passou a
+   ser determinístico por `responseId` (a PK da própria linha, não adivinhável) —
+   `{userId}/{attemptId}/{responseId}`, sem sufixo aleatório nem extensão. Todo upload
+   pra aquela linha, inclusive retry (mesmo com formato diferente), sobrescreve o MESMO
+   objeto (`upsert: true`). A escrita de `audio_path` passou a ser checada; falha marca a
+   linha como erro (um retry recalcula o mesmo caminho e se corrige sozinho).
+3. **Exclusão de conta não garantia a anonimização.** Faltava paginação (uma conta com
+   muitas respostas só era parcialmente limpa), `simulation_feedbacks.general_feedback`
+   (conteúdo derivado da fala) e `audio_url` legado não eram zerados, e nada impedia um
+   envio novo durante a limpeza. **Correção:** `purgeUserRecordings` agora bloqueia a
+   conta (`status = 'blocked'`) ANTES de tocar em qualquer dado — `authorize()` (M1) já
+   rejeita toda ação de conta não-`active`, fechando a janela de novo envio; pagina
+   tentativas/respostas/feedbacks até esgotar; deriva o caminho do Storage pelos IDs (não
+   pela coluna `audio_path`) e remove incondicionalmente — **verificado contra o Supabase
+   real que `DELETE` num objeto inexistente devolve `200`/lista vazia, não erro**, então
+   isso cobre até a linha cujo upload terminou mas nunca chegou a gravar `audio_path`;
+   zera `general_feedback` e `audio_url` junto.
+4. **A promessa de expiração automática não existia de fato.** O texto de consentimento
+   dizia "apagada automaticamente", mas `expireRecordings` só rodava se alguém executasse
+   manualmente — e a assinatura ignorava `expires_at` (uma gravação vencida continuava
+   assinável até o script rodar). **Correção:** nova rota `/api/cron/expire-recordings`
+   (protegida por `CRON_SECRET`) + `vercel.json` com Vercel Cron 1x/dia; `expireRecordings`
+   ganhou paginação de verdade (antes só processava o 1º lote); `createRecordingSignedUrl`
+   passou a checar `expires_at` e tratar gravação vencida como não-encontrada.
+   **Pendente:** `CRON_SECRET` ainda não existe nas env vars da Vercel — a expiração
+   automática só fica real depois de configurado + deploy.
+5. **Consentimento forjável + faltava auditoria administrativa.** A policy de INSERT só
+   checava `auth.uid() = user_id`, sem restringir `consent_version`/`accepted_at` — o
+   cliente podia mandar uma versão inventada ou um timestamp retroativo direto pra
+   PostgREST. O plano (item 3.2) também pede "registrar acesso administrativo [à
+   gravação] sem conteúdo sensível", que não existia. **Correção:** migration
+   `20260912060000` revoga INSERT de `authenticated` em `recording_consents` — só
+   `service_role` escreve (a Server Action usa o client admin; `consent_version` vem
+   sempre da constante do servidor, `accepted_at` sempre do `now()` do banco). Nova
+   tabela `recording_access_log` (só metadado — quem, o quê, quando) registrada sempre
+   que um admin assina a gravação de OUTRO titular (não a própria). Canal de exclusão no
+   texto passou a ser o e-mail real (`sdeccache@gmail.com`), CONSENT_VERSION incrementada.
+6. **Correção de linguagem, não de código:** eu tinha afirmado que a chave privada no
+   bundle "confirmava exposição" — a Sabrina apontou, corretamente, que a presença no
+   pacote do servidor não prova por si só exposição pública (Vercel não serve o código-
+   fonte da função por um endpoint público). Era defesa em profundidade contra uma
+   superfície de ataque desnecessária, não uma exposição pública comprovada.
+
+### Limitações residuais reconhecidas (não corrigidas, por decisão de escopo)
+
+- `expireRecordings` (caminho baseado em tempo, não o de exclusão de conta) ainda filtra
+  por `audio_path is not null` — uma linha cujo upload nunca chegou a gravar
+  `audio_path`/`expires_at` não é pega por ele (só pelo caminho de exclusão de conta, que
+  é 100% baseado em ID). Residual real, mas exige upload-bem-sucedido-seguido-de-falha-
+  na-escrita-seguinte-sem-nenhum-retry-depois — uma combinação rara, dado o teto de
+  retry por slot do M2.
+- O bloqueio de conta em `purgeUserRecordings` fecha a janela de novo envio pra
+  requisições que ainda não passaram por `authorize()` no momento do bloqueio; uma
+  requisição já em voo naquele instante exato ainda pode completar. Mesma limitação
+  inerente de qualquer sistema vivo — não é um gap específico deste código.
+
 ## Homologação do M2 em produção — 2026-09-12 (CONCLUÍDA)
 
 **M2 mergeado em `main` e homologado no ambiente implantado.** Ordem seguida, conforme

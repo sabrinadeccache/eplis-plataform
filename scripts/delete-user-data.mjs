@@ -3,18 +3,27 @@
 // resultado ANONIMIZADO** — a plataforma não perde histórico de uso
 // (estatística agregada), mas o titular deixa de ser identificável.
 //
-// Ordem importa: o Storage não participa de cascade do Postgres, então as
-// gravações (e a transcrição/feedback, que são conteúdo de fala — dado
-// pessoal) precisam ser limpas ANTES de apagar a conta. Depois, apagar a
-// conta em `public.users`/Auth desvincula as tentativas automaticamente
-// (`simulation_attempts.user_id` → NULL, `on delete set null`, migration
-// 20260912030000) — elas sobrevivem anônimas.
+// Espelha src/lib/simulations/retention.ts (`purgeUserRecordings`) — ver lá
+// o motivo de cada passo. Resumo do que muda em relação à 1ª versão deste
+// script (achados da revisão de 2026-09-12):
 //
-// DRY-RUN POR PADRÃO: só lista o que seria apagado. Passe `--apply` pra
-// executar de verdade. Isto é uma operação IRREVERSÍVEL (a voz e o
-// conteúdo de fala do titular são removidos de vez) — pensado pra rodar
-// mediante pedido do titular pelo canal administrativo (M3.3), não em
-// lote.
+// 1. Bloqueia a conta (`status = 'blocked'`) ANTES de tocar em qualquer
+//    dado — sem isso, nada impedia um envio novo durante a limpeza (a
+//    conta continuava `active` até o `deleteUser` final). `authorize()`
+//    (M1) já rejeita toda ação de conta não-`active`.
+// 2. Pagina de verdade (tentativas, respostas, feedbacks) — a versão
+//    anterior só limpava até o limite implícito de uma consulta.
+// 3. O caminho apagado no Storage é DERIVADO DOS IDS, não da coluna
+//    `audio_path` — cobre a linha cujo upload terminou mas nunca chegou a
+//    gravar `audio_path`.
+// 4. Também zera `audio_url` (legado) e `simulation_feedbacks.general_feedback`
+//    (conteúdo derivado da fala do titular, ligado à tentativa mesmo depois
+//    de anonimizada).
+//
+// DRY-RUN POR PADRÃO. Passe `--apply` pra executar de verdade — é
+// IRREVERSÍVEL (a voz e o conteúdo de fala do titular são removidos de
+// vez). Pensado pra rodar mediante pedido do titular pelo canal
+// administrativo (M3.3), não em lote.
 //
 // Uso:
 //   node scripts/delete-user-data.mjs <email>             # dry-run
@@ -38,31 +47,85 @@ const TRACKS = [
   { table: "pilot_responses", bucket: "pilot-recordings" },
 ];
 
-async function purgeTrack(supabase, { table, bucket }, userId, apply) {
-  const { data, error } = await supabase
-    .from(table)
-    .select("id, audio_path, simulation_attempts!inner(user_id)")
-    .eq("simulation_attempts.user_id", userId);
-  if (error) throw new Error(`${table}: ${error.message}`);
+const PAGE_SIZE = 500;
+const ATTEMPT_CHUNK = 200;
 
-  const rows = data ?? [];
-  const paths = rows.map((r) => r.audio_path).filter(Boolean);
-  if (rows.length === 0 || !apply) {
-    return { responses: rows.length, storageObjects: paths.length };
+function chunk(items, size) {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+function buildPath(userId, attemptId, responseId) {
+  return `${userId}/${attemptId}/${responseId}`;
+}
+
+async function fetchAllAttemptIds(supabase, userId) {
+  const ids = [];
+  for (let page = 0; ; page += 1) {
+    const { data, error } = await supabase
+      .from("simulation_attempts")
+      .select("id")
+      .eq("user_id", userId)
+      .order("id", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`simulation_attempts: ${error.message}`);
+    ids.push(...data.map((r) => r.id));
+    if (data.length < PAGE_SIZE) break;
   }
+  return ids;
+}
 
-  if (paths.length > 0) {
+async function purgeTrack(supabase, { table, bucket }, userId, attemptIds, apply) {
+  let responses = 0;
+  let storageObjects = 0;
+
+  for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
+    const { data, error } = await supabase.from(table).select("id, simulation_attempt_id, audio_path").in("simulation_attempt_id", idsChunk);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    const rows = data ?? [];
+    if (rows.length === 0) continue;
+    responses += rows.length;
+    if (!apply) continue;
+
+    const paths = rows.map((r) => buildPath(userId, r.simulation_attempt_id, r.id));
     const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
     if (storageError) throw new Error(`${table} (storage): ${storageError.message}`);
+    storageObjects += paths.length;
+
+    const { error: clearError } = await supabase
+      .from(table)
+      .update({ audio_path: null, audio_url: null, transcript: null, ai_feedback: null })
+      .in("id", rows.map((r) => r.id));
+    if (clearError) throw new Error(`${table} (clear): ${clearError.message}`);
   }
 
-  const { error: clearError } = await supabase
-    .from(table)
-    .update({ audio_path: null, transcript: null, ai_feedback: null })
-    .in("id", rows.map((r) => r.id));
-  if (clearError) throw new Error(`${table} (clear): ${clearError.message}`);
+  return { responses, storageObjects };
+}
 
-  return { responses: rows.length, storageObjects: paths.length };
+async function clearFeedbacks(supabase, attemptIds, apply) {
+  let cleared = 0;
+  if (!apply) {
+    for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
+      const { data, error } = await supabase.from("simulation_feedbacks").select("id").in("simulation_attempt_id", idsChunk);
+      if (error) throw new Error(`simulation_feedbacks: ${error.message}`);
+      cleared += (data ?? []).length;
+    }
+    return cleared;
+  }
+  for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
+    const { data, error } = await supabase.from("simulation_feedbacks").select("id").in("simulation_attempt_id", idsChunk);
+    if (error) throw new Error(`simulation_feedbacks: ${error.message}`);
+    const rows = data ?? [];
+    if (rows.length === 0) continue;
+    const { error: clearError } = await supabase
+      .from("simulation_feedbacks")
+      .update({ general_feedback: null })
+      .in("id", rows.map((r) => r.id));
+    if (clearError) throw new Error(`simulation_feedbacks (clear): ${clearError.message}`);
+    cleared += rows.length;
+  }
+  return cleared;
 }
 
 async function main() {
@@ -92,10 +155,25 @@ async function main() {
   console.log(apply ? "Aplicando (irreversível)…" : "Dry-run (nada será apagado — use --apply pra aplicar)…");
   console.log(`Usuário: ${userRow.id} (${userRow.email}, role=${userRow.role})`);
 
-  for (const track of TRACKS) {
-    const result = await purgeTrack(supabase, track, userRow.id, apply);
-    console.log(`  ${track.table}: ${result.responses} resposta(s), ${result.storageObjects} gravação(ões)`);
+  if (apply) {
+    // Bloqueia a conta ANTES de tocar em qualquer dado — impede que uma
+    // submissão em andamento ou nova crie gravação durante a limpeza
+    // (achado da revisão: authorize() já rejeita conta não-`active`, M1).
+    const { error: blockError } = await supabase.from("users").update({ status: "blocked" }).eq("id", userRow.id);
+    if (blockError) throw new Error(`Falha ao bloquear a conta antes da limpeza: ${blockError.message}`);
+    console.log("Conta bloqueada (status=blocked) — nenhuma submissão nova passa a partir daqui.");
   }
+
+  const attemptIds = await fetchAllAttemptIds(supabase, userRow.id);
+  console.log(`Tentativas do usuário: ${attemptIds.length}`);
+
+  for (const track of TRACKS) {
+    const result = await purgeTrack(supabase, track, userRow.id, attemptIds, apply);
+    console.log(`  ${track.table}: ${result.responses} resposta(s), ${result.storageObjects} gravação(ões) removida(s)`);
+  }
+
+  const feedbacksCleared = await clearFeedbacks(supabase, attemptIds, apply);
+  console.log(`  simulation_feedbacks: ${feedbacksCleared} relatório(s) com general_feedback limpo`);
 
   if (!apply) {
     console.log("\nDry-run concluído. Rode com --apply pra limpar o conteúdo de fala e então apagar a conta.");

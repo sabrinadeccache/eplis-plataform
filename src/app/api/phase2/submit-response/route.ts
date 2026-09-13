@@ -181,11 +181,16 @@ export async function POST(request: Request) {
     }
 
     const ext = validation.container === "mp4" ? "mp4" : "webm";
-    // Caminho privado, com o dono no prefixo e sufixo aleatório — ver
-    // buildRecordingPath em src/lib/simulations/recording-access.ts (M3.1).
-    const path = buildRecordingPath({ userId, attemptId, promptId, stage, slot, ext });
+    // Caminho DETERMINÍSTICO por responseId (M3, revisão 2026-09-12) — todo
+    // upload pra esta linha, inclusive retry, sobrescreve o MESMO objeto
+    // (upsert: true). Ver comentário em recording-access.ts pro achado real
+    // (caminho aleatório por chamada deixava o objeto anterior órfão).
+    const path = buildRecordingPath({ userId, attemptId, responseId });
 
-    const { error: uploadError } = await supabase.storage
+    // Bucket privado, sem policy nenhuma pra `authenticated` (migration
+    // 20260912050000) — o upload é SÓ por service_role, depois de todos os
+    // guards acima. O client do candidato nunca escreve no bucket direto.
+    const { error: uploadError } = await admin.storage
       .from("phase2-recordings")
       .upload(path, buffer, { contentType: mimeType, upsert: true });
     if (uploadError) {
@@ -199,7 +204,7 @@ export async function POST(request: Request) {
     // Bucket privado (M3.1): guarda o CAMINHO do objeto, não uma URL
     // pública. O acesso é por URL assinada de vida curta, gerada só depois
     // de confirmar autorização — ver createRecordingSignedUrl.
-    await admin
+    const { error: pathUpdateError } = await admin
       .from("phase2_responses")
       .update({
         audio_path: path,
@@ -210,6 +215,16 @@ export async function POST(request: Request) {
         expires_at: recordingExpiresAt(attempt.mode as SimulationMode),
       })
       .eq("id", responseId);
+    if (pathUpdateError) {
+      // Achado da revisão: esta escrita não era checada — se falhasse, o
+      // objeto já existia no bucket mas `audio_path`/`expires_at` nunca
+      // eram gravados, e o fluxo seguia mesmo assim pra transcrição. Como o
+      // caminho é determinístico (acima), um retry ainda encontra o MESMO
+      // objeto e corrige isso sozinho; aqui só falha rápido em vez de
+      // seguir com a linha em estado inconsistente.
+      await admin.from("phase2_responses").update({ processing_status: "error" }).eq("id", responseId);
+      return NextResponse.json({ error: "Não foi possível registrar a gravação." }, { status: 500 });
+    }
 
     let transcript: string;
     try {
