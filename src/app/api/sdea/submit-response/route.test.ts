@@ -51,16 +51,27 @@ vi.mock("@/lib/ai/pilot-track", () => ({
 
 const storageUpload = vi.fn();
 const adminUpdate = vi.fn();
+let accountStatus = "active";
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    from() {
+    from(table: string) {
       return {
         update(payload: Record<string, unknown>) {
           adminUpdate(payload);
           return this;
         },
+        select() {
+          return this;
+        },
         eq() {
           return this;
+        },
+        // Recheck de status (achado da revisão, M3): assertAccountStillActive
+        // consulta `public.users` bem antes de persistir conteúdo — o
+        // comportamento de bloqueio no meio da requisição é testado abaixo.
+        async maybeSingle() {
+          if (table === "users") return { data: { status: accountStatus }, error: null };
+          return { data: null, error: null };
         },
         then(resolve: (v: { data: null; error: null }) => void) {
           resolve({ data: null, error: null });
@@ -156,6 +167,7 @@ const sequence = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  accountStatus = "active";
   authorize.mockResolvedValue({ user: { id: "user-1", operational_profile: "fixed_wing" } });
   assertOwnAttemptInProgress.mockResolvedValue(attempt);
   getSequenceForAttempt.mockResolvedValue(sequence);
@@ -234,6 +246,15 @@ describe("POST /api/sdea/submit-response", () => {
     expect(reserveResponseSlot).toHaveBeenCalledWith(
       expect.objectContaining({ promptId: "prompt-1", stage: "narrative", slot: 2 }),
     );
+  });
+
+  it("recheca a conta perto da persistência: bloqueio no meio do processamento barra o upload (achado da revisão)", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    accountStatus = "blocked";
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(403);
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).not.toHaveBeenCalled();
   });
 
   it("fluxo normal: reserva, sobe o áudio, transcreve e gera feedback (practice)", async () => {

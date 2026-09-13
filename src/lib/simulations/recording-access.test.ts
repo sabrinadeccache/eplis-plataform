@@ -26,6 +26,7 @@ function makeClients(options: {
   row?: { audio_path: string | null; expires_at?: string | null; ownerId: string } | null;
   adminRow?: { audio_path: string | null; expires_at?: string | null; ownerId: string } | null;
   signedUrl?: string | null;
+  auditLogFails?: boolean;
 }) {
   const signCalls: { bucket: string; path: string; ttl: number }[] = [];
   const auditLogInserts: Record<string, unknown>[] = [];
@@ -52,7 +53,10 @@ function makeClients(options: {
             };
           },
           insert(payload: Record<string, unknown>) {
-            if (table === "recording_access_log") auditLogInserts.push(payload);
+            if (table === "recording_access_log") {
+              if (options.auditLogFails) return Promise.resolve({ data: null, error: { message: "boom" } });
+              auditLogInserts.push(payload);
+            }
             return Promise.resolve({ data: null, error: null });
           },
         };
@@ -179,6 +183,27 @@ describe("createRecordingSignedUrl", () => {
     expect(auditLogInserts).toEqual([
       { admin_user_id: "admin-1", track: "phase2", response_id: "resp-1" },
     ]);
+  });
+
+  it("falha fechado (500) se o registro de auditoria falhar — nenhum acesso administrativo sai sem log (achado da revisão)", async () => {
+    const { supabase, admin, signCalls, auditLogInserts } = makeClients({
+      adminRow: { audio_path: "outro/attempt-9/a", expires_at: future, ownerId: "outro-usuario" },
+      auditLogFails: true,
+    });
+    const result = await createRecordingSignedUrl({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      supabase: supabase as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      admin: admin as any,
+      ...base,
+      user: user({ id: "admin-1", role: "admin" }),
+    });
+    expect(result).toMatchObject({ ok: false, status: 500 });
+    expect(auditLogInserts).toEqual([]);
+    // A URL já tinha sido assinada quando o log falhou (a assinatura roda
+    // antes da auditoria) — mas ela nunca é DEVOLVIDA ao chamador, é isso
+    // que garante que nenhum acesso sem auditoria "vaza" pro admin.
+    expect(signCalls).toHaveLength(1);
   });
 
   it("admin acessando a PRÓPRIA gravação não gera registro de auditoria (não é supervisão de terceiro)", async () => {

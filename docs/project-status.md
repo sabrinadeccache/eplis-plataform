@@ -78,18 +78,74 @@ adversarial já incorporada — achados P0 reais, não só cobertura de teste.
    fonte da função por um endpoint público). Era defesa em profundidade contra uma
    superfície de ataque desnecessária, não uma exposição pública comprovada.
 
-### Limitações residuais reconhecidas (não corrigidas, por decisão de escopo)
+### 2ª rodada de revisão (2026-09-12) — 5 achados adicionais, todos corrigidos
 
-- `expireRecordings` (caminho baseado em tempo, não o de exclusão de conta) ainda filtra
-  por `audio_path is not null` — uma linha cujo upload nunca chegou a gravar
-  `audio_path`/`expires_at` não é pega por ele (só pelo caminho de exclusão de conta, que
-  é 100% baseado em ID). Residual real, mas exige upload-bem-sucedido-seguido-de-falha-
-  na-escrita-seguinte-sem-nenhum-retry-depois — uma combinação rara, dado o teto de
-  retry por slot do M2.
-- O bloqueio de conta em `purgeUserRecordings` fecha a janela de novo envio pra
-  requisições que ainda não passaram por `authorize()` no momento do bloqueio; uma
-  requisição já em voo naquele instante exato ainda pode completar. Mesma limitação
-  inerente de qualquer sistema vivo — não é um gap específico deste código.
+A Sabrina revisou o commit `21db9aa` (221/221 testes, tsc e eslint passando) e recusou
+aprovar o merge: passar nos testes não provava a integração real. Recusou também as duas
+"limitações residuais" da rodada anterior como aceitáveis pra documentar em vez de
+corrigir. Todos os 7 pontos abaixo (5 numerados + os 2 residuais) têm correção real de
+código, não só texto.
+
+1. **A rota de cron era interceptada pelo proxy antes de chegar no `CRON_SECRET`.**
+   Vercel Cron não manda cookie de sessão — só o header `Authorization` que a própria
+   rota confere. `src/proxy.ts` redirecionava `/api/cron/expire-recordings` pra `/login`
+   antes da checagem da rota rodar; configurar `CRON_SECRET` sozinho não bastava, a
+   execução nunca alcançava a rota. **Correção:** `SESSION_EXEMPT_PATHS` em
+   `src/lib/supabase/proxy.ts` — `/api/cron/*` passa direto pelo proxy (sem tocar client
+   Supabase nenhum); a validação do segredo continua só dentro da rota. Testado em
+   `src/lib/supabase/proxy.test.ts`.
+2. **A limpeza de storage parou de olhar `audio_path`, e perdeu gravação legada.** A
+   correção do achado #2 da 1ª rodada (caminho determinístico) trocou a lógica de
+   remoção pra derivar o caminho SÓ pelos IDs — mas isso descartou qualquer gravação cujo
+   `audio_path` real (formato legado, de antes desta mudança, ou do bucket público
+   original) não bate com o caminho novo calculado. Como remover um caminho inexistente
+   não dá erro, o código achava que tinha limpado e zerava a referência mesmo sem ter
+   tocado no objeto real. **Correção:** `src/lib/simulations/retention.ts` agora lê
+   `audio_path` e remove a UNIÃO dele com o caminho determinístico (`candidatePaths`) —
+   cobre os dois casos ao mesmo tempo, em vez de escolher um.
+3. **Paginação de resposta incompleta dentro de cada bloco de tentativas.**
+   `purgeUserRecordings` já paginava a busca de IDs de tentativa, mas agrupava até 200
+   IDs por vez e fazia UMA consulta `.in(...)` de respostas por bloco — com dezenas de
+   respostas por tentativa, um bloco de 200 podia estourar o limite implícito do
+   PostgREST sem aviso nenhum, truncando a limpeza silenciosamente. **Correção:**
+   `fetchAllResponsesForAttempts` pagina de verdade (`.range()`, 500 por página) até
+   esgotar CADA bloco de tentativas, tanto pra respostas quanto pro laço de
+   `simulation_feedbacks`.
+4. **Ordem de deploy da migration 20260912050000 estava invertida.** O cabeçalho dizia
+   "migration antes do código, como o resto do projeto" — mas o CÓDIGO que roda em
+   produção hoje ainda sobe com `supabase.storage` (client do usuário); aplicar a
+   migration primeiro revogaria exatamente esse acesso e quebraria todo envio de
+   gravação em produção, o mesmo erro do M1 que o CLAUDE.md documenta. **Correção:**
+   cabeçalho da migration reescrito — esta é a ÚNICA migration do M3 que segue código
+   primeiro, migration depois (o inverso das demais, que são aditivas); só aplicar depois
+   de confirmar em produção que as rotas já sobem com `admin.storage`.
+5. **`logAdminAccess` ignorava erro do INSERT.** A URL assinada era entregue ao admin
+   mesmo que o registro de auditoria falhasse silenciosamente — sem provar acesso
+   registrado, não tem como provar supervisão. **Correção:** `createRecordingSignedUrl`
+   agora falha fechado (`{ok:false, status:500}`) se o insert em `recording_access_log`
+   retornar erro; nenhum acesso administrativo a gravação de outro titular sai sem
+   auditoria gravada.
+6. **(Residual #1 corrigido) Upload sem `audio_path` gravado ficava invisível pro
+   caminho baseado em tempo.** Se o objeto sobe mas a escrita de `audio_path`/
+   `expires_at` falha logo depois, a linha nunca bate no filtro de `expireRecordings`
+   (que exige `audio_path is not null`) nem tem `expires_at` pra vencer — só o caminho de
+   exclusão de CONTA (100% por ID) alcançava esse caso; uma conta nunca excluída deixava
+   o objeto órfão pra sempre. **Correção:** `sweepOrphanedUploads` — 2ª varredura em
+   `expireRecordings`, por `processing_status = 'error'` + `audio_path is null` + mais
+   velho que o prazo mais curto (30 dias) — tenta remover o caminho determinístico
+   incondicionalmente (sem erro se não existir).
+7. **(Residual #2 corrigido) Bloqueio de conta não parava requisição já em voo.** O
+   `status = 'blocked'` fecha `authorize()` pra requisições NOVAS, mas uma que já tinha
+   passado por `authorize()` no instante do bloqueio continuava até o fim, podendo gravar
+   conteúdo novo depois da "exclusão". A Sabrina recusou aceitar isso como limitação
+   documentada: "documentar a corrida não a resolve". **Correção:** as duas rotas de
+   submit-response fazem uma 2ª checagem de status (`assertAccountStillActive`) logo
+   antes de persistir qualquer conteúdo (upload/`audio_path`/transcrição), não só no
+   início da requisição — reduz a janela de "todo o tempo de processamento" pro intervalo
+   entre essa checagem e a escrita. Não elimina a corrida por completo (nenhum sistema
+   sem lock distribuído elimina), mas fecha o caso prático: qualquer requisição que leve
+   tempo suficiente pro cron ou pra exclusão de conta rodar no meio é barrada antes de
+   escrever.
 
 ## Homologação do M2 em produção — 2026-09-12 (CONCLUÍDA)
 

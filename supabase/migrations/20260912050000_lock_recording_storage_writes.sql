@@ -16,10 +16,24 @@
 -- `authorize()` + os guards do M2 (consentimento, item, decode). O client
 -- do candidato nunca mais toca o objeto: nem pra subir, nem pra ler.
 --
--- ORDEM DE DEPLOY: migration ANTES do código, como o resto do projeto — o
--- código ANTIGO (que ainda chamava `supabase.storage...upload` com o client
--- do usuário) pararia de funcionar assim que esta migration for aplicada.
--- Corrigido no mesmo commit: as rotas passam a subir com `admin.storage`.
+-- ORDEM DE DEPLOY (achado da revisão, 2026-09-12): esta migration é a
+-- EXCEÇÃO à regra do projeto — aqui é CÓDIGO PRIMEIRO, migration DEPOIS,
+-- o inverso das outras migrations do M3 (20260912000000 a 20260912040000
+-- e 20260912060000, que são aditivas e não afetam nenhum caminho de
+-- código já em produção). O cabeçalho original desta migration dizia o
+-- contrário ("migration antes do código") e estava errado: o código que
+-- roda em `main` HOJE (antes deste commit ser deployado) ainda faz
+-- `supabase.storage...upload/download` com o client do usuário — é
+-- exatamente esse client que esta migration revoga. Aplicar esta
+-- migration antes do deploy do código novo (que troca pra
+-- `admin.storage`) quebraria todo envio de gravação em produção, o mesmo
+-- erro documentado no CLAUDE.md pra migration 20260910* do M1.
+--
+-- Por isso esta migration **não pode ser aplicada junto com o resto do
+-- pacote M3**: aplicar só depois de confirmar, em produção, que as rotas
+-- `phase2/submit-response` e `sdea/submit-response` (e qualquer outro
+-- caminho que toque nesses buckets) já estão rodando a versão com
+-- `admin.storage` — nunca antes.
 
 drop policy if exists "insert own recordings" on storage.objects;
 drop policy if exists "select own recordings" on storage.objects;

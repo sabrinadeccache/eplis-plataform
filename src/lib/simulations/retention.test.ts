@@ -21,6 +21,7 @@ function makeAdmin(tables: Record<string, Row[]>) {
         if (op === "eq") return r[col] === val;
         if (op === "in") return (val as unknown[]).includes(r[col]);
         if (op === "not-is-null") return r[col] != null;
+        if (op === "is-null") return r[col] == null;
         if (op === "lte") return r[col] != null && (r[col] as string) <= (val as string);
         return true;
       }),
@@ -49,6 +50,10 @@ function makeAdmin(tables: Record<string, Row[]>) {
           if (val === null) filters.push({ col, op: "not-is-null", val: null });
           return builder;
         },
+        is(col: string, val: unknown) {
+          if (val === null) filters.push({ col, op: "is-null", val: null });
+          return builder;
+        },
         lte(col: string, val: unknown) {
           filters.push({ col, op: "lte", val });
           return builder;
@@ -58,6 +63,10 @@ function makeAdmin(tables: Record<string, Row[]>) {
         },
         range(start: number, end: number) {
           range = [start, end];
+          return builder;
+        },
+        limit(n: number) {
+          range = [0, n - 1];
           return builder;
         },
         update(payload: Row) {
@@ -186,6 +195,58 @@ describe("expireRecordings", () => {
     expect(report.byTrack.phase2.rowsCleared).toBe(0);
   });
 
+  it("remove a UNIÃO do audio_path legado com o caminho determinístico (achado da revisão: só os IDs perdia gravação legada)", async () => {
+    const legada = {
+      id: "p-legado",
+      simulation_attempt_id: "a1",
+      audio_path: "caminho/bem/antigo.webm",
+      expires_at: "2020-01-01T00:00:00Z",
+      simulation_attempts: { user_id: "u1" },
+    };
+    const { admin, removed, updates } = makeAdmin({ phase2_responses: [legada], pilot_responses: [] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const report = await expireRecordings({ admin: admin as any, dryRun: false });
+    expect(report.errors).toEqual([]);
+    const phase2Removal = removed.find((r) => r.bucket === "phase2-recordings");
+    expect(phase2Removal?.paths.sort()).toEqual(["caminho/bem/antigo.webm", "u1/a1/p-legado"]);
+    expect(updates).toEqual([{ table: "phase2_responses", payload: { audio_path: null }, ids: ["p-legado"] }]);
+  });
+
+  it("varre e remove uploads órfãos (audio_path nulo, erro, mais velho que o prazo) mesmo sem bater no filtro principal", async () => {
+    const orfao = {
+      id: "p-orfao",
+      simulation_attempt_id: "a1",
+      audio_path: null,
+      expires_at: null,
+      processing_status: "error",
+      created_at: "2020-01-01T00:00:00Z",
+      simulation_attempts: { user_id: "u1" },
+    };
+    const { admin, removed } = makeAdmin({ phase2_responses: [orfao], pilot_responses: [] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const report = await expireRecordings({ admin: admin as any, dryRun: false });
+    expect(report.byTrack.phase2.orphansSwept).toBe(1);
+    const phase2Removal = removed.find((r) => r.bucket === "phase2-recordings");
+    expect(phase2Removal?.paths).toContain("u1/a1/p-orfao");
+  });
+
+  it("dry-run da varredura de órfãos só conta, não remove", async () => {
+    const orfao = {
+      id: "p-orfao",
+      simulation_attempt_id: "a1",
+      audio_path: null,
+      expires_at: null,
+      processing_status: "error",
+      created_at: "2020-01-01T00:00:00Z",
+      simulation_attempts: { user_id: "u1" },
+    };
+    const { admin, removed } = makeAdmin({ phase2_responses: [orfao], pilot_responses: [] });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const report = await expireRecordings({ admin: admin as any, dryRun: true });
+    expect(report.byTrack.phase2.orphansSwept).toBe(1);
+    expect(removed).toEqual([]);
+  });
+
   it("não expõe conteúdo sensível no relatório (só contagens)", async () => {
     const { admin } = makeAdmin({ phase2_responses: [vencida("p-1")], pilot_responses: [] });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -267,6 +328,24 @@ describe("purgeUserRecordings (exclusão de conta)", () => {
     await purgeUserRecordings({ admin: admin as any, userId: "u1", dryRun: false });
     const phase2Removal = removed.find((r) => r.bucket === "phase2-recordings");
     expect(phase2Removal?.paths).not.toContain("outro/a9/p-9");
+  });
+
+  it("pagina de verdade DENTRO de um único bloco de tentativas (achado da revisão: consulta sem range truncava respostas)", async () => {
+    const tables = baseTables();
+    // Mais de uma "página" (500) de respostas na MESMA tentativa — antes
+    // desta correção, a consulta única `.in(...)` sem `.range()` podia
+    // truncar isso silenciosamente.
+    tables.phase2_responses = Array.from({ length: 501 }, (_, i) => ({
+      id: `p-${i}`,
+      simulation_attempt_id: "a1",
+      audio_path: `u1/a1/p-${i}`,
+    }));
+    const { admin, removed } = makeAdmin(tables);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const report = await purgeUserRecordings({ admin: admin as any, userId: "u1", dryRun: false });
+    expect(report.responsesCleared).toBe(501);
+    const phase2Removal = removed.find((r) => r.bucket === "phase2-recordings");
+    expect(phase2Removal?.paths.length).toBe(501);
   });
 
   it("se o bloqueio da conta falhar, para ali — não segue apagando dado com a conta ainda ativa", async () => {

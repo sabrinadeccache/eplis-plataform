@@ -29,27 +29,40 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
+// **Achado da revisão (2026-09-12): derivar SÓ pelos IDs perdia as
+// gravações legadas.** A rodada anterior parou de ler `audio_path` pra
+// decidir o que apagar (só pra fechar o caso de upload bem-sucedido com a
+// escrita de `audio_path` falhando depois) — mas isso quebrou o caso
+// comum: gravações antigas (de antes do caminho determinístico, ou até de
+// antes do M3.1, formato `{attemptId}/{arquivo}`) continuam em
+// `audio_path`, num caminho DIFERENTE do que `buildRecordingPath` calcula
+// hoje. Removendo só o caminho calculado, o objeto real (no caminho
+// antigo) nunca era tocado — e como remover um caminho inexistente não dá
+// erro, o código achava que tinha limpado e zerava a referência mesmo
+// assim, perdendo o único jeito de achar aquele objeto de novo.
+//
+// Correção: sempre que existir `audio_path` na linha, ele é o endereço
+// SOMADO ao caminho determinístico (não substituído) — cobre os dois casos
+// de uma vez: o objeto no caminho antigo (se a linha é de antes desta
+// mudança) e o objeto no caminho novo (se a linha já é atual, ou se o
+// upload girou pro caminho novo mas a escrita de `audio_path` falhou).
+function candidatePaths(row: { audio_path: string | null }, ids: { userId: string; attemptId: string; responseId: string }): string[] {
+  const deterministic = buildRecordingPath(ids);
+  return row.audio_path && row.audio_path !== deterministic ? [row.audio_path, deterministic] : [deterministic];
+}
+
 // Só metadado de contagem — nunca transcrição, nome de titular ou conteúdo
 // da gravação (o plano pede explicitamente "registrar acesso administrativo
 // sem conteúdo sensível" — o mesmo princípio vale pra qualquer relatório
 // operacional deste módulo).
 export type ExpiryReport = {
   dryRun: boolean;
-  byTrack: Record<RecordingTrack, { expired: number; storageDeleted: number; rowsCleared: number }>;
+  byTrack: Record<RecordingTrack, { expired: number; storageDeleted: number; rowsCleared: number; orphansSwept: number }>;
   errors: string[];
 };
 
-type PendingExpiryRow = { id: string; simulation_attempt_id: string; user_id: string | null };
+type PendingExpiryRow = { id: string; simulation_attempt_id: string; audio_path: string | null; user_id: string | null };
 
-// **Achado da revisão (2026-09-12): sem paginação, um backlog grande de
-// gravações vencidas era processado só parcialmente** (o `limit` cortava
-// silenciosamente o resto, que só seria pego na próxima execução — ok pra
-// um cron diário de rotina, mas quebra a garantia de "processa tudo que
-// está vencido agora" que um dry-run de verificação precisa dar). Agora
-// pagina de verdade: em dry-run, por `range` (as linhas não mudam entre
-// páginas); aplicando de verdade, repete a MESMA consulta (sem offset) até
-// vir vazia — cada lote processado sai do filtro (`audio_path` zerado),
-// então a consulta seguinte já pega o próximo lote.
 async function fetchExpiredBatch(
   admin: ReturnType<typeof createAdminClient>,
   table: "phase2_responses" | "pilot_responses",
@@ -58,7 +71,7 @@ async function fetchExpiredBatch(
 ): Promise<{ rows: PendingExpiryRow[]; error: string | null }> {
   const { data, error } = await admin
     .from(table)
-    .select("id, simulation_attempt_id, simulation_attempts(user_id)")
+    .select("id, simulation_attempt_id, audio_path, simulation_attempts(user_id)")
     .not("audio_path", "is", null)
     .lte("expires_at", nowIso)
     .order("id", { ascending: true })
@@ -69,25 +82,71 @@ async function fetchExpiredBatch(
   const rows = ((data ?? []) as unknown as {
     id: string;
     simulation_attempt_id: string;
+    audio_path: string | null;
     simulation_attempts: { user_id: string | null } | { user_id: string | null }[] | null;
   }[]).map((r) => {
     const attempt = Array.isArray(r.simulation_attempts) ? r.simulation_attempts[0] : r.simulation_attempts;
-    return { id: r.id, simulation_attempt_id: r.simulation_attempt_id, user_id: attempt?.user_id ?? null };
+    return {
+      id: r.id,
+      simulation_attempt_id: r.simulation_attempt_id,
+      audio_path: r.audio_path,
+      user_id: attempt?.user_id ?? null,
+    };
   });
   return { rows, error: null };
 }
 
+// **Achado da revisão (2026-09-12): upload cuja persistência falhou podia
+// ficar pra sempre sem dono.** Se o objeto sobe no Storage mas a escrita de
+// `audio_path`/`expires_at` falha logo depois (ambos ficam `null`), a linha
+// nunca bate no filtro principal (`audio_path is not null`) — nem esta
+// função nem o cron a alcançam, e se o candidato nunca tentar de novo
+// aquele item, o objeto fica órfão indefinidamente. Esta 2ª varredura pega
+// exatamente esse caso: `audio_path` nulo, estágio marcado como erro
+// (é o que a rota grava nesse cenário), e ANTIGO o bastante (usa o prazo
+// mais curto, 30 dias, como corte de "isso não vai ser retentado") — tenta
+// remover o caminho determinístico de qualquer forma (sem erro se não
+// existir) pra cobrir o caso em que o objeto está lá mas sem `audio_path`
+// nenhum apontando pra ele.
+async function sweepOrphanedUploads(
+  admin: ReturnType<typeof createAdminClient>,
+  table: "phase2_responses" | "pilot_responses",
+  track: RecordingTrack,
+  cutoffIso: string,
+  dryRun: boolean,
+): Promise<{ swept: number; error: string | null }> {
+  const { data, error } = await admin
+    .from(table)
+    .select("id, simulation_attempt_id, simulation_attempts(user_id)")
+    .is("audio_path", null)
+    .eq("processing_status", "error")
+    .lte("created_at", cutoffIso)
+    .limit(500);
+
+  if (error) return { swept: 0, error: error.message };
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    simulation_attempt_id: string;
+    simulation_attempts: { user_id: string | null } | { user_id: string | null }[] | null;
+  }[];
+  if (rows.length === 0 || dryRun) return { swept: rows.length, error: null };
+
+  const paths = rows.map((r) => {
+    const attempt = Array.isArray(r.simulation_attempts) ? r.simulation_attempts[0] : r.simulation_attempts;
+    return buildRecordingPath({
+      userId: attempt?.user_id ?? "anon",
+      attemptId: r.simulation_attempt_id,
+      responseId: r.id,
+    });
+  });
+  const { error: storageError } = await admin.storage.from(recordingBucket(track)).remove(paths);
+  if (storageError) return { swept: 0, error: storageError.message };
+  return { swept: rows.length, error: null };
+}
+
 // Processo de expiração IDEMPOTENTE: seleciona linhas com gravação vencida,
-// apaga o objeto no Storage e zera `audio_path`. Rodar de novo depois de
-// aplicado não reprocessa nada — a linha já não bate no filtro.
-//
-// O caminho do objeto é DERIVADO DOS IDS (`buildRecordingPath`), não lido
-// da coluna `audio_path` — mais robusto contra a linha ter ficado num
-// estado parcial (upload no bucket concluído, mas a escrita de
-// `audio_path`/`expires_at` na mesma chamada tendo falhado antes; ver
-// achado equivalente nas rotas de submit-response). Como o caminho é
-// determinístico por `responseId`, remover por ID sempre acerta o objeto
-// certo, exista ele ou não — `remove()` num caminho ausente não é erro.
+// apaga o(s) objeto(s) no Storage e zera `audio_path`. Rodar de novo depois
+// de aplicado não reprocessa nada — a linha já não bate no filtro.
 //
 // `dryRun` (padrão) não apaga nada: só conta o que seria apagado. É o que
 // permite verificar a retenção sem tocar em dado de produção.
@@ -100,12 +159,13 @@ export async function expireRecordings(params: {
 }): Promise<ExpiryReport> {
   const { admin, now = new Date(), dryRun = true, batchSize = 500, maxBatches = 50 } = params;
   const nowIso = now.toISOString();
+  const orphanCutoffIso = new Date(now.getTime() - RETENTION_DAYS.practice * DAY_MS).toISOString();
 
   const report: ExpiryReport = {
     dryRun,
     byTrack: {
-      phase2: { expired: 0, storageDeleted: 0, rowsCleared: 0 },
-      pilot: { expired: 0, storageDeleted: 0, rowsCleared: 0 },
+      phase2: { expired: 0, storageDeleted: 0, rowsCleared: 0, orphansSwept: 0 },
+      pilot: { expired: 0, storageDeleted: 0, rowsCleared: 0, orphansSwept: 0 },
     },
     errors: [],
   };
@@ -133,12 +193,8 @@ export async function expireRecordings(params: {
         continue;
       }
 
-      const paths = rows.map((r) =>
-        buildRecordingPath({
-          userId: r.user_id ?? "anon",
-          attemptId: r.simulation_attempt_id,
-          responseId: r.id,
-        }),
+      const paths = rows.flatMap((r) =>
+        candidatePaths(r, { userId: r.user_id ?? "anon", attemptId: r.simulation_attempt_id, responseId: r.id }),
       );
       const { error: storageError } = await admin.storage.from(recordingBucket(track)).remove(paths);
       if (storageError) {
@@ -148,7 +204,7 @@ export async function expireRecordings(params: {
         report.errors.push(`${track}: falha ao remover do storage (${storageError.message})`);
         break;
       }
-      report.byTrack[track].storageDeleted += rows.length;
+      report.byTrack[track].storageDeleted += paths.length;
 
       const { error: clearError } = await admin
         .from(table)
@@ -162,6 +218,10 @@ export async function expireRecordings(params: {
 
       if (rows.length < batchSize) break;
     }
+
+    const { swept, error: sweepError } = await sweepOrphanedUploads(admin, table, track, orphanCutoffIso, dryRun);
+    if (sweepError) report.errors.push(`${track}: falha na varredura de órfãos (${sweepError})`);
+    else report.byTrack[track].orphansSwept = swept;
   }
 
   return report;
@@ -194,6 +254,37 @@ async function fetchAllAttemptIds(admin: ReturnType<typeof createAdminClient>, u
   return ids;
 }
 
+const ATTEMPT_CHUNK = 200;
+const RESPONSE_PAGE_SIZE = 500;
+
+// **Achado da revisão (2026-09-12): agrupar tentativas não pagina
+// respostas.** A versão anterior fazia UMA consulta por bloco de 200
+// tentativas — com até ~36 respostas por tentativa, um bloco podia ter
+// milhares de linhas, e a consulta ficava sujeita ao limite implícito do
+// banco sem nenhum aviso. Esta função pagina de verdade DENTRO de cada
+// bloco de tentativas, com `range`, até esgotar — só então a exclusão pode
+// considerar aquele bloco concluído.
+async function fetchAllResponsesForAttempts(
+  admin: ReturnType<typeof createAdminClient>,
+  table: "phase2_responses" | "pilot_responses",
+  attemptIdsChunk: string[],
+): Promise<{ rows: { id: string; simulation_attempt_id: string; audio_path: string | null }[]; error: string | null }> {
+  const rows: { id: string; simulation_attempt_id: string; audio_path: string | null }[] = [];
+  for (let page = 0; ; page += 1) {
+    const { data, error } = await admin
+      .from(table)
+      .select("id, simulation_attempt_id, audio_path")
+      .in("simulation_attempt_id", attemptIdsChunk)
+      .order("id", { ascending: true })
+      .range(page * RESPONSE_PAGE_SIZE, page * RESPONSE_PAGE_SIZE + RESPONSE_PAGE_SIZE - 1);
+    if (error) return { rows, error: error.message };
+    const batch = (data ?? []) as { id: string; simulation_attempt_id: string; audio_path: string | null }[];
+    rows.push(...batch);
+    if (batch.length < RESPONSE_PAGE_SIZE) break;
+  }
+  return { rows, error: null };
+}
+
 // Exclusão de conta (decisão da Sabrina: apaga o áudio, mantém o resultado
 // ANONIMIZADO). Este passo cuida do que o Postgres não cuida sozinho:
 //
@@ -206,23 +297,20 @@ async function fetchAllAttemptIds(admin: ReturnType<typeof createAdminClient>, u
 //   não anonimizaria de verdade (o teor do que a pessoa falou pode
 //   reidentificar). São zerados aqui; ficam as notas dos 6 critérios, a
 //   pontuação geral e as datas, que é o que sustenta estatística agregada.
-// - `audio_url` LEGADO (URL pública de antes do M3.1) também é limpo —
-//   preservá-lo não expõe nada hoje (o bucket é privado, a URL não
-//   funciona mais), mas é conteúdo remanescente ligado ao titular que não
-//   tem por que sobreviver à exclusão.
+// - `audio_url` LEGADO (URL pública de antes do M3.1) também é limpo.
 //
-// **Achado da revisão (2026-09-12), corrigido nesta função:**
-// 1. Faltava paginação — uma conta com muitas respostas só tinha uma parte
-//    limpa (limite implícito de linhas por consulta), e o script achava
-//    que tinha terminado. Agora pagina de verdade (tentativas, respostas e
-//    feedbacks) até esgotar.
-// 2. Nada impedia um NOVO envio durante ou logo após a limpeza (a conta
-//    continuava `active` até o `deleteUser` final, minutos depois pra uma
-//    conta grande). Agora, antes de tocar em qualquer dado (fora de
-//    dry-run), a conta é marcada `blocked` — `authorize()` (M1) já rejeita
-//    toda ação de uma conta não-`active`, então nenhuma submissão nova
-//    consegue passar da autorização a partir daqui.
-// 3. `general_feedback` e `audio_url` legado não eram limpos.
+// A conta é marcada `blocked` ANTES de tocar em qualquer dado (fora de
+// dry-run) — `authorize()` (M1) já rejeita toda ação de uma conta
+// não-`active`, fechando a autorização pra qualquer submissão NOVA a partir
+// daqui. **Limite reconhecido, não uma garantia absoluta:** uma requisição
+// que já passou por `authorize()` ANTES do bloqueio continua rodando até o
+// fim (o bloqueio não cancela trabalho em andamento) — as rotas de
+// submit-response (M3, revisão 2026-09-12) mitigam isso com uma 2ª checagem
+// de status logo antes de gravar qualquer conteúdo, o que reduz essa janela
+// de "todo o tempo de processamento" pra "o intervalo entre essa checagem e
+// a escrita", mas não elimina a corrida por completo — ver
+// `assertAccountStillActive` em `src/lib/simulations/attempt-guards.ts` e o
+// comentário nas duas rotas.
 //
 // O desvínculo da tentativa (`user_id` → NULL) é feito pelo próprio banco
 // quando a conta é removida, via `on delete set null`
@@ -261,30 +349,19 @@ export async function purgeUserRecordings(params: {
   }
   if (attemptIds.length === 0) return report;
 
-  const ATTEMPT_CHUNK = 200;
-
   for (const { track, table } of TRACKS) {
     for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
-      const { data, error } = await admin
-        .from(table)
-        .select("id, simulation_attempt_id, audio_path")
-        .in("simulation_attempt_id", idsChunk);
+      const { rows, error } = await fetchAllResponsesForAttempts(admin, table, idsChunk);
       if (error) {
-        report.errors.push(`${track}: falha ao listar respostas (${error.message})`);
+        report.errors.push(`${track}: falha ao listar respostas (${error})`);
         continue;
       }
-
-      const rows = (data ?? []) as { id: string; simulation_attempt_id: string; audio_path: string | null }[];
       if (rows.length === 0) continue;
       report.responsesCleared += rows.length;
       if (dryRun) continue;
 
-      // Caminho derivado dos IDs, não da coluna `audio_path` — cobre
-      // também a linha cujo upload terminou mas nunca chegou a gravar
-      // `audio_path` (achado da revisão). `remove()` num caminho que não
-      // existe de fato não é erro.
-      const paths = rows.map((r) =>
-        buildRecordingPath({ userId, attemptId: r.simulation_attempt_id, responseId: r.id }),
+      const paths = rows.flatMap((r) =>
+        candidatePaths(r, { userId, attemptId: r.simulation_attempt_id, responseId: r.id }),
       );
       const { error: storageError } = await admin.storage.from(recordingBucket(track)).remove(paths);
       if (storageError) {

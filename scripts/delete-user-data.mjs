@@ -13,12 +13,20 @@
 //    (M1) já rejeita toda ação de conta não-`active`.
 // 2. Pagina de verdade (tentativas, respostas, feedbacks) — a versão
 //    anterior só limpava até o limite implícito de uma consulta.
-// 3. O caminho apagado no Storage é DERIVADO DOS IDS, não da coluna
-//    `audio_path` — cobre a linha cujo upload terminou mas nunca chegou a
-//    gravar `audio_path`.
+// 3. O caminho apagado no Storage é a UNIÃO do `audio_path` gravado (cobre
+//    formato legado, de antes do caminho determinístico) com o caminho
+//    determinístico calculado pelos IDs (cobre a linha cujo upload terminou
+//    mas nunca chegou a gravar `audio_path`) — achado da revisão de
+//    2026-09-12: usar só os IDs, como a versão anterior fazia, perdia
+//    gravação legada (o objeto real ficava intocado e a coluna era zerada
+//    do mesmo jeito, porque remover um caminho inexistente não dá erro).
 // 4. Também zera `audio_url` (legado) e `simulation_feedbacks.general_feedback`
 //    (conteúdo derivado da fala do titular, ligado à tentativa mesmo depois
 //    de anonimizada).
+// 5. Pagina de verdade DENTRO de cada bloco de 200 tentativas (não só a
+//    busca de IDs de tentativa) — achado da revisão de 2026-09-12: uma
+//    consulta `.in()` sem `.range()` pode ser truncada silenciosamente pra
+//    contas com muitas respostas dentro de um único bloco.
 //
 // DRY-RUN POR PADRÃO. Passe `--apply` pra executar de verdade — é
 // IRREVERSÍVEL (a voz e o conteúdo de fala do titular são removidos de
@@ -60,6 +68,28 @@ function buildPath(userId, attemptId, responseId) {
   return `${userId}/${attemptId}/${responseId}`;
 }
 
+function candidatePaths(row, userId) {
+  const deterministic = buildPath(userId, row.simulation_attempt_id, row.id);
+  return row.audio_path && row.audio_path !== deterministic ? [row.audio_path, deterministic] : [deterministic];
+}
+
+async function fetchAllResponsesForAttempts(supabase, table, idsChunk) {
+  const rows = [];
+  for (let page = 0; ; page += 1) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("id, simulation_attempt_id, audio_path")
+      .in("simulation_attempt_id", idsChunk)
+      .order("id", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
 async function fetchAllAttemptIds(supabase, userId) {
   const ids = [];
   for (let page = 0; ; page += 1) {
@@ -81,14 +111,12 @@ async function purgeTrack(supabase, { table, bucket }, userId, attemptIds, apply
   let storageObjects = 0;
 
   for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
-    const { data, error } = await supabase.from(table).select("id, simulation_attempt_id, audio_path").in("simulation_attempt_id", idsChunk);
-    if (error) throw new Error(`${table}: ${error.message}`);
-    const rows = data ?? [];
+    const rows = await fetchAllResponsesForAttempts(supabase, table, idsChunk);
     if (rows.length === 0) continue;
     responses += rows.length;
     if (!apply) continue;
 
-    const paths = rows.map((r) => buildPath(userId, r.simulation_attempt_id, r.id));
+    const paths = rows.flatMap((r) => candidatePaths(r, userId));
     const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
     if (storageError) throw new Error(`${table} (storage): ${storageError.message}`);
     storageObjects += paths.length;
@@ -103,21 +131,32 @@ async function purgeTrack(supabase, { table, bucket }, userId, attemptIds, apply
   return { responses, storageObjects };
 }
 
+async function fetchAllFeedbackIds(supabase, idsChunk) {
+  const rows = [];
+  for (let page = 0; ; page += 1) {
+    const { data, error } = await supabase
+      .from("simulation_feedbacks")
+      .select("id")
+      .in("simulation_attempt_id", idsChunk)
+      .order("id", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`simulation_feedbacks: ${error.message}`);
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
 async function clearFeedbacks(supabase, attemptIds, apply) {
   let cleared = 0;
-  if (!apply) {
-    for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
-      const { data, error } = await supabase.from("simulation_feedbacks").select("id").in("simulation_attempt_id", idsChunk);
-      if (error) throw new Error(`simulation_feedbacks: ${error.message}`);
-      cleared += (data ?? []).length;
-    }
-    return cleared;
-  }
   for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
-    const { data, error } = await supabase.from("simulation_feedbacks").select("id").in("simulation_attempt_id", idsChunk);
-    if (error) throw new Error(`simulation_feedbacks: ${error.message}`);
-    const rows = data ?? [];
+    const rows = await fetchAllFeedbackIds(supabase, idsChunk);
     if (rows.length === 0) continue;
+    if (!apply) {
+      cleared += rows.length;
+      continue;
+    }
     const { error: clearError } = await supabase
       .from("simulation_feedbacks")
       .update({ general_feedback: null })

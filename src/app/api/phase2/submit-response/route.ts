@@ -5,6 +5,7 @@ import { authorize, AuthError } from "@/lib/auth/authorize";
 import { transcribeAudio } from "@/lib/ai/openai";
 import { generateResponseFeedback, MODEL_VERSION, type FeedbackStage } from "@/lib/ai/anthropic";
 import { assertOwnAttemptInProgress } from "@/services/simulations/phase2/actions";
+import { assertAccountStillActive } from "@/lib/simulations/attempt-guards";
 import { getSequenceForAttempt, type Phase2ItemSequence } from "@/services/simulations/phase2/queries";
 import { responseStagesForPhase2Item } from "@/services/simulations/phase2/response-stages";
 import { validateAudioContainer, validateDecodedAudio, MAX_REQUEST_BODY_BYTES } from "@/lib/audio/validate";
@@ -178,6 +179,18 @@ export async function POST(request: Request) {
       // está corrompido" (achado da homologação em produção).
       const status = validation.kind === "unavailable" ? 503 : 422;
       return NextResponse.json({ error: validation.reason }, { status });
+    }
+
+    // Achado da revisão (2026-09-12): recheca a conta bem perto do ponto de
+    // persistir conteúdo, não só no início da requisição — fecha a janela
+    // prática pra uma exclusão/bloqueio de conta que acontece NO MEIO do
+    // processamento (decode + transcrição já levaram tempo). Ver comentário
+    // em attempt-guards.ts.
+    try {
+      await assertAccountStillActive(admin, userId);
+    } catch {
+      await admin.from("phase2_responses").update({ processing_status: "error" }).eq("id", responseId);
+      return NextResponse.json({ error: "Conta não está mais ativa." }, { status: 403 });
     }
 
     const ext = validation.container === "mp4" ? "mp4" : "webm";

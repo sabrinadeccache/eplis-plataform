@@ -120,15 +120,25 @@ async function findOwnedRecording(params: {
 // Registro de acesso administrativo — item 3.2 do plano de correção
 // ("registrar acesso administrativo sem conteúdo sensível"). Só metadado
 // (quem, o quê, quando); nunca a URL assinada nem o áudio em si.
+//
+// **Achado da revisão (2026-09-12): erro de INSERT era ignorado.** A
+// versão anterior não conferia o retorno deste insert — se a auditoria
+// falhasse (índice, rede, o que for), a função seguia em frente e a URL
+// assinada era entregue do mesmo jeito: um acesso administrativo real,
+// sem NENHUM registro dele. Como auditabilidade é um requisito nomeado do
+// M3.2 (não um "extra"), o comportamento correto é falhar fechado: se não
+// dá pra provar que o acesso foi registrado, o acesso não acontece.
 async function logAdminAccess(
   admin: ReturnType<typeof createAdminClient>,
   params: { adminUserId: string; track: RecordingTrack; responseId: string },
-): Promise<void> {
-  await admin.from("recording_access_log").insert({
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const { error } = await admin.from("recording_access_log").insert({
     admin_user_id: params.adminUserId,
     track: params.track,
     response_id: params.responseId,
   });
+  if (error) return { ok: false, reason: error.message };
+  return { ok: true };
 }
 
 export type RecordingUrlResult =
@@ -164,11 +174,14 @@ export async function createRecordingSignedUrl(params: {
   // acessando a PRÓPRIA gravação (ele também usa a plataforma, ver
   // CLAUDE.md) não é o caso que o plano pede pra auditar.
   if (params.user.role === "admin" && recording.ownerUserId !== params.user.id) {
-    await logAdminAccess(params.admin, {
+    const logResult = await logAdminAccess(params.admin, {
       adminUserId: params.user.id,
       track: params.track,
       responseId: params.responseId,
     });
+    if (!logResult.ok) {
+      return { ok: false, status: 500, reason: "Não foi possível registrar o acesso administrativo." };
+    }
   }
 
   return { ok: true, url: data.signedUrl, expiresInSeconds: SIGNED_URL_TTL_SECONDS };

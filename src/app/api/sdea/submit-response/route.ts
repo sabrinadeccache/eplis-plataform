@@ -6,6 +6,7 @@ import { transcribeAudio } from "@/lib/ai/openai";
 import { generatePilotResponseFeedback, MODEL_VERSION, type PilotFeedbackStage } from "@/lib/ai/pilot-track";
 import { pilotResponseContext } from "@/services/simulations/pilot/context";
 import { assertOwnAttemptInProgress } from "@/services/simulations/pilot/actions";
+import { assertAccountStillActive } from "@/lib/simulations/attempt-guards";
 import { getSequenceForAttempt, type PilotItemSequence } from "@/services/simulations/pilot/queries";
 import { responseStagesForPilotItem } from "@/services/simulations/pilot/response-stages";
 import { sdeaAircraftType } from "@/lib/auth/roles";
@@ -151,6 +152,16 @@ export async function POST(request: Request) {
       // está corrompido" (achado da homologação em produção).
       const status = validation.kind === "unavailable" ? 503 : 422;
       return NextResponse.json({ error: validation.reason }, { status });
+    }
+
+    // Achado da revisão (2026-09-12): ver comentário equivalente na rota da
+    // Fase 2 e em attempt-guards.ts — recheca a conta bem perto do ponto de
+    // persistir conteúdo, não só no início da requisição.
+    try {
+      await assertAccountStillActive(admin, userId);
+    } catch {
+      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
+      return NextResponse.json({ error: "Conta não está mais ativa." }, { status: 403 });
     }
 
     const ext = validation.container === "mp4" ? "mp4" : "webm";
