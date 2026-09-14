@@ -111,12 +111,14 @@ function Countdown({
 export function Phase1Runner({
   attemptId,
   questions,
+  startIndex = 0,
 }: {
   attemptId: string;
   questions: Phase1QuizItem[];
+  startIndex?: number;
 }) {
   const router = useRouter();
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(startIndex);
   const [phase, setPhase] = useState<RunnerPhase>("reading");
   const [secondsLeft, setSecondsLeft] = useState(READING_SECONDS);
   const [selected, setSelected] = useState<McqOption | null>(null);
@@ -141,9 +143,9 @@ export function Phase1Runner({
     advancingRef.current = true;
     startTransition(async () => {
       try {
-        if (selected) {
-          await recordAnswer(attemptId, current.id, selected);
-        }
+        // Expiração sem seleção também é persistida (selected_option = NULL,
+        // is_correct = false), mantendo exatamente uma resposta por item.
+        await recordAnswer(attemptId, current.id, selected);
         if (isLast) {
           await finishAttempt(attemptId);
           router.push(`/fase1/resultado/${attemptId}`);

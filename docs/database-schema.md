@@ -96,7 +96,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | current_state | enum, nullable | **[NOVO]** espelha os estados da state machine (ver seção "Estados da Fase 2" abaixo). Permite retomar uma tentativa `official` interrompida sem reconstruir a posição a partir das respostas já gravadas |
 | current_part | enum, nullable | **[NOVO]** `part1`..`part4` — parte atual da entrevista |
 | current_item_index | int, nullable | **[NOVO]** índice do item dentro da parte atual (ex: 3ª de 10 situações da Parte 2) |
-| item_sequence | jsonb, nullable | **[NOVO, 2026-09-11 — revisão do M2]** sequência de prompts sorteada pro candidato (Fase 2/SDEA), **congelada no momento da criação da tentativa** — `{ part1: [id, ...], part2: [...], ... }` (ids de `phase2_prompts`/`pilot_prompts`, já na ordem em que aparecem). Antes, `getSequenceForAttempt` recalculava o sorteio a cada carregamento de tela a partir do pool ATIVO e do perfil ATUAL do usuário — se o conteúdo fosse desativado/editado ou o perfil operacional mudasse no meio de uma tentativa em andamento, o "item corrente" podia mudar debaixo do guard de item. `null` só em tentativas de Fase 1 (não usa) ou de antes da migration `20260911010000_m2_review_fixes.sql` — nesse caso o código cai no sorteio ao vivo antigo (`drawSequenceForAttempt`). |
+| item_sequence | jsonb, nullable | **[ATUALIZADO, M4 2026-09-14]** sequência congelada no início. Fase 1 usa `{ phase1: [question_id, ...] }`; Fase 2/SDEA usam `{ part1: [prompt_id, ...], ... }`. Reload nunca sorteia novamente. Tentativa legada com `null` é congelada uma vez; respostas existentes formam o prefixo. |
 | last_submission_at | timestamptz, nullable | **[NOVO, 2026-09-11 — revisão do M2, 2ª rodada]** timestamp do último envio de resposta aceito (qualquer slot, inclusive retry), usado só pelo rate limit (`src/lib/simulations/rate-limit.ts`) como cooldown via compare-and-swap. Existe porque contar LINHAS de resposta (por `created_at` ou `started_at`) não reflete retry — um retry reaproveita a mesma linha (`item_slot`), então a contagem de linhas nunca cresce com ele; só um timestamp dedicado, atualizado em toda submissão, mede a taxa de envio de verdade. |
 | started_at | timestamp | |
 | finished_at | timestamp, nullable | |
@@ -141,13 +141,23 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | id | uuid | |
 | simulation_attempt_id | uuid → simulation_attempts | |
 | question_id | uuid → phase1_questions | |
-| selected_option | enum | `a`, `b`, `c` |
+| selected_option | enum, nullable | `a`, `b`, `c`; `NULL` quando o tempo official termina sem seleção (migration 140000) |
 | is_correct | boolean | calculado no momento da resposta |
 | created_at | timestamp | |
+
+Constraint única `(simulation_attempt_id, question_id)` garante uma resposta por item.
+A migration `20260914000000_phase1_consistency.sql` também cria índice parcial único
+em `simulation_attempts(user_id, mode)` para Fase 1 `in_progress`, impedindo duas abas
+de criarem tentativas concorrentes do mesmo modo.
 
 **Regra de tempo (confirmada pelo Manual do Examinando, item 1.2.1):** 30s de leitura (pode iniciar o áudio antes) → até 45s de áudio → 1 minuto para responder, **incluindo** a reescuta opcional dentro dessa mesma janela (não é tempo adicional). Ao fim de 1 min, avança automaticamente.
 
 **Pool atual (2026-09-10):** 172 áudios ativos / 189 perguntas — audio01–10 + lote `v*` (43/60, batches 1–2) + `audio060–189` (`scripts/add-phase1-audios-batch3.mjs`, dados em `scripts/data/phase1-batch3.json`, do mapa `Material Didático/ATC/Phase 1 - Audios/mapa_questões.xlsx`). `getRandomQuizQuestions(limit, userId?)` prioriza perguntas ainda não respondidas pelo usuário (só repete quando o pool inédito esgota) — ver `src/services/simulations/phase1/queries.ts`.
+
+**Retomada M4:** a lista sorteada é persistida antes do primeiro item. O contador é a
+quantidade de `phase1_answers`; `finishAttempt` exige exatamente o tamanho da sequência.
+Pergunta desativada após o início continua disponível naquela tentativa via leitura
+servidora autorizada, sem expor o gabarito ao cliente.
 
 ---
 

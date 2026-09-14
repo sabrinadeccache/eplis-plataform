@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type Phase1QuizItem = {
   id: string;
@@ -97,4 +98,65 @@ export async function getRandomQuizQuestions(
 
   const take = Math.max(1, Math.min(Math.trunc(limit) || MAX_QUESTIONS, MAX_QUESTIONS));
   return items.slice(0, take);
+}
+
+export function phase1SequenceIds(itemSequence: unknown): string[] {
+  if (!itemSequence || typeof itemSequence !== "object" || Array.isArray(itemSequence)) return [];
+  const ids = (itemSequence as Record<string, unknown>).phase1;
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) return [];
+  if (ids.length > MAX_QUESTIONS || new Set(ids).size !== ids.length) return [];
+  return [...ids];
+}
+
+export function currentPhase1QuestionId(sequence: string[], answeredQuestionIds: string[]): string | null {
+  if (new Set(answeredQuestionIds).size !== answeredQuestionIds.length) {
+    throw new Error("Progresso inconsistente: questão respondida mais de uma vez.");
+  }
+  const answered = new Set(answeredQuestionIds);
+  const expectedPrefix = sequence.slice(0, answeredQuestionIds.length);
+  if (expectedPrefix.some((id) => !answered.has(id)) || answeredQuestionIds.some((id) => !expectedPrefix.includes(id))) {
+    throw new Error("Progresso inconsistente com a sequência persistida.");
+  }
+  return sequence[answeredQuestionIds.length] ?? null;
+}
+
+export function assertPhase1CompletionCount(sequence: string[], answerCount: number): void {
+  if (sequence.length === 0 || answerCount !== sequence.length) {
+    throw new Error("Ainda há questões pendentes.");
+  }
+}
+
+// A sequência já foi autorizada e congelada na tentativa. O admin client é
+// intencional aqui: uma pergunta desativada depois do início precisa continuar
+// disponível naquela tentativa, mas nunca enviamos correct_option ao runner.
+export async function getQuizQuestionsByIds(questionIds: string[]): Promise<Phase1QuizItem[]> {
+  if (questionIds.length === 0) return [];
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("phase1_questions")
+    .select("id, prompt, option_a, option_b, option_c, phase1_audios(audio_url)")
+    .in("id", questionIds);
+
+  if (error || !data) throw new Error("Não foi possível carregar as questões da tentativa.");
+
+  const byId = new Map<string, Phase1QuizItem>();
+  for (const row of data as Record<string, unknown>[]) {
+    const audio = row.phase1_audios as { audio_url?: string } | null;
+    if (!audio?.audio_url) continue;
+    byId.set(row.id as string, {
+      id: row.id as string,
+      audioUrl: audio.audio_url,
+      prompt: row.prompt as string,
+      optionA: row.option_a as string,
+      optionB: row.option_b as string,
+      optionC: row.option_c as string,
+    });
+  }
+
+  const ordered = questionIds.map((id) => byId.get(id)).filter((item): item is Phase1QuizItem => Boolean(item));
+  if (ordered.length !== questionIds.length) {
+    throw new Error("A tentativa referencia uma questão indisponível. Contate o suporte.");
+  }
+  return ordered;
 }

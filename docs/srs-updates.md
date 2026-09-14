@@ -46,6 +46,13 @@ memorização do banco com o tempo. Implementado em
 `getRandomQuizQuestions(limit, userId?)`. *(Melhoria de produto, pedido da Sabrina —
 não vem de especificação oficial. Fase 2/SDEA ainda não têm equivalente.)*
 
+**RF-58** — A tentativa da Fase 1 deve congelar a lista ordenada de questões no início,
+derivar o item corrente das respostas persistidas e sobreviver a reload/login sem novo
+sorteio. Deve existir no máximo uma tentativa `in_progress` por usuário e modo. Cada item
+gera exatamente uma resposta; timeout official sem seleção conta como incorreto. Practice
+nunca integra histórico, gráfico ou nota Official. *Implementado localmente na M4 em
+2026-09-14; migration 140000 deve preceder o código.*
+
 ## Requisitos existentes alterados
 
 **RF-12 (esclarecimento)** — O tempo de reescuta do áudio na Fase 1 (segunda escuta

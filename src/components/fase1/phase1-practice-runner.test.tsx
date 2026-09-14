@@ -44,6 +44,18 @@ function listenThenPick(optionLabel: string) {
 }
 
 describe("Phase1PracticeRunner", () => {
+  it("retoma na primeira questão ainda não respondida", () => {
+    render(
+      <Phase1PracticeRunner
+        attemptId="a1"
+        questions={[makeQuestion("q1"), makeQuestion("q2"), makeQuestion("q3")]}
+        startIndex={2}
+      />,
+    );
+    expect(screen.getByText("3/3")).toBeInTheDocument();
+    expect(screen.getByText("Prompt q3")).toBeInTheDocument();
+  });
+
   it("revela resposta certa e transcrição só depois de responder, e avança", async () => {
     render(
       <Phase1PracticeRunner

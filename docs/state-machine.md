@@ -3,6 +3,22 @@
 > Atualiza o documento STATE MACHINE original com o timeout de início de resposta e a
 > regra de repetição diferenciada por parte, confirmados pelo Manual do Examinando.
 
+## Fase 1 — sequência e retomada (M4)
+
+```text
+IN_PROGRESS (item_sequence.phase1 congelada)
+  -> item corrente = quantidade de phase1_answers
+  -> leitura -> áudio -> resposta
+  -> timeout official sem seleção = resposta incorreta persistida
+  -> próximo item
+  -> COMPLETED somente quando respostas = itens
+```
+
+Reload e novo login retomam o primeiro item sem resposta; não há novo sorteio. Practice
+e official podem ser retomados enquanto `status = in_progress`, ou abandonados com
+confirmação. Uma tentativa `abandoned` não volta a abrir. Duas abas convergem pela
+unicidade de tentativa em andamento e de resposta por pergunta.
+
 ## Fluxo geral
 
 **Camada de privacidade M3 (revisão Codex, ainda não implantada):** não muda a

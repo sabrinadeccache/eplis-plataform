@@ -98,8 +98,8 @@ export type SimulationAttemptRow = {
   current_item_index: number | null;
   elapsed_seconds: number;
   // Sequência de prompts sorteada pro candidato, congelada no momento da
-  // criação da tentativa — { part1: string[], part2: string[], ... } (ids de
-  // phase2_prompts/pilot_prompts, na ordem em que aparecem no simulado). Sem
+  // criação da tentativa — { phase1: string[] } para a Fase 1 ou
+  // { part1: string[], part2: string[], ... } para Fase 2/SDEA. Sem
   // isso, `getSequenceForAttempt` recalculava a cada chamada a partir do
   // pool ativo e do perfil atual do usuário, que podem mudar no meio de uma
   // tentativa em andamento. `null` só em tentativas anteriores a essa coluna
@@ -144,7 +144,9 @@ export type Phase1AnswerRow = {
   id: string;
   simulation_attempt_id: string;
   question_id: string;
-  selected_option: McqOption;
+  // Nulo quando o tempo da questão official termina sem seleção. Ainda é uma
+  // resposta persistida e incorreta, preservando N itens = N respostas.
+  selected_option: McqOption | null;
   is_correct: boolean;
   created_at: string;
 };

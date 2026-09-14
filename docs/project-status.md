@@ -13,12 +13,40 @@ conteúdo próprio, baseado nas especificações públicas do exame.
 
 Responsável: Sabrina Deccache.
 
+## Milestone 4 — consistência da Fase 1 e do Desempenho — implementada localmente (2026-09-14)
+
+Branch `reliability/phase1-resume-performance`, baseada no commit M3 `cbb82f8`.
+Sem push, merge, migration remota ou deploy.
+
+- A Fase 1 persiste a lista ordenada de IDs em `simulation_attempts.item_sequence.phase1`
+  no momento da criação. Reload e novo login carregam os mesmos itens, na mesma ordem.
+  Conteúdo desativado depois do início continua legível somente para a tentativa já
+  autorizada; `correct_option` nunca é enviado ao runner.
+- O item corrente é derivado das respostas persistidas. O servidor recusa pergunta
+  anterior/futura, trata replay concorrente pela constraint única e só finaliza quando
+  o total de respostas coincide com o tamanho da sequência. Timeout official sem
+  seleção grava uma resposta incorreta com `selected_option = NULL`.
+- `/fase1` localiza tentativas `practice` e `official` em andamento, mostra posição,
+  permite continuar e oferece abandono com confirmação. Uma constraint parcial impede
+  duas tentativas simultâneas do mesmo usuário/modo, inclusive em duas abas.
+- Tentativa legada sem sequência é recuperada uma vez: respostas existentes viram o
+  prefixo e o restante é congelado por compare-and-set. O item ainda não respondido que
+  existia apenas no browser antigo não pode ser reconstruído retroativamente.
+- As três páginas de Desempenho usam a mesma query autoritativa:
+  `status = completed AND mode = official`. Practice não entra em lista, gráfico ou nota.
+- Migration `20260914000000_phase1_consistency.sql`: torna `selected_option` anulável,
+  cria unicidade por tentativa/pergunta e unicidade parcial de tentativa em andamento.
+  Aplicar **antes** do código M4. Ela não recalcula nem altera resultados históricos.
+- Verificação local nesta implementação: 285 testes passando, incluindo constraints em
+  PostgreSQL embarcado; `tsc`, `eslint` e build de produção passando. Permanece apenas o
+  aviso conhecido de tracing amplo do ffmpeg no build.
+
 ## Milestone 3 — gravações privadas, retenção e LGPD — em revisão (2026-09-12)
 
 ### Retomada prioritária — implementação Codex sobre `8c63842`
 
-Sabrina autorizou corrigir os bloqueadores da revisão. Alterações **locais** na
-branch M3, sem commit/push/merge e sem tocar em produção. Ler primeiro
+Sabrina autorizou corrigir os bloqueadores da revisão. Alterações registradas
+localmente no commit `cbb82f8`, sem push/merge e sem tocar em produção. Ler primeiro
 [`m3-privacy-handoff.md`](m3-privacy-handoff.md): desenho, testes, recuperação,
 ordem de implantação e próximos passos para Claude.
 
