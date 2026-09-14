@@ -16,4 +16,3 @@ export function AbandonAttemptForm({ action }: { action: () => void }) {
     </form>
   );
 }
-

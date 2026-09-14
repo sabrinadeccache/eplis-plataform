@@ -14,17 +14,19 @@ export default async function Fase1Page() {
   if (user.role === "pilot") redirect("/dashboard");
 
   const supabase = await createClient();
-  const { data: openAttempts } = await supabase
+  const { data: openAttempts, error: attemptsError } = await supabase
     .from("simulation_attempts")
     .select("id, mode, item_sequence")
     .eq("user_id", user.id)
     .eq("phase", "phase1")
     .eq("status", "in_progress")
     .order("started_at", { ascending: false });
+  if (attemptsError) throw new Error("Não foi possível carregar as tentativas em andamento.");
   const openIds = (openAttempts ?? []).map((attempt) => attempt.id);
-  const { data: openAnswers } = openIds.length
+  const { data: openAnswers, error: answersError } = openIds.length
     ? await supabase.from("phase1_answers").select("simulation_attempt_id").in("simulation_attempt_id", openIds)
-    : { data: [] as { simulation_attempt_id: string }[] };
+    : { data: [] as { simulation_attempt_id: string }[], error: null };
+  if (answersError) throw new Error("Não foi possível carregar o progresso das tentativas.");
   const answeredByAttempt = new Map<string, number>();
   for (const answer of openAnswers ?? []) {
     answeredByAttempt.set(answer.simulation_attempt_id, (answeredByAttempt.get(answer.simulation_attempt_id) ?? 0) + 1);

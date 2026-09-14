@@ -15,4 +15,3 @@ create unique index if not exists phase1_answers_attempt_question_unique
 create unique index if not exists phase1_one_in_progress_per_mode
   on public.simulation_attempts(user_id, mode)
   where phase = 'phase1' and status = 'in_progress' and user_id is not null;
-

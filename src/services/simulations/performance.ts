@@ -20,4 +20,3 @@ export async function getCompletedOfficialAttempts(
   if (error) throw new Error("Não foi possível carregar o desempenho.");
   return data ?? [];
 }
-

@@ -16,7 +16,7 @@ export async function startAttempt(mode: SimulationMode, formData?: FormData) {
   const supabase = await createClient();
   const { user } = await authorizeOrRedirect(supabase, { track: "controller" });
 
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("simulation_attempts")
     .select("id")
     .eq("user_id", user.id)
@@ -26,6 +26,7 @@ export async function startAttempt(mode: SimulationMode, formData?: FormData) {
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (existingError) throw new Error("Não foi possível verificar tentativas em andamento.");
   if (existing) redirect(`/fase1/simulado/${existing.id}`);
 
   const raw = Number(formData?.get("count"));
@@ -169,6 +170,12 @@ export async function recordAnswer(
     .order("created_at", { ascending: true });
   if (answersError) throw new Error("Não foi possível validar o progresso da tentativa.");
 
+  const prior = (answers ?? []).find((answer) => answer.question_id === questionId);
+  if (!prior) {
+    const currentQuestionId = currentPhase1QuestionId(sequence, (answers ?? []).map((answer) => answer.question_id));
+    if (currentQuestionId !== questionId) throw new Error("Esta não é a questão corrente da tentativa.");
+  }
+
   const admin = createAdminClient();
   const { data: question } = await admin
     .from("phase1_questions")
@@ -176,11 +183,7 @@ export async function recordAnswer(
     .eq("id", questionId)
     .single();
   if (!question) throw new Error("Questão inválida.");
-
-  const prior = (answers ?? []).find((answer) => answer.question_id === questionId);
   if (prior) return answerResult(attempt.mode, question, prior.is_correct);
-  const currentQuestionId = currentPhase1QuestionId(sequence, (answers ?? []).map((answer) => answer.question_id));
-  if (currentQuestionId !== questionId) throw new Error("Esta não é a questão corrente da tentativa.");
 
   const isCorrect = selectedOption !== null && question.correct_option === selectedOption;
   const { data: inserted, error } = await admin
@@ -209,14 +212,15 @@ export async function finishAttempt(attemptId: string) {
   const sequence = phase1SequenceIds(attempt.item_sequence);
   if (sequence.length === 0) throw new Error("Tentativa sem sequência persistida.");
 
-  const [{ count: total, error: totalError }, { count: correct, error: correctError }] = await Promise.all([
-    supabase.from("phase1_answers").select("id", { count: "exact", head: true }).eq("simulation_attempt_id", attemptId),
-    supabase.from("phase1_answers").select("id", { count: "exact", head: true }).eq("simulation_attempt_id", attemptId).eq("is_correct", true),
-  ]);
-  if (totalError || correctError) throw new Error("Não foi possível validar as respostas.");
-  assertPhase1CompletionCount(sequence, total ?? 0);
+  const { data: answers, error: answersError } = await supabase
+    .from("phase1_answers")
+    .select("question_id, is_correct")
+    .eq("simulation_attempt_id", attemptId);
+  if (answersError) throw new Error("Não foi possível validar as respostas.");
+  assertPhase1CompletionCount(sequence, answers?.length ?? 0);
+  currentPhase1QuestionId(sequence, (answers ?? []).map((answer) => answer.question_id));
 
-  const score = correct ?? 0;
+  const score = (answers ?? []).filter((answer) => answer.is_correct).length;
   const admin = createAdminClient();
   const { error } = await admin
     .from("simulation_attempts")

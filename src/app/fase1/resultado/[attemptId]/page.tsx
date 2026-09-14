@@ -80,12 +80,9 @@ export default async function Fase1ResultadoPage({
             correct_option: string;
           } | null;
 
-          // A RLS de phase1_questions só libera leitura de perguntas com
-          // is_active = true — uma pergunta desativada depois da tentativa (ex.:
-          // trocada por outra no mesmo áudio) vira null aqui no join em vez de
-          // barrar a query inteira. Sem esse guard, a página quebra ao tentar
-          // ler campos de um objeto null (era exatamente o crash reportado após
-          // finalizar o simulado da Fase 1).
+          // Defesa para conteúdo removido de forma administrativa apesar das
+          // regras de seed/FK. Desativação comum não torna a questão invisível
+          // aqui, pois a leitura server-side autorizada usa o admin client.
           if (!question) {
             return (
               <div key={i} className="card p-4 text-sm text-muted">
