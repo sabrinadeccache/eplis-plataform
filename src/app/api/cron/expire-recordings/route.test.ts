@@ -25,6 +25,11 @@ afterEach(() => {
 });
 
 describe("GET /api/cron/expire-recordings", () => {
+  it("falha parcial não aparece como cron saudável", async () => {
+    expireRecordings.mockResolvedValue({ dryRun: false, byTrack: {}, errors: ["upload pendente"] });
+    const res = await GET(makeRequest("Bearer test-secret"));
+    expect(res.status).toBe(503);
+  });
   it("recusa sem CRON_SECRET configurado no ambiente — falha fechado, nunca executa sem segredo", async () => {
     delete process.env.CRON_SECRET;
     const res = await GET(makeRequest("Bearer qualquer-coisa"));

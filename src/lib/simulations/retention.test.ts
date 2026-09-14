@@ -23,12 +23,35 @@ function makeAdmin(tables: Record<string, Row[]>) {
         if (op === "not-is-null") return r[col] != null;
         if (op === "is-null") return r[col] == null;
         if (op === "lte") return r[col] != null && (r[col] as string) <= (val as string);
+        if (op === "gt") return (r[col] as string) > (val as string);
+        if (op === "stale") return String(r.started_at ?? r.created_at ?? "9999") <= String(val);
         return true;
       }),
     );
   }
 
   const admin = {
+    async rpc(name: string, args: Record<string, unknown>) {
+      if (name === "request_privacy_deletion") {
+        if (usersUpdateFails) return { data: null, error: { message: "boom" } };
+        const user = (tables.users ?? []).find((r) => r.id === args.p_user_id);
+        if (user) user.status = "blocked";
+        updates.push({ table: "users", payload: { status: "blocked" }, ids: [String(args.p_user_id)] });
+        return { data: !(tables.privacy_uploads ?? []).length, error: null };
+      }
+      if (name === "claim_recording_cleanup_batch") {
+        const table = args.p_track === "phase2" ? "phase2_responses" : "pilot_responses";
+        const claims = (args.p_candidates as { id: string; audio_path: string | null }[]).map((candidate) => {
+          const row = (tables[table] ?? []).find((r) => r.id === candidate.id);
+          const uploadPending = (tables.privacy_uploads ?? []).some((ticket) => ticket.response_id === candidate.id);
+          const claimed = Boolean(row && !uploadPending && !(args.p_orphan && (row.audio_path || row.recording_purged_at)));
+          if (claimed && row) row.recording_cleanup_pending = true;
+          return { response_id: candidate.id, claimed, upload_pending: uploadPending };
+        });
+        return { data: claims, error: null };
+      }
+      return { data: null, error: { message: `RPC inesperada: ${name}` } };
+    },
     from(table: string) {
       const filters: { col: string; op: string; val: unknown }[] = [];
       let range: [number, number] | null = null;
@@ -56,6 +79,14 @@ function makeAdmin(tables: Record<string, Row[]>) {
         },
         lte(col: string, val: unknown) {
           filters.push({ col, op: "lte", val });
+          return builder;
+        },
+        gt(col: string, val: unknown) {
+          filters.push({ col, op: "gt", val });
+          return builder;
+        },
+        or(expression: string) {
+          filters.push({ col: "started_at", op: "stale", val: expression.split(",")[0].replace("started_at.lte.", "") });
           return builder;
         },
         order() {
@@ -86,7 +117,7 @@ function makeAdmin(tables: Record<string, Row[]>) {
             resolve({ data: null, error: null });
             return;
           }
-          let matched = applyFilters(source, filters);
+          let matched = applyFilters(source, filters).sort((a, b) => String(a.id).localeCompare(String(b.id)));
           if (range) matched = matched.slice(range[0], range[1] + 1);
           resolve({ data: matched, error: null });
         },
@@ -162,7 +193,7 @@ describe("expireRecordings", () => {
     const report = await expireRecordings({ admin: admin as any, dryRun: false });
     expect(report.errors).toEqual([]);
     expect(removed).toEqual([{ bucket: "phase2-recordings", paths: ["u1/a1/p-1"] }]);
-    expect(updates).toEqual([{ table: "phase2_responses", payload: { audio_path: null }, ids: ["p-1"] }]);
+    expect(updates).toEqual([{ table: "phase2_responses", payload: { audio_path: null, audio_url: null, recording_purged_at: expect.any(String) }, ids: ["p-1"] }]);
     expect(report.byTrack.phase2.rowsCleared).toBe(1);
   });
 
@@ -199,7 +230,7 @@ describe("expireRecordings", () => {
     const legada = {
       id: "p-legado",
       simulation_attempt_id: "a1",
-      audio_path: "caminho/bem/antigo.webm",
+      audio_path: "a1/prompt-stage-123.webm",
       expires_at: "2020-01-01T00:00:00Z",
       simulation_attempts: { user_id: "u1" },
     };
@@ -208,8 +239,8 @@ describe("expireRecordings", () => {
     const report = await expireRecordings({ admin: admin as any, dryRun: false });
     expect(report.errors).toEqual([]);
     const phase2Removal = removed.find((r) => r.bucket === "phase2-recordings");
-    expect(phase2Removal?.paths.sort()).toEqual(["caminho/bem/antigo.webm", "u1/a1/p-legado"]);
-    expect(updates).toEqual([{ table: "phase2_responses", payload: { audio_path: null }, ids: ["p-legado"] }]);
+    expect(phase2Removal?.paths.sort()).toEqual(["a1/prompt-stage-123.webm", "u1/a1/p-legado"]);
+    expect(updates).toEqual([{ table: "phase2_responses", payload: { audio_path: null, audio_url: null, recording_purged_at: expect.any(String) }, ids: ["p-legado"] }]);
   });
 
   it("varre e remove uploads órfãos (audio_path nulo, erro, mais velho que o prazo) mesmo sem bater no filtro principal", async () => {
@@ -344,8 +375,7 @@ describe("purgeUserRecordings (exclusão de conta)", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const report = await purgeUserRecordings({ admin: admin as any, userId: "u1", dryRun: false });
     expect(report.responsesCleared).toBe(501);
-    const phase2Removal = removed.find((r) => r.bucket === "phase2-recordings");
-    expect(phase2Removal?.paths.length).toBe(501);
+    expect(removed.filter((r) => r.bucket === "phase2-recordings").flatMap((r) => r.paths).length).toBe(501);
   });
 
   it("se o bloqueio da conta falhar, para ali — não segue apagando dado com a conta ainda ativa", async () => {
@@ -357,5 +387,67 @@ describe("purgeUserRecordings (exclusão de conta)", () => {
     expect(report.responsesCleared).toBe(0);
     expect(report.errors.length).toBeGreaterThan(0);
     expect(removed).toEqual([]);
+  });
+});
+
+describe("regressões da 3ª revisão", () => {
+  it.each(["phase2", "pilot"])("%s: mais de 500 órfãos, incluindo crash sem status error; segunda execução não repete", async (track) => {
+    const rows = Array.from({ length: 1203 }, (_, i) => ({
+      id: `r-${String(i).padStart(5, "0")}`, simulation_attempt_id: "a1", audio_path: null,
+      processing_status: ["error", "transcribing", "analyzing"][i % 3],
+      started_at: "2020-01-01T00:00:00Z", created_at: "2020-01-01T00:00:00Z",
+      simulation_attempts: { user_id: "u1" },
+    }));
+    const { admin, removed } = makeAdmin({ [`${track}_responses`]: rows });
+    const client = admin as unknown as Parameters<typeof expireRecordings>[0]["admin"];
+    const dry = await expireRecordings({ admin: client });
+    expect(dry.byTrack[track as "phase2" | "pilot"].orphansSwept).toBe(1203);
+    expect(removed).toHaveLength(0);
+    const first = await expireRecordings({ admin: client, dryRun: false });
+    expect(first.errors).toEqual([]);
+    expect(first.byTrack[track as "phase2" | "pilot"].orphansSwept).toBe(1203);
+    const second = await expireRecordings({ admin: client, dryRun: false });
+    expect(second.byTrack[track as "phase2" | "pilot"].orphansSwept).toBe(0);
+    expect(removed.flatMap((r) => r.paths)).toHaveLength(1203);
+  });
+  it("usa started_at renovado no retry, não created_at antigo", async () => {
+    const { admin, removed } = makeAdmin({ phase2_responses: [{
+      id: "r1", simulation_attempt_id: "a1", audio_path: null, processing_status: "transcribing",
+      created_at: "2020-01-01T00:00:00Z", started_at: "2026-09-12T00:00:00Z", simulation_attempts: { user_id: "u1" },
+    }] });
+    const report = await expireRecordings({ admin: admin as unknown as Parameters<typeof expireRecordings>[0]["admin"], now: new Date("2026-09-12T12:00:00Z"), dryRun: false });
+    expect(report.byTrack.phase2.orphansSwept).toBe(0);
+    expect(removed).toHaveLength(0);
+  });
+  it("falha de Storage não marca órfão limpo; a repetição consegue recuperá-lo", async () => {
+    const fake = makeAdmin({ phase2_responses: [{ id: "r1", simulation_attempt_id: "a1", audio_path: null, processing_status: "error", created_at: "2020-01-01T00:00:00Z", simulation_attempts: { user_id: "u1" } }] });
+    const admin = fake.admin as unknown as Parameters<typeof expireRecordings>[0]["admin"];
+    fake.setStorageFails(true);
+    expect((await expireRecordings({ admin, dryRun: false })).errors.length).toBeGreaterThan(0);
+    expect(fake.updates).toHaveLength(0);
+    fake.setStorageFails(false);
+    expect((await expireRecordings({ admin, dryRun: false })).byTrack.phase2.orphansSwept).toBe(1);
+  });
+  it("exclusão pendente não toca Storage nem conteúdo", async () => {
+    const { admin, removed } = makeAdmin({ users: [{ id: "u1", status: "active" }], privacy_uploads: [{ id: "in-flight" }] });
+    const report = await purgeUserRecordings({ admin: admin as unknown as Parameters<typeof purgeUserRecordings>[0]["admin"], userId: "u1", dryRun: false });
+    expect(report.accountBlocked).toBe(true);
+    expect(report.errors[0]).toContain("pendente");
+    expect(removed).toHaveLength(0);
+  });
+  it("audio_path envenenado não apaga objeto de outra tentativa", async () => {
+    const { admin, removed } = makeAdmin({ phase2_responses: [{
+      id: "r1", simulation_attempt_id: "a1", expires_at: "2020-01-01T00:00:00Z",
+      simulation_attempts: { user_id: "u1" }, audio_path: "outro/a9/resposta-alheia",
+    }] });
+    const report = await expireRecordings({ admin: admin as unknown as Parameters<typeof expireRecordings>[0]["admin"], dryRun: false });
+    expect(report.errors[0]).toContain("namespace");
+    expect(removed).toHaveLength(0);
+  });
+  it("pagina também 1203 relatórios e limita mutações a 100 IDs", async () => {
+    const { admin, updates } = makeAdmin({ users: [{ id: "u1", status: "active" }], simulation_attempts: [{ id: "a1", user_id: "u1" }], simulation_feedbacks: Array.from({ length: 1203 }, (_, i) => ({ id: `f-${i}`, simulation_attempt_id: "a1", general_feedback: "conteúdo" })) });
+    const report = await purgeUserRecordings({ admin: admin as unknown as Parameters<typeof purgeUserRecordings>[0]["admin"], userId: "u1", dryRun: false });
+    expect(report.feedbacksCleared).toBe(1203);
+    expect(updates.every((r) => r.ids.length <= 100)).toBe(true);
   });
 });

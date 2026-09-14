@@ -188,6 +188,8 @@ export type Phase2ResponseRow = {
   // (M3.2, migration 20260912020000): practice 30 dias, official 180.
   // Transcrição, feedback e notas não expiram — só o áudio.
   expires_at: string | null;
+  recording_cleanup_pending: boolean;
+  recording_purged_at: string | null;
   // **Legado.** Guardava a URL PÚBLICA da gravação, de quando os buckets
   // eram públicos — as URLs gravadas aqui deixaram de funcionar quando os
   // buckets viraram privados (migration 20260912000000), o que era o
@@ -237,6 +239,8 @@ export type PilotResponseRow = {
   retry_count: number;
   audio_path: string | null;
   expires_at: string | null;
+  recording_cleanup_pending: boolean;
+  recording_purged_at: string | null;
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
@@ -360,11 +364,18 @@ export type Database = {
       simulation_feedbacks: TableDef<SimulationFeedbackRow, SimulationFeedbackInsert>;
       recording_consents: TableDef<RecordingConsentRow, RecordingConsentInsert>;
       recording_access_log: TableDef<RecordingAccessLogRow, RecordingAccessLogInsert>;
+      privacy_deletion_requests: TableDef<{ user_id: string; requested_at: string }, { user_id: string }>;
+      privacy_uploads: TableDef<{ id: string; user_id: string; response_id: string; track: "phase2" | "pilot"; started_at: string }, { user_id: string; response_id: string; track: "phase2" | "pilot" }>;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      begin_privacy_upload: { Args: { p_user_id: string; p_response_id: string; p_track: string }; Returns: string };
+      finish_privacy_upload: { Args: { p_upload_id: string }; Returns: undefined };
+      request_privacy_deletion: { Args: { p_user_id: string }; Returns: boolean };
+      claim_recording_cleanup: { Args: { p_track: string; p_response_id: string; p_now: string; p_orphan: boolean; p_expected_path?: string | null }; Returns: boolean };
+      claim_recording_cleanup_batch: { Args: { p_track: string; p_candidates: { id: string; audio_path: string | null }[]; p_now: string; p_orphan: boolean }; Returns: { response_id: string; claimed: boolean; upload_pending: boolean }[] };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
 };
-

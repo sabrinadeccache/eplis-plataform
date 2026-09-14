@@ -6,6 +6,9 @@
 
 ## Visão geral
 
+**Estado M3:** alterações descritas nesta revisão ainda pendentes de aplicação;
+não confundir schema da branch com produção. Deploy: `m3-privacy-handoff.md`.
+
 ```
 users
  └─ simulation_attempts
@@ -85,7 +88,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | Campo | Tipo | Observações |
 |---|---|---|
 | id | uuid | |
-| user_id | uuid → users | |
+| user_id | uuid → users, nullable na M3 | `on delete set null` (030000); exclusão só após barreira + limpeza de conteúdo |
 | phase | enum | `phase1`, `phase2` (controlador/EPLIS), `pilot_interview` (piloto/SDEA — **[NOVO, 2026-08-24]**; a trilha do piloto não tem um equivalente de "Fase 1" — o SDEA é uma única entrevista oral de 4 partes, sem prova de compreensão auditiva separada) |
 | mode | enum | `practice`, `official` |
 | status | enum | `in_progress`, `completed`, `abandoned` |
@@ -352,6 +355,25 @@ titular da gravação, é trilha de auditoria interna.
 ---
 
 ## Enums de referência
+
+### Barreira e limpeza M3 — migration 20260912070000 (pendente)
+
+- `privacy_deletion_requests`: `user_id` PK/FK para users (cascade), `requested_at`
+  timestamptz. Barreira durável; restaurar status active não remove o pedido.
+- `privacy_uploads`: UUID `id`, `user_id` FK restrict, `response_id`, `track`
+  (`phase2`/`pilot`), `started_at`. Único por trilha/resposta. Sem acesso para
+  anon/authenticated e sem timeout automático; impede exclusão enquanto existir.
+- Nas duas tabelas de resposta: `recording_cleanup_pending boolean default false`
+  e `recording_purged_at timestamptz nullable`. Claim terminal bloqueia novo upload
+  no slot vencido; purged_at só após confirmação da remoção. Sem novo enum.
+- RPCs somente service_role: `begin_privacy_upload`, `finish_privacy_upload`,
+  `request_privacy_deletion`, `claim_recording_cleanup` e
+  `claim_recording_cleanup_batch` (um round-trip por página).
+- Triggers verificam a barreira inclusive em escrita service_role nas respostas /
+  relatórios, recusam tentativa nova e impedem apagar usuário com upload pendente.
+  Conteúdo pode ser limpo para NULL, nunca repovoado depois da exclusão.
+
+Detalhamento e recuperação operacional: `m3-privacy-handoff.md`.
 
 ```
 role: admin | pilot | air_traffic_controller

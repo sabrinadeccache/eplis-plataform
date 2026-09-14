@@ -15,6 +15,32 @@ Responsável: Sabrina Deccache.
 
 ## Milestone 3 — gravações privadas, retenção e LGPD — em revisão (2026-09-12)
 
+### Retomada prioritária — implementação Codex sobre `8c63842`
+
+Sabrina autorizou corrigir os bloqueadores da revisão. Alterações **locais** na
+branch M3, sem commit/push/merge e sem tocar em produção. Ler primeiro
+[`m3-privacy-handoff.md`](m3-privacy-handoff.md): desenho, testes, recuperação,
+ordem de implantação e próximos passos para Claude.
+
+- Nova migration **20260912070000**: barreira transacional de exclusão, tickets
+  de upload, proteção contra conteúdo tardio da IA e claim terminal de limpeza.
+  Vai ANTES deste código; **050000 continua DEPOIS**, após confirmar admin.storage.
+- Cron/scripts agora compartilham `retention-core.mjs`; paginação por cursor,
+  progresso persistido e tratamento de crash `transcribing`/`analyzing`. Testado
+  com 1.203 órfãos e 1.203 relatórios. Prazo de gravação permanece 30/180 dias.
+- Upload de resultado incerto fica pendente até reconciliação administrativa;
+  não há liberação por timeout. Não apagar Auth nem declarar exclusão concluída
+  enquanto houver ticket. A barreira impede repovoar conteúdo por IA tardia.
+- Homologação real M3 e `CRON_SECRET` continuam pendentes. Alertas do `npm audit`
+  em dependências existentes foram registrados no handoff para triagem separada:
+  4 em runtime (3 high, 1 critical; correção sugerida leva Next 16.2.12→16.3.5).
+- Verificação local: **274 testes**, `tsc` e `eslint` passando; build isolado
+  com ambiente fictício passou (aviso conhecido de tracing amplo do ffmpeg).
+  23 testes executam a nova migration em PostgreSQL embarcado; não substituem
+  Supabase/Storage/Vercel reais. Sem teste ou operação contra produção nesta sessão.
+
+As seções de revisão abaixo são histórico, não substituem este estado atual.
+
 Branch `privacy/private-recordings-consent`, aguardando aprovação da Sabrina antes do
 merge e da aplicação das migrations. Escopo: 3.1 (storage privado), 3.2 (retenção +
 anonimização na exclusão de conta), 3.3 (consentimento). Uma rodada de revisão
@@ -78,13 +104,14 @@ adversarial já incorporada — achados P0 reais, não só cobertura de teste.
    fonte da função por um endpoint público). Era defesa em profundidade contra uma
    superfície de ataque desnecessária, não uma exposição pública comprovada.
 
-### 2ª rodada de revisão (2026-09-12) — 5 achados adicionais, todos corrigidos
+### 2ª rodada de revisão (2026-09-12) — histórico do commit `8c63842`
 
 A Sabrina revisou o commit `21db9aa` (221/221 testes, tsc e eslint passando) e recusou
 aprovar o merge: passar nos testes não provava a integração real. Recusou também as duas
 "limitações residuais" da rodada anterior como aceitáveis pra documentar em vez de
-corrigir. Todos os 7 pontos abaixo (5 numerados + os 2 residuais) têm correção real de
-código, não só texto.
+corrigir. As alterações abaixo foram implementadas nessa rodada, mas os pontos 6/7
+ainda eram insuficientes: lote de órfãos sem progresso e rechecagem sem coordenação.
+Ver a implementação Codex / handoff acima para a substituição dessas garantias.
 
 1. **A rota de cron era interceptada pelo proxy antes de chegar no `CRON_SECRET`.**
    Vercel Cron não manda cookie de sessão — só o header `Authorization` que a própria
@@ -142,10 +169,9 @@ código, não só texto.
    submit-response fazem uma 2ª checagem de status (`assertAccountStillActive`) logo
    antes de persistir qualquer conteúdo (upload/`audio_path`/transcrição), não só no
    início da requisição — reduz a janela de "todo o tempo de processamento" pro intervalo
-   entre essa checagem e a escrita. Não elimina a corrida por completo (nenhum sistema
-   sem lock distribuído elimina), mas fecha o caso prático: qualquer requisição que leve
-   tempo suficiente pro cron ou pra exclusão de conta rodar no meio é barrada antes de
-   escrever.
+   entre essa checagem e a escrita. **Essa mitigação não fechava o caso prático:** IA
+   ainda podia escrever depois da limpeza. Substituída pela barreira no banco e
+   coordenação dos uploads na revisão Codex (migration 070000).
 
 ## Homologação do M2 em produção — 2026-09-12 (CONCLUÍDA)
 

@@ -1,43 +1,7 @@
-// Exclusão de conta — Milestone 3.2 do plano de correção (ver
-// docs/project-status.md). Decisão da Sabrina: **apaga o áudio, mantém o
-// resultado ANONIMIZADO** — a plataforma não perde histórico de uso
-// (estatística agregada), mas o titular deixa de ser identificável.
-//
-// Espelha src/lib/simulations/retention.ts (`purgeUserRecordings`) — ver lá
-// o motivo de cada passo. Resumo do que muda em relação à 1ª versão deste
-// script (achados da revisão de 2026-09-12):
-//
-// 1. Bloqueia a conta (`status = 'blocked'`) ANTES de tocar em qualquer
-//    dado — sem isso, nada impedia um envio novo durante a limpeza (a
-//    conta continuava `active` até o `deleteUser` final). `authorize()`
-//    (M1) já rejeita toda ação de conta não-`active`.
-// 2. Pagina de verdade (tentativas, respostas, feedbacks) — a versão
-//    anterior só limpava até o limite implícito de uma consulta.
-// 3. O caminho apagado no Storage é a UNIÃO do `audio_path` gravado (cobre
-//    formato legado, de antes do caminho determinístico) com o caminho
-//    determinístico calculado pelos IDs (cobre a linha cujo upload terminou
-//    mas nunca chegou a gravar `audio_path`) — achado da revisão de
-//    2026-09-12: usar só os IDs, como a versão anterior fazia, perdia
-//    gravação legada (o objeto real ficava intocado e a coluna era zerada
-//    do mesmo jeito, porque remover um caminho inexistente não dá erro).
-// 4. Também zera `audio_url` (legado) e `simulation_feedbacks.general_feedback`
-//    (conteúdo derivado da fala do titular, ligado à tentativa mesmo depois
-//    de anonimizada).
-// 5. Pagina de verdade DENTRO de cada bloco de 200 tentativas (não só a
-//    busca de IDs de tentativa) — achado da revisão de 2026-09-12: uma
-//    consulta `.in()` sem `.range()` pode ser truncada silenciosamente pra
-//    contas com muitas respostas dentro de um único bloco.
-//
-// DRY-RUN POR PADRÃO. Passe `--apply` pra executar de verdade — é
-// IRREVERSÍVEL (a voz e o conteúdo de fala do titular são removidos de
-// vez). Pensado pra rodar mediante pedido do titular pelo canal
-// administrativo (M3.3), não em lote.
-//
-// Uso:
-//   node scripts/delete-user-data.mjs <email>             # dry-run
-//   node scripts/delete-user-data.mjs <email> --apply     # aplica de verdade
+// Dry-run por padrão. Ver docs/m3-privacy-handoff.md antes de --apply.
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { purgeUserRecordings } from "../src/lib/simulations/retention-core.mjs";
 
 function loadEnv() {
   const lines = readFileSync(".env.local", "utf8").split(/\r?\n/);
@@ -50,184 +14,21 @@ function loadEnv() {
   return env;
 }
 
-const TRACKS = [
-  { table: "phase2_responses", bucket: "phase2-recordings" },
-  { table: "pilot_responses", bucket: "pilot-recordings" },
-];
-
-const PAGE_SIZE = 500;
-const ATTEMPT_CHUNK = 200;
-
-function chunk(items, size) {
-  const out = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
-
-function buildPath(userId, attemptId, responseId) {
-  return `${userId}/${attemptId}/${responseId}`;
-}
-
-function candidatePaths(row, userId) {
-  const deterministic = buildPath(userId, row.simulation_attempt_id, row.id);
-  return row.audio_path && row.audio_path !== deterministic ? [row.audio_path, deterministic] : [deterministic];
-}
-
-async function fetchAllResponsesForAttempts(supabase, table, idsChunk) {
-  const rows = [];
-  for (let page = 0; ; page += 1) {
-    const { data, error } = await supabase
-      .from(table)
-      .select("id, simulation_attempt_id, audio_path")
-      .in("simulation_attempt_id", idsChunk)
-      .order("id", { ascending: true })
-      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-    if (error) throw new Error(`${table}: ${error.message}`);
-    const batch = data ?? [];
-    rows.push(...batch);
-    if (batch.length < PAGE_SIZE) break;
-  }
-  return rows;
-}
-
-async function fetchAllAttemptIds(supabase, userId) {
-  const ids = [];
-  for (let page = 0; ; page += 1) {
-    const { data, error } = await supabase
-      .from("simulation_attempts")
-      .select("id")
-      .eq("user_id", userId)
-      .order("id", { ascending: true })
-      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-    if (error) throw new Error(`simulation_attempts: ${error.message}`);
-    ids.push(...data.map((r) => r.id));
-    if (data.length < PAGE_SIZE) break;
-  }
-  return ids;
-}
-
-async function purgeTrack(supabase, { table, bucket }, userId, attemptIds, apply) {
-  let responses = 0;
-  let storageObjects = 0;
-
-  for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
-    const rows = await fetchAllResponsesForAttempts(supabase, table, idsChunk);
-    if (rows.length === 0) continue;
-    responses += rows.length;
-    if (!apply) continue;
-
-    const paths = rows.flatMap((r) => candidatePaths(r, userId));
-    const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
-    if (storageError) throw new Error(`${table} (storage): ${storageError.message}`);
-    storageObjects += paths.length;
-
-    const { error: clearError } = await supabase
-      .from(table)
-      .update({ audio_path: null, audio_url: null, transcript: null, ai_feedback: null })
-      .in("id", rows.map((r) => r.id));
-    if (clearError) throw new Error(`${table} (clear): ${clearError.message}`);
-  }
-
-  return { responses, storageObjects };
-}
-
-async function fetchAllFeedbackIds(supabase, idsChunk) {
-  const rows = [];
-  for (let page = 0; ; page += 1) {
-    const { data, error } = await supabase
-      .from("simulation_feedbacks")
-      .select("id")
-      .in("simulation_attempt_id", idsChunk)
-      .order("id", { ascending: true })
-      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-    if (error) throw new Error(`simulation_feedbacks: ${error.message}`);
-    const batch = data ?? [];
-    rows.push(...batch);
-    if (batch.length < PAGE_SIZE) break;
-  }
-  return rows;
-}
-
-async function clearFeedbacks(supabase, attemptIds, apply) {
-  let cleared = 0;
-  for (const idsChunk of chunk(attemptIds, ATTEMPT_CHUNK)) {
-    const rows = await fetchAllFeedbackIds(supabase, idsChunk);
-    if (rows.length === 0) continue;
-    if (!apply) {
-      cleared += rows.length;
-      continue;
-    }
-    const { error: clearError } = await supabase
-      .from("simulation_feedbacks")
-      .update({ general_feedback: null })
-      .in("id", rows.map((r) => r.id));
-    if (clearError) throw new Error(`simulation_feedbacks (clear): ${clearError.message}`);
-    cleared += rows.length;
-  }
-  return cleared;
-}
-
 async function main() {
-  const email = process.argv[2];
-  const apply = process.argv.includes("--apply");
-  if (!email) {
-    console.error("Uso: node scripts/delete-user-data.mjs <email> [--apply]");
-    process.exit(1);
-  }
-
   const env = loadEnv();
-  const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  const { data: userRow, error: userError } = await supabase
-    .from("users")
-    .select("id, email, role, status")
-    .eq("email", email)
-    .maybeSingle();
-  if (userError) throw userError;
-  if (!userRow) {
-    console.error(`Nenhum usuário com o e-mail ${email}.`);
-    process.exit(1);
+  const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+  const dryRun = !process.argv.includes("--apply");
+  const email = process.argv[2];
+  if (!email || email.startsWith("--")) throw new Error("Uso: node scripts/delete-user-data.mjs <email> [--apply]");
+  const { data: user, error } = await admin.from("users").select("id").eq("email", email).maybeSingle();
+  if (error || !user) throw new Error("Não foi possível encontrar a conta.");
+  const report = await purgeUserRecordings({ admin, userId: user.id, dryRun });
+  console.log(JSON.stringify(report, null, 2));
+  if (report.errors.length) { process.exitCode = 1; return; }
+  if (!dryRun) {
+    const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+    if (deleteError) throw deleteError;
+    console.log("Conta removida; conteúdo de fala limpo e resultados desvinculados.");
   }
-
-  console.log(apply ? "Aplicando (irreversível)…" : "Dry-run (nada será apagado — use --apply pra aplicar)…");
-  console.log(`Usuário: ${userRow.id} (${userRow.email}, role=${userRow.role})`);
-
-  if (apply) {
-    // Bloqueia a conta ANTES de tocar em qualquer dado — impede que uma
-    // submissão em andamento ou nova crie gravação durante a limpeza
-    // (achado da revisão: authorize() já rejeita conta não-`active`, M1).
-    const { error: blockError } = await supabase.from("users").update({ status: "blocked" }).eq("id", userRow.id);
-    if (blockError) throw new Error(`Falha ao bloquear a conta antes da limpeza: ${blockError.message}`);
-    console.log("Conta bloqueada (status=blocked) — nenhuma submissão nova passa a partir daqui.");
-  }
-
-  const attemptIds = await fetchAllAttemptIds(supabase, userRow.id);
-  console.log(`Tentativas do usuário: ${attemptIds.length}`);
-
-  for (const track of TRACKS) {
-    const result = await purgeTrack(supabase, track, userRow.id, attemptIds, apply);
-    console.log(`  ${track.table}: ${result.responses} resposta(s), ${result.storageObjects} gravação(ões) removida(s)`);
-  }
-
-  const feedbacksCleared = await clearFeedbacks(supabase, attemptIds, apply);
-  console.log(`  simulation_feedbacks: ${feedbacksCleared} relatório(s) com general_feedback limpo`);
-
-  if (!apply) {
-    console.log("\nDry-run concluído. Rode com --apply pra limpar o conteúdo de fala e então apagar a conta.");
-    return;
-  }
-
-  const { error: deleteError } = await supabase.auth.admin.deleteUser(userRow.id);
-  if (deleteError) throw deleteError;
-  console.log(
-    `\nConta removida (Auth + public.users). As tentativas ficam anônimas ` +
-      `(simulation_attempts.user_id = NULL) — histórico de uso preservado, titular não identificável.`,
-  );
 }
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch((e) => { console.error(e.message); process.exitCode = 1; });

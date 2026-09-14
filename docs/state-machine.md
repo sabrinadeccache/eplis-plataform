@@ -5,6 +5,12 @@
 
 ## Fluxo geral
 
+**Camada de privacidade M3 (revisão Codex, ainda não implantada):** não muda a
+sequência pedagógica abaixo. A barreira de exclusão invalida persistência de fala
+e feedback, mesmo se a requisição começou antes. Slots reclamados pela retenção
+ficam terminalmente fechados para novo upload (`recording_cleanup_pending`);
+processamento interrompido antigo é marcado `error`. Ver `m3-privacy-handoff.md`.
+
 ```
 INTERVIEW_IDLE
  ↓

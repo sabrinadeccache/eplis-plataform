@@ -1,5 +1,7 @@
 "use server";
 
+import { assertPrivacyWrite } from "@/lib/simulations/privacy-barrier";
+
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -184,7 +186,7 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
 
     const report = await generatePilotFinalReport(rows, attempt.mode as SimulationMode);
 
-    await admin.from("simulation_feedbacks").insert({
+    assertPrivacyWrite(await admin.from("simulation_feedbacks").insert({
       simulation_attempt_id: attemptId,
       phase: "pilot_interview",
       overall_score: report.overall,
@@ -197,7 +199,7 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
       general_feedback: report.general_feedback,
       ai_provider: "anthropic",
       model_version: MODEL_VERSION,
-    });
+    }));
 
     await admin
       .from("simulation_attempts")

@@ -1,3 +1,4 @@
+import { withPrivacyUpload, assertPrivacyWrite, privacyWriteError } from "@/lib/simulations/privacy-barrier";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -145,7 +146,7 @@ export async function POST(request: Request) {
     // conta pro teto de retry do slot, não é mais uma tentativa "de graça".
     const validation = await validateDecodedAudio(buffer, containerCheck.container);
     if (!validation.ok) {
-      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
+      assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
       // 503 quando o problema é NOSSO (o validador não rodou) — só 422
       // quando o arquivo do candidato é que não presta. Sem essa distinção,
       // uma falha de infraestrutura aparecia pro candidato como "seu áudio
@@ -154,13 +155,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validation.reason }, { status });
     }
 
-    // Achado da revisão (2026-09-12): ver comentário equivalente na rota da
-    // Fase 2 e em attempt-guards.ts — recheca a conta bem perto do ponto de
-    // persistir conteúdo, não só no início da requisição.
+    // Rechecagem de UX; a garantia de exclusão é a barreira transacional
+    // + reserva de upload em privacy-barrier.ts / migration 070000.
     try {
       await assertAccountStillActive(admin, userId);
     } catch {
-      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
+      assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
       return NextResponse.json({ error: "Conta não está mais ativa." }, { status: 403 });
     }
 
@@ -171,14 +171,19 @@ export async function POST(request: Request) {
 
     // Bucket privado, sem policy nenhuma pra `authenticated` (migration
     // 20260912050000) — o upload é SÓ por service_role.
-    const { error: uploadError } = await admin.storage
-      .from("pilot-recordings")
-      .upload(path, buffer, { contentType: mimeType, upsert: true });
+    const { error: uploadError } = await withPrivacyUpload(
+      admin,
+      userId,
+      responseId,
+      "pilot",
+      () => admin.storage.from("pilot-recordings").upload(path, buffer, { contentType: mimeType, upsert: true }),
+      () => admin.storage.from("pilot-recordings").remove([path]),
+    );
     if (uploadError) {
-      await admin
+      assertPrivacyWrite(await admin
         .from("pilot_responses")
         .update({ processing_status: "error" })
-        .eq("id", responseId);
+        .eq("id", responseId));
       return NextResponse.json({ error: `Falha ao enviar o áudio: ${uploadError.message}` }, { status: 500 });
     }
 
@@ -200,21 +205,21 @@ export async function POST(request: Request) {
       // Ver comentário equivalente na rota da Fase 2 — falha rápido em vez
       // de seguir com a linha em estado inconsistente; um retry encontra o
       // MESMO objeto (caminho determinístico) e corrige sozinho.
-      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
-      return NextResponse.json({ error: "Não foi possível registrar a gravação." }, { status: 500 });
+      assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+      throw privacyWriteError(pathUpdateError);
     }
 
     let transcript: string;
     try {
       transcript = await transcribeAudio(buffer, `audio.${ext}`);
     } catch {
-      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
+      assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
       return NextResponse.json({ error: "Não foi possível transcrever o áudio." }, { status: 502 });
     }
-    await admin
+    assertPrivacyWrite(await admin
       .from("pilot_responses")
       .update({ transcript, processing_status: "analyzing" })
-      .eq("id", responseId);
+      .eq("id", responseId));
 
     const { data: prompt } = await supabase
       .from("pilot_prompts")
@@ -227,10 +232,10 @@ export async function POST(request: Request) {
     // Modo `official` não dá nenhum feedback durante o simulado (só o
     // relatório final) — mesmo comportamento/motivo já documentado na Fase 2.
     if (attempt.mode === "official") {
-      await admin
+      assertPrivacyWrite(await admin
         .from("pilot_responses")
         .update({ processing_status: "done", finished_at: new Date().toISOString() })
-        .eq("id", responseId);
+        .eq("id", responseId));
 
       return NextResponse.json({ transcript, feedback: null });
     }
@@ -242,7 +247,7 @@ export async function POST(request: Request) {
       transcript,
       NO_FEEDBACK_STAGES.includes(stage) ? undefined : (stage as PilotFeedbackStage),
     );
-    await admin
+    assertPrivacyWrite(await admin
       .from("pilot_responses")
       .update({
         ai_feedback: feedback,
@@ -251,7 +256,7 @@ export async function POST(request: Request) {
         processing_status: "done",
         finished_at: new Date().toISOString(),
       })
-      .eq("id", responseId);
+      .eq("id", responseId));
 
     return NextResponse.json({ transcript, feedback });
   } catch (error) {

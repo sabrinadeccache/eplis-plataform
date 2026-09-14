@@ -34,5 +34,5 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   const report = await expireRecordings({ admin, dryRun: false });
 
-  return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json(report, { status: report.errors.length ? 503 : 200, headers: { "Cache-Control": "no-store" } });
 }

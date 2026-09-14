@@ -4,6 +4,12 @@ Plataforma de treinamento para o EPLIS (Exame de Proficiência em Inglês Aeron�
 SISCEAB). Ver `docs/project-status.md` primeiro em qualquer nova sessão — tem o status
 atual, o que já foi feito, o que falta, e as decisões de design já fechadas.
 
+**Retomada M3 (2026-09-12):** ler `docs/m3-privacy-handoff.md` antes de alterar,
+mergear ou implantar `privacy/private-recordings-consent`. Há alterações locais do
+Codex sobre `8c63842`, autorizadas pela Sabrina. Não sobrescrever. A migration
+070000 vai antes deste código; 050000 continua depois. Não liberar tickets de
+upload por timeout nem duplicar a retenção nos scripts (núcleo único `.mjs`).
+
 ## Leitura obrigatória antes de mexer em modelagem ou regras de negócio
 
 - `docs/project-status.md` — ponto de retomada, infraestrutura provisionada, roadmap.

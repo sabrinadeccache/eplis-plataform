@@ -6,6 +6,13 @@
 
 ## Novos requisitos
 
+**M3 — privacidade operacional (2026-09-12, revisão Codex):** exclusão de conta
+deve bloquear novos uploads e invalidar conteúdo tardio de IA no banco. Upload
+não finalizado exige pendência/reconciliação, nunca sucesso por timeout. Expiração
+deve persistir progresso e não disputar o mesmo slot com retry. Scripts e cron
+devem executar a mesma implementação. Detalhes: `m3-privacy-handoff.md`; ainda
+não implantado. Mantidos os prazos 30 dias practice / 180 dias official.
+
 **RF-52** — O sistema deve suportar o campo `operational_profile` (`TWR`, `APP`, `ACC`,
 `AFIS`, `FIS`, `COpM`, `ab_initio`) em `users`, definindo qual versão de prova da Fase 2
 o candidato recebe. *Fase: F1 (junto com RF-05/RF-06).*

@@ -50,10 +50,16 @@ vi.mock("@/lib/ai/pilot-track", () => ({
 }));
 
 const storageUpload = vi.fn();
+const storageRemove = vi.fn();
 const adminUpdate = vi.fn();
 let accountStatus = "active";
+let privacyWriteDenied = false;
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    async rpc(name: string) {
+      if (name === "begin_privacy_upload" && accountStatus !== "active") return { data: null, error: { message: "blocked" } };
+      return { data: name === "begin_privacy_upload" ? "upload-token" : null, error: null };
+    },
     from(table: string) {
       return {
         update(payload: Record<string, unknown>) {
@@ -66,15 +72,13 @@ vi.mock("@/lib/supabase/admin", () => ({
         eq() {
           return this;
         },
-        // Recheck de status (achado da revisão, M3): assertAccountStillActive
-        // consulta `public.users` bem antes de persistir conteúdo — o
-        // comportamento de bloqueio no meio da requisição é testado abaixo.
+        // Recheck de UX; a barreira transacional tem testes próprios.
         async maybeSingle() {
           if (table === "users") return { data: { status: accountStatus }, error: null };
           return { data: null, error: null };
         },
-        then(resolve: (v: { data: null; error: null }) => void) {
-          resolve({ data: null, error: null });
+        then(resolve: (v: { data: null; error: { code: string; message: string } | null }) => void) {
+          resolve({ data: null, error: privacyWriteDenied ? { code: "42501", message: "privacy fence" } : null });
         },
       };
     },
@@ -82,7 +86,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     // desde a revisão do M3 — ver comentário equivalente na suíte da Fase 2.
     storage: {
       from() {
-        return { upload: storageUpload };
+        return { upload: storageUpload, remove: storageRemove };
       },
     },
   }),
@@ -168,6 +172,7 @@ const sequence = {
 beforeEach(() => {
   vi.clearAllMocks();
   accountStatus = "active";
+  privacyWriteDenied = false;
   authorize.mockResolvedValue({ user: { id: "user-1", operational_profile: "fixed_wing" } });
   assertOwnAttemptInProgress.mockResolvedValue(attempt);
   getSequenceForAttempt.mockResolvedValue(sequence);
@@ -176,11 +181,22 @@ beforeEach(() => {
   assertSubmissionRate.mockResolvedValue(undefined);
   getConsentStatus.mockResolvedValue({ accepted: true, version: "test", acceptedAt: "2026-01-01T00:00:00Z" });
   storageUpload.mockResolvedValue({ error: null });
+  storageRemove.mockResolvedValue({ error: null });
   transcribeAudio.mockResolvedValue("This is a picture of an airport.");
   generatePilotResponseFeedback.mockResolvedValue("Nice description.");
 });
 
 describe("POST /api/sdea/submit-response", () => {
+  it("IA retorna depois da barreira: escrita recusada não vira sucesso 200", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "response-1", slot: 0 });
+    let release!: (text: string) => void;
+    transcribeAudio.mockImplementation(() => new Promise<string>((resolve) => { release = resolve; }));
+    const pending = POST(makeRequest());
+    await vi.waitFor(() => expect(transcribeAudio).toHaveBeenCalledOnce());
+    privacyWriteDenied = true;
+    release("conteúdo tardio");
+    expect((await pending).status).toBe(403);
+  });
   it("rejeita quando o consentimento de gravação ainda não foi aceito — Milestone 3.3, antes até de parsear o formulário", async () => {
     getConsentStatus.mockResolvedValue({ accepted: false, version: "test", acceptedAt: null });
     const formDataSpy = vi.fn();
