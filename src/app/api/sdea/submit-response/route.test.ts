@@ -51,6 +51,7 @@ vi.mock("@/lib/ai/pilot-track", () => ({
 
 const storageUpload = vi.fn();
 const storageRemove = vi.fn();
+const storageDownload = vi.fn();
 const adminUpdate = vi.fn();
 let accountStatus = "active";
 let privacyWriteDenied = false;
@@ -75,6 +76,20 @@ vi.mock("@/lib/supabase/admin", () => ({
         // Recheck de UX; a barreira transacional tem testes próprios.
         async maybeSingle() {
           if (table === "users") return { data: { status: accountStatus }, error: null };
+          if (table === "official_response_windows") return {
+            data: {
+              id: "window-1",
+              recording_started_at: "2026-09-14T12:00:00.000Z",
+              recording_finished_at: "2026-09-14T12:00:12.000Z",
+              repetition_count: 1,
+              expected_duration_seconds: 45,
+            },
+            error: null,
+          };
+          return { data: null, error: null };
+        },
+        async single() {
+          if (table === "pilot_responses") return { data: { audio_path: "user/attempt/response.webm" }, error: null };
           return { data: null, error: null };
         },
         then(resolve: (v: { data: null; error: { code: string; message: string } | null }) => void) {
@@ -86,7 +101,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     // desde a revisão do M3 — ver comentário equivalente na suíte da Fase 2.
     storage: {
       from() {
-        return { upload: storageUpload, remove: storageRemove };
+        return { upload: storageUpload, remove: storageRemove, download: storageDownload };
       },
     },
   }),
@@ -123,6 +138,7 @@ function makeRequest(
   formData.set("stage", overrides.stage ?? "picture_description");
   formData.set("slot", overrides.slot ?? "0");
   formData.set("repetitionCount", overrides.repetitionCount ?? "0");
+  if (overrides.resume) formData.set("resume", overrides.resume);
   if (audio) formData.set("audio", audio, "audio.webm");
   return {
     formData: async () => formData,
@@ -182,6 +198,7 @@ beforeEach(() => {
   getConsentStatus.mockResolvedValue({ accepted: true, version: "test", acceptedAt: "2026-01-01T00:00:00Z" });
   storageUpload.mockResolvedValue({ error: null });
   storageRemove.mockResolvedValue({ error: null });
+  storageDownload.mockResolvedValue({ data: new Blob(["stored"], { type: "audio/webm" }), error: null });
   transcribeAudio.mockResolvedValue("This is a picture of an airport.");
   generatePilotResponseFeedback.mockResolvedValue("Nice description.");
 });
@@ -285,6 +302,15 @@ describe("POST /api/sdea/submit-response", () => {
     expect(transcribeAudio).toHaveBeenCalledOnce();
     expect(generatePilotResponseFeedback).toHaveBeenCalledOnce();
     expect(body).toEqual({ transcript: "This is a picture of an airport.", feedback: "Nice description." });
+  });
+
+  it("retoma do upload persistido sem exigir nova gravação nem novo upload", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    const res = await POST(makeRequest({ resume: "true" }, { audio: null }));
+    expect(res.status).toBe(200);
+    expect(storageDownload).toHaveBeenCalledWith("user/attempt/response.webm");
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).toHaveBeenCalledOnce();
   });
 
   it("modo official não chama geração de feedback", async () => {

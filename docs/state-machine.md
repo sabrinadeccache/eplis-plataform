@@ -114,8 +114,9 @@ Sem alteração em relação ao documento original:
 - **Official**: zero feedback durante a entrevista; relatório completo (pontos fortes,
   pontos fracos, exemplos de melhoria, estimativa por critério) só ao final.
 
-**Regra de nota final:** o nível reportado é sempre o menor entre os 6 critérios —
-nunca uma média (segue a mesma lógica de segurança operacional do exame real).
+**Contrato provisório de nota final (M6):** até existir avaliação acústica validada,
+pronúncia e fluência ficam indisponíveis. O nível reportado é o menor entre estrutura,
+vocabulário, compreensão e interações — nunca uma média.
 
 ---
 
@@ -180,8 +181,8 @@ oficiais do SDEA:
   é específica da foto; itens 1–5 são fixos no runner (`PART4_*` em
   `pilot-interview-runner.tsx`), incluindo o sorteio 1-de-4 da pergunta de "antes".
 
-**Correção — mesma regra do controlador, com uma ressalva própria do exame:** nota final
-sempre o menor dos 6 critérios OACI, nunca média. A ressalva: os documentos oficiais do
+**Correção — mesmo contrato provisório do controlador, com uma ressalva própria do exame:**
+nota final é o menor dos quatro critérios sustentados pela transcrição. A ressalva: os documentos oficiais do
 SDEA são explícitos que a produção oral **não é julgada pela precisão técnica ou
 operacional** — isso inclui fraseologia de radiotelefonia. Mesmo na Parte 2 (readback
 inclusive), a IA avalia só proficiência linguística (estrutura, clareza, fluência,

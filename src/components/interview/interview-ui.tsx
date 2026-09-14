@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Part, SimulationMode } from "@/types/database";
 
 // Peças visuais compartilhadas pela IHM da entrevista (Fase 2 e SDEA). A lógica
@@ -115,11 +115,39 @@ export function InterviewStrip({
 
 export function RecLight({ active }: { active: boolean }) {
   return (
-    <div className={`iv-reclight${active ? " on" : ""}`}>
+    <div className={`iv-reclight${active ? " on" : ""}`} aria-live="polite">
       <span className="iv-dot" />
-      <span>REC</span>
+      <span>{active ? "REC" : "EM ESPERA"}</span>
     </div>
   );
+}
+
+const CAPTIONS_STORAGE_KEY = "eplis.interview.captions";
+
+export function usePersistedCaptions(): [boolean, () => void] {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setOn(window.localStorage?.getItem(CAPTIONS_STORAGE_KEY) === "on");
+      } catch {
+        // Storage pode estar indisponível em navegação privada ou no teste.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const toggle = () => {
+    setOn((current) => {
+      const next = !current;
+      try {
+        window.localStorage?.setItem(CAPTIONS_STORAGE_KEY, next ? "on" : "off");
+      } catch {
+        // A preferência segue válida nesta sessão mesmo sem persistência.
+      }
+      return next;
+    });
+  };
+  return [on, toggle];
 }
 
 export function StatusLine({
@@ -132,7 +160,7 @@ export function StatusLine({
   sub?: string;
 }) {
   return (
-    <div className="iv-status">
+    <div className="iv-status" role="status" aria-live="polite">
       <div className={`iv-now${tone === "rec" ? " rec" : tone === "speak" ? " speak" : ""}`}>
         {title}
       </div>
@@ -164,7 +192,7 @@ export function CaptionsToggle({
 
 export function CaptionsPanel({ text }: { text: string }) {
   return (
-    <div className="iv-cc">
+    <div className="iv-cc" role="region" aria-label="Legendas do examinador">
       <span className="iv-who">Examinador</span>
       {text}
     </div>

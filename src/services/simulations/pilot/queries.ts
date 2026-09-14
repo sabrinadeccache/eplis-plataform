@@ -20,6 +20,7 @@ export type PilotPrompt = {
   dialogueAudioUrl: string | null;
   discussionQuestion: string | null;
   discussionQuestion2: string | null;
+  comparisonQuestion?: string | null;
   imageUrl: string | null;
   agreeDisagreeStatement: string | null;
   expectedDurationSeconds: number;
@@ -61,6 +62,7 @@ type PromptRow = {
   dialogue_audio_url: string | null;
   discussion_question: string | null;
   discussion_question_2: string | null;
+  comparison_question: string | null;
   image_url: string | null;
   agree_disagree_statement: string | null;
   expected_duration_seconds: number;
@@ -94,6 +96,7 @@ function toPrompt(row: PromptRow): PilotPrompt {
     dialogueAudioUrl: row.dialogue_audio_url,
     discussionQuestion: row.discussion_question,
     discussionQuestion2: row.discussion_question_2,
+    comparisonQuestion: row.comparison_question,
     imageUrl: row.image_url,
     agreeDisagreeStatement: row.agree_disagree_statement,
     expectedDurationSeconds: row.expected_duration_seconds,
@@ -103,7 +106,7 @@ function toPrompt(row: PromptRow): PilotPrompt {
 const PROMPT_COLUMNS =
   "id, part, prompt_text, atc_audio_text, atc_audio_url, expected_readback, complication_text, " +
   "complication_image_url, expected_reaction, atc_followup_audio_text, atc_followup_audio_url, " +
-  "expected_confirmation, dialogue_audio_url, discussion_question, discussion_question_2, image_url, " +
+  "expected_confirmation, dialogue_audio_url, discussion_question, discussion_question_2, comparison_question, image_url, " +
   "agree_disagree_statement, expected_duration_seconds, order_index";
 
 // Ver comentário equivalente em src/services/simulations/phase2/queries.ts —

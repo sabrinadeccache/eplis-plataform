@@ -83,8 +83,9 @@ export default async function SdeaResultadoPage({
               <ProficiencyScale level={overall ?? null} />
             </div>
             <p className="mt-4 text-xs leading-relaxed text-muted">
-              O nível geral é sempre igual ao critério mais fraco entre os seis abaixo —
-              nunca uma média — por segurança operacional (Escala OACI).
+              O nível geral é o critério mais fraco entre estrutura, vocabulário,
+              compreensão e interações. Pronúncia e fluência não recebem nota sem
+              uma análise acústica validada.
             </p>
           </div>
 

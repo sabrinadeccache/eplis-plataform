@@ -28,9 +28,16 @@ describe("lowestProficiency", () => {
 });
 
 describe("normalizeFinalReport", () => {
-  it("força overall = menor dos 6 critérios, ignorando o que o modelo mandou", () => {
+  it("usa o menor dos quatro critérios textuais e marca os acústicos indisponíveis", () => {
     const out = normalizeFinalReport({ ...base, comprehension: "weak", overall: "excellent" });
     expect(out.overall).toBe("weak");
+    expect(out.pronunciation).toBeNull();
+    expect(out.fluency).toBeNull();
+  });
+
+  it("não deixa uma pseudo-nota acústica determinar o overall", () => {
+    const out = normalizeFinalReport({ ...base, pronunciation: "weak", fluency: "weak" });
+    expect(out.overall).toBe("good");
   });
 
   it("aceita a faixa nova 'excellent'", () => {

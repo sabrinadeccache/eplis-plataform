@@ -222,6 +222,7 @@ export type PilotPromptRow = {
   expected_confirmation: string | null;
   discussion_question: string | null;
   discussion_question_2: string | null;
+  comparison_question: string | null;
   image_url: string | null;
   agree_disagree_statement: string | null;
   order_index: number | null;
@@ -327,6 +328,26 @@ type PilotPromptInsert = Partial<Omit<PilotPromptRow, "id" | "created_at">> &
 type PilotResponseInsert = Partial<Omit<PilotResponseRow, "id" | "created_at">> &
   Pick<PilotResponseRow, "simulation_attempt_id" | "prompt_id" | "response_stage">;
 
+export type OfficialResponseWindowRow = {
+  id: string;
+  simulation_attempt_id: string;
+  prompt_id: string;
+  track: "phase2" | "pilot_interview";
+  item_slot: number;
+  response_stage: string;
+  expected_duration_seconds: number;
+  question_started_at: string;
+  question_finished_at: string | null;
+  recording_started_at: string | null;
+  recording_finished_at: string | null;
+  client_session_token: string | null;
+  repetition_count: number;
+  submitted_at: string | null;
+  created_at: string;
+};
+type OfficialResponseWindowInsert = Partial<Omit<OfficialResponseWindowRow, "id" | "created_at">> &
+  Pick<OfficialResponseWindowRow, "simulation_attempt_id" | "prompt_id" | "track" | "item_slot" | "response_stage" | "expected_duration_seconds">;
+
 // Registro do aceite de consentimento pra gravação de voz — M3.3 (migration
 // 20260912040000). Imutável por design: sem update/delete pra
 // `authenticated`, ver src/lib/simulations/consent.ts.
@@ -366,6 +387,7 @@ export type Database = {
       simulation_feedbacks: TableDef<SimulationFeedbackRow, SimulationFeedbackInsert>;
       recording_consents: TableDef<RecordingConsentRow, RecordingConsentInsert>;
       recording_access_log: TableDef<RecordingAccessLogRow, RecordingAccessLogInsert>;
+      official_response_windows: TableDef<OfficialResponseWindowRow, OfficialResponseWindowInsert>;
       privacy_deletion_requests: TableDef<{ user_id: string; requested_at: string }, { user_id: string }>;
       privacy_uploads: TableDef<{ id: string; user_id: string; response_id: string; track: "phase2" | "pilot"; started_at: string }, { user_id: string; response_id: string; track: "phase2" | "pilot" }>;
     };
@@ -376,6 +398,7 @@ export type Database = {
       request_privacy_deletion: { Args: { p_user_id: string }; Returns: boolean };
       claim_recording_cleanup: { Args: { p_track: string; p_response_id: string; p_now: string; p_orphan: boolean; p_expected_path?: string | null }; Returns: boolean };
       claim_recording_cleanup_batch: { Args: { p_track: string; p_candidates: { id: string; audio_path: string | null }[]; p_now: string; p_orphan: boolean }; Returns: { response_id: string; claimed: boolean; upload_pending: boolean }[] };
+      increment_official_repetition: { Args: { p_window_id: string }; Returns: number };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

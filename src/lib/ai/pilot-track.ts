@@ -157,22 +157,25 @@ export async function generatePilotResponseFeedback(
   return extractText(msg.content);
 }
 
-// Mesma regra inegociável de segurança operacional do relatório final do
-// controlador (nunca média, sempre o menor dos 6 critérios) — é uma regra da
-// Escala OACI, não específica de nenhuma trilha.
+// Mesmo contrato provisório do controlador: só critérios sustentados pela
+// transcrição determinam o overall até existir avaliador acústico validado.
 const PILOT_FINAL_REPORT_SYSTEM = `Você é um examinador do Santos Dumont English Assessment (SDEA)
-avaliando pela Escala de Proficiência OACI (Doc 9835), seis critérios: pronúncia, estrutura,
-vocabulário, fluência, compreensão, interações. ${PROFICIENCY_SCALE_PROMPT}
+avaliando evidências TRANSCRITAS. Classifique somente estrutura, vocabulário, compreensão e
+interações. ${PROFICIENCY_SCALE_PROMPT}
+
+Você não recebe o sinal acústico nesta etapa. Portanto, não atribua nota de pronúncia nem de
+fluência oral: devolva null nesses dois campos e explique no feedback que eles estão indisponíveis
+até haver avaliação acústica validada. Não faça inferências acústicas a partir da transcrição.
 
 REGRA OBRIGATÓRIA E NÃO NEGOCIÁVEL DE SEGURANÇA OPERACIONAL: o nível geral relatado (overall)
-NUNCA é uma média dos seis critérios — é sempre igual ao MENOR valor entre eles (o critério mais
+NUNCA é uma média — é sempre igual ao MENOR valor entre os quatro critérios disponíveis (o critério mais
 fraco determina o resultado geral), pois um único critério fraco pode comprometer a segurança em
 comunicações reais de tráfego aéreo.
 
 Regra específica deste exame: a produção oral do candidato NÃO é julgada pela precisão técnica ou
 operacional — isso inclui fraseologia de radiotelefonia. Nunca rebaixe nenhum critério, nem
 mencione no general_feedback, por causa de fraseologia incorreta ou não-padrão; avalie somente a
-proficiência linguística em si (pronúncia, estrutura, vocabulário, fluência, compreensão,
+proficiência linguística observável na transcrição (estrutura, vocabulário, compreensão,
 interações).
 
 Regra da Parte 2 (role-play em que o candidato interpreta o piloto, 4 respostas distintas por
@@ -199,24 +202,24 @@ gramática e clareza.
 
 Se alguma transcrição estiver vazia, ou for claramente ruído/fragmento cortado em vez de uma
 tentativa real de resposta em inglês, trate isso como um provável problema técnico (microfone) e
-NÃO use essa resposta específica para rebaixar nenhum dos 6 critérios — avalie os critérios com
+NÃO use essa resposta específica para rebaixar nenhum dos critérios disponíveis — avalie-os com
 base nas demais respostas e, se mencionar o caso no general_feedback, deixe claro que foi por
 motivo técnico, não de proficiência.
 
 Este relatório fica salvo como registro de progresso do aluno (mesmo a entrevista tendo sido
 conduzida em inglês) — escreva o campo general_feedback em português, explicando individualmente
-cada um dos 6 critérios (o que motivou a nota dada em cada um, com pelo menos um exemplo concreto
+cada um dos 4 critérios disponíveis (o que motivou a nota dada em cada um, com pelo menos um exemplo concreto
 extraído das respostas do candidato) e não só uma impressão geral, para que o aluno entenda
 exatamente onde está seu progresso e o que precisa melhorar.
 
 Responda APENAS com um JSON estrito, sem texto antes ou depois, no formato:
-{"pronunciation":"weak|moderate|good|excellent","structure":"weak|moderate|good|excellent","vocabulary":"weak|moderate|good|excellent","fluency":"weak|moderate|good|excellent","comprehension":"weak|moderate|good|excellent","interaction":"weak|moderate|good|excellent","overall":"<igual ao menor dos seis>","general_feedback":"<texto em português explicando cada um dos 6 critérios individualmente>"}`;
+{"pronunciation":null,"structure":"weak|moderate|good|excellent","vocabulary":"weak|moderate|good|excellent","fluency":null,"comprehension":"weak|moderate|good|excellent","interaction":"weak|moderate|good|excellent","overall":"<igual ao menor dos quatro critérios disponíveis>","general_feedback":"<texto em português explicando os quatro critérios disponíveis e a limitação acústica>"}`;
 
 const FALLBACK_REPORT: FinalReport = {
-  pronunciation: "moderate",
+  pronunciation: null,
   structure: "moderate",
   vocabulary: "moderate",
-  fluency: "moderate",
+  fluency: null,
   comprehension: "moderate",
   interaction: "moderate",
   overall: "moderate",

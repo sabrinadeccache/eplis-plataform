@@ -73,7 +73,9 @@ export function CriteriaGrid({
                 {PROFICIENCY_LABEL[level]}
               </>
             ) : (
-              "—"
+              key === "pronunciation_score" || key === "fluency_score"
+                ? "Indisponível sem análise acústica"
+                : "—"
             )}
           </p>
         </div>

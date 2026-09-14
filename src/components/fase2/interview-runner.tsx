@@ -20,6 +20,7 @@ import {
   CaptionsPanel,
   formatElapsed,
   createMicAnalyser,
+  usePersistedCaptions,
 } from "@/components/interview/interview-ui";
 
 // Tudo que a IA fala é em inglês (inclusive introduções/instruções) — o
@@ -140,7 +141,8 @@ function ResponseStartTimer({ seconds, onExpire }: { seconds: number; onExpire: 
   );
 }
 
-type RecorderState = "waiting_ai" | "ready" | "recording" | "paused" | "submitting" | "feedback";
+type RecorderState = "waiting_ai" | "ready" | "recording" | "paused" | "submitting" | "submit_error" | "feedback";
+type ProcessingStage = "uploading" | "transcribing" | "evaluating";
 
 function stepKey(part: Part, itemIndex: number, stepIndex: number): string {
   return `${part}-${itemIndex}-${stepIndex}`;
@@ -152,6 +154,21 @@ function stepKey(part: Part, itemIndex: number, stepIndex: number): string {
 // só mostrar o botão "ativar áudio" quando for realmente isso.
 function isAutoplayBlocked(err: unknown): boolean {
   return err instanceof DOMException && err.name === "NotAllowedError";
+}
+
+class OfficialEventError extends Error {
+  constructor(message: string, readonly canResume = false) { super(message); }
+}
+
+async function postOfficialEvent(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const response = await fetch("/api/simulations/official-window", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ track: "phase2", ...payload }),
+  });
+  const body = (await response.json().catch(() => ({}))) as { error?: string; canResume?: boolean };
+  if (!response.ok) throw new OfficialEventError(body.error ?? "Não foi possível registrar o relógio oficial.", body.canResume);
+  return body;
 }
 
 // TTS (OpenAI) falha esporadicamente por causa transitória (rede, rate limit).
@@ -205,7 +222,10 @@ export function InterviewRunner({
   const [awaitingFeedbackSpeech, setAwaitingFeedbackSpeech] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const [captionsOn, setCaptionsOn] = useState(false);
+  const [captionsOn, toggleCaptions] = usePersistedCaptions();
+  const [processingStage, setProcessingStage] = useState<ProcessingStage>("uploading");
+  const [submitError, setSubmitError] = useState<{ message: string; code: string } | null>(null);
+  const [resumeFromStoredAudio, setResumeFromStoredAudio] = useState(false);
   const [elapsed, setElapsed] = useState(initialElapsedSeconds);
   const [micAnalyser, setMicAnalyser] = useState<AnalyserNode | null>(null);
   const [stepSpeechFailed, setStepSpeechFailed] = useState(false);
@@ -217,6 +237,10 @@ export function InterviewRunner({
   const chunksRef = useRef<Blob[]>([]);
   const advancingItemRef = useRef(false);
   const micAnalyserRef = useRef<{ analyser: AnalyserNode; close: () => void } | null>(null);
+  const recordingLimitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const submittingRef = useRef(false);
+  const officialFinishedRef = useRef(false);
+  const officialSessionTokenRef = useRef(crypto.randomUUID());
 
   const teardownMic = useCallback(() => {
     micAnalyserRef.current?.close();
@@ -249,6 +273,18 @@ export function InterviewRunner({
   const currentPrompt = pickPrompt(sequence, part, itemIndex);
   const steps = buildSteps(part, itemIndex, currentPrompt);
   const currentStep = steps[stepIndex];
+  const currentSlot = steps.slice(0, stepIndex).filter((step) => step.kind === "response").length;
+
+  const officialEvent = useCallback((event: string) => {
+    return postOfficialEvent({
+      event,
+      attemptId,
+      promptId: currentPrompt.id,
+      stage: currentStep.stage,
+      slot: currentSlot,
+      clientSessionToken: officialSessionTokenRef.current,
+    });
+  }, [attemptId, currentPrompt.id, currentStep.stage, currentSlot]);
 
   // Mesma trava usada no Phase1Runner (advancingRef): o timer automático de
   // 3s do step "auto" e o clique manual em "Continuar" podem disparar
@@ -345,6 +381,7 @@ export function InterviewRunner({
       if (finished) return;
       finished = true;
       if (step.kind === "response") {
+        if (mode === "official") void officialEvent("question_finished").catch(() => {});
         setRecorderState("ready");
       } else if (step.kind === "auto") {
         advanceTimeout = setTimeout(() => goToNextStepRef.current(), 3000);
@@ -361,6 +398,7 @@ export function InterviewRunner({
       .then(({ audioBase64, mimeType }) => {
         if (cancelled) return;
         audio.src = `data:${mimeType};base64,${audioBase64}`;
+        if (step.kind === "response" && mode === "official") void officialEvent("question_started").catch(() => {});
         audio.play().catch((err) => {
           if (cancelled) return;
           if (isAutoplayBlocked(err)) setAudioBlocked(true);
@@ -379,7 +417,7 @@ export function InterviewRunner({
       audio.removeEventListener("ended", onFinished);
       audio.removeEventListener("error", onFinished);
     };
-  }, [part, itemIndex, stepIndex, sequence, attemptId, speechNonce]);
+  }, [part, itemIndex, stepIndex, sequence, attemptId, speechNonce, mode, officialEvent]);
 
   // Clique real do usuário — o navegador aceita isso como gesto válido pra
   // desbloquear autoplay no elemento de áudio daqui em diante, mesmo que o
@@ -396,6 +434,7 @@ export function InterviewRunner({
   function replayAudio() {
     const audio = audioRef.current;
     if (!audio) return;
+    if (mode === "official") void officialEvent("repeat").catch(() => {});
     if (!audio.src || stepSpeechFailed) {
       setSpeechNonce((n) => n + 1);
       setRepetitionCount((c) => c + 1);
@@ -426,6 +465,21 @@ export function InterviewRunner({
       );
       return;
     }
+    if (mode === "official") {
+      try {
+        await officialEvent("recording_started");
+      } catch (error) {
+        stream.getTracks().forEach((track) => track.stop());
+        if (error instanceof OfficialEventError && error.canResume) {
+          setResumeFromStoredAudio(true);
+          setSubmitError({ message: error.message, code: `CTL-${attemptId.slice(0, 8).toUpperCase()}` });
+          setRecorderState("submit_error");
+          return;
+        }
+        setMicError(error instanceof Error ? error.message : "Não foi possível iniciar a gravação oficial.");
+        return;
+      }
+    }
     const recorder = new MediaRecorder(stream);
     chunksRef.current = [];
     recorder.ondataavailable = (e) => {
@@ -439,6 +493,12 @@ export function InterviewRunner({
     micAnalyserRef.current = mic;
     setMicAnalyser(mic?.analyser ?? null);
     setRecorderState("recording");
+    if (mode === "official") {
+      recordingLimitRef.current = setTimeout(
+        () => finishAndSubmit(),
+        Math.max(1, currentPrompt.expectedDurationSeconds) * 1000,
+      );
+    }
   }
 
   function pauseRecording() {
@@ -506,10 +566,27 @@ export function InterviewRunner({
   }
 
   function finishAndSubmit() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitError(null);
+    setProcessingStage("uploading");
+    if (recordingLimitRef.current) clearTimeout(recordingLimitRef.current);
     setRecorderState("submitting");
     teardownMic();
     stopRecorderAndGetBlob().then((blob) => {
       startTransition(async () => {
+        try {
+        if (mode === "official" && !officialFinishedRef.current && !resumeFromStoredAudio) {
+          try {
+            await officialEvent("recording_finished");
+          } catch (error) {
+            submittingRef.current = false;
+            setMicError(error instanceof Error ? error.message : "Não foi possível encerrar a gravação oficial.");
+            setRecorderState("ready");
+            return;
+          }
+          officialFinishedRef.current = true;
+        }
         // Upload via multipart/form-data numa route handler comum, NÃO uma
         // Server Action — o áudio em base64 como argumento de Server Action
         // estourava o limite interno de decodificação do protocolo Flight
@@ -531,9 +608,17 @@ export function InterviewRunner({
         // "narrative" duas vezes no mesmo item).
         formData.append("slot", String(steps.slice(0, stepIndex).filter((s) => s.kind === "response").length));
         formData.append("repetitionCount", String(repetitionCount));
-        formData.append("audio", blob, `audio.${blob.type.includes("mp4") ? "mp4" : "webm"}`);
+        if (resumeFromStoredAudio) formData.append("resume", "true");
+        else formData.append("audio", blob, `audio.${blob.type.includes("mp4") ? "mp4" : "webm"}`);
 
-        const res = await fetch("/api/phase2/submit-response", { method: "POST", body: formData });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 120_000);
+        const transcribingTimer = setTimeout(() => setProcessingStage("transcribing"), 1200);
+        const evaluatingTimer = mode === "practice" ? setTimeout(() => setProcessingStage("evaluating"), 7000) : null;
+        const res = await fetch("/api/phase2/submit-response", { method: "POST", body: formData, signal: controller.signal });
+        clearTimeout(timeout);
+        clearTimeout(transcribingTimer);
+        if (evaluatingTimer) clearTimeout(evaluatingTimer);
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error ?? "Não foi possível enviar a resposta.");
@@ -544,11 +629,14 @@ export function InterviewRunner({
         // relatório final) — pula direto pro próximo estágio/item, sem card nem
         // áudio de feedback.
         if (mode === "official") {
+          submittingRef.current = false;
+          setResumeFromStoredAudio(false);
           goToNextStep();
           return;
         }
 
         setFeedback(result.feedback);
+        submittingRef.current = false;
         setRecorderState("feedback");
 
         // A IA "fala" o feedback, como um entrevistador de verdade, além de
@@ -584,14 +672,26 @@ export function InterviewRunner({
             setAwaitingFeedbackSpeech(false);
           }
         }
+        } catch (error) {
+          submittingRef.current = false;
+          const code = `CTL-${attemptId.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+          setSubmitError({
+            message: error instanceof Error && error.name === "AbortError"
+              ? "O processamento demorou além do esperado. Seu áudio foi preservado para nova tentativa."
+              : error instanceof Error ? error.message : "Não foi possível processar a resposta.",
+            code,
+          });
+          setRecorderState("submit_error");
+        }
       });
     });
   }
 
   const isRecording = recorderState === "recording" || recorderState === "paused";
+  const isActivelyRecording = recorderState === "recording";
   // Imagem da Parte 4: dividir o retângulo da IHM com o visualizador no desktop.
   const part4Image = part === "part4" ? currentPrompt.imageUrl : null;
-  const orbState: OrbState = isRecording
+  const orbState: OrbState = isActivelyRecording
     ? "rec"
     : speaking || recorderState === "waiting_ai" || awaitingFeedbackSpeech
       ? "speak"
@@ -601,9 +701,15 @@ export function InterviewRunner({
     if (recorderState === "recording")
       return { tone: "rec", title: "Sua vez — gravando", sub: "Fale sua resposta e conclua quando terminar." };
     if (recorderState === "paused")
-      return { tone: "rec", title: "Gravação pausada", sub: "Retome quando estiver pronto." };
+      return { tone: "idle", title: "Gravação pausada", sub: "Retome quando estiver pronto." };
     if (recorderState === "submitting")
-      return { tone: "idle", title: "Processando", sub: "Transcrevendo e avaliando sua resposta…" };
+      return {
+        tone: "idle",
+        title: processingStage === "uploading" ? "Enviando áudio" : processingStage === "transcribing" ? "Transcrevendo" : "Avaliando",
+        sub: "Normalmente leva de 20 a 60 segundos. Mantenha esta tela aberta.",
+      };
+    if (recorderState === "submit_error")
+      return { tone: "idle", title: "Processamento interrompido", sub: "Tente novamente sem gravar outra resposta." };
     if (recorderState === "feedback")
       return awaitingFeedbackSpeech
         ? { tone: "speak", title: "Examinador falando", sub: "Ouça o comentário do examinador." }
@@ -628,7 +734,7 @@ export function InterviewRunner({
   // exame real.
   const captionsControl =
     mode === "official" ? null : (
-      <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+      <CaptionsToggle on={captionsOn} onToggle={toggleCaptions} />
     );
 
   function renderDeck() {
@@ -649,6 +755,7 @@ export function InterviewRunner({
         <>
           <KeyButton icon="mic" label="Falar" variant="primary" onClick={startRecording} />
           <KeyButton icon="replay" label={stepSpeechFailed ? "Ouvir a pergunta" : "Repetir pergunta"} onClick={replayAudio} />
+          <DeckNote>Repetições são consideradas no critério de compreensão.</DeckNote>
           <DeckSpacer />
           {captionsControl}
         </>
@@ -659,6 +766,7 @@ export function InterviewRunner({
       return (
         <>
           <KeyButton icon="replay" label={stepSpeechFailed ? "Ouvir a pergunta" : "Repetir pergunta"} onClick={replayAudio} />
+          <DeckNote>Uma repetição é tolerada; repetições adicionais afetam compreensão.</DeckNote>
           <DeckSpacer />
           {captionsControl}
         </>
@@ -696,11 +804,15 @@ export function InterviewRunner({
     if (recorderState === "submitting") {
       return (
         <>
-          <DeckNote>Transcrevendo e avaliando sua resposta…</DeckNote>
+          <DeckNote>{processingStage === "uploading" ? "Enviando áudio com segurança…" : processingStage === "transcribing" ? "Transcrevendo sua resposta…" : "Avaliando sua resposta…"}</DeckNote>
           <DeckSpacer />
           {captionsControl}
         </>
       );
+    }
+
+    if (recorderState === "submit_error") {
+      return <><KeyButton icon="send" label="Tentar processamento novamente" variant="primary" onClick={finishAndSubmit} /><DeckSpacer />{captionsControl}</>;
     }
 
     if (recorderState === "feedback") {
@@ -722,7 +834,7 @@ export function InterviewRunner({
       <>
         <DeckNote>Aguarde a IA terminar de falar…</DeckNote>
         <DeckSpacer />
-        <CaptionsToggle on={captionsOn} onToggle={() => setCaptionsOn((v) => !v)} />
+        <CaptionsToggle on={captionsOn} onToggle={toggleCaptions} />
       </>
     );
   }
@@ -733,6 +845,7 @@ export function InterviewRunner({
       <audio ref={feedbackAudioRef} />
 
       {micError && <div className="note note-danger">{micError}</div>}
+      {submitError && <div className="note note-danger" role="alert">{submitError.message} Código para suporte: <strong>{submitError.code}</strong>.</div>}
 
       {stepSpeechFailed && currentStep.kind === "response" && recorderState === "ready" && (
         <div className="note note-caution">
@@ -778,7 +891,7 @@ export function InterviewRunner({
 
         <div className={`iv-stage${part4Image ? " iv-stage--split" : ""}`}>
           <div className="iv-stage-col">
-            <RecLight active={isRecording} />
+            <RecLight active={isActivelyRecording} />
             <div className="iv-orb-wrap">
               <AudioOrb
                 state={orbState}

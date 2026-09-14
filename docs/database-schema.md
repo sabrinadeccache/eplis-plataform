@@ -211,7 +211,7 @@ servidora autorizada, sem expor o gabarito ao cliente.
 - **Parte 2: só repetição da frase é aceita — esclarecimento de vocabulário NÃO é permitido nessa parte**, porque o item avalia justamente se o candidato entendeu o vocabulário/estrutura sem ajuda.
 - Uso excessivo dessas estratégias não é esperado para candidatos em nível 5/6 — é sinal para a IA considerar na avaliação de "Interações", não motivo de bloqueio técnico.
 
-**Timeout de início de resposta [ALTERADO 2026-08-11]:** no modo `official`, não existe botão manual para começar a falar — 5s depois da pergunta ser apresentada, a gravação começa sozinha (fidelidade ao exame real, decisão da Sabrina). Isso é um timer diferente do timer de duração da resposta (ainda não implementado) e é controlado separadamente na state machine (ver `docs/state-machine.md`).
+**Timeouts oficiais [M5]:** no modo `official`, não existe botão manual para começar a falar: 5s depois da pergunta, a gravação começa sozinha. O cliente encerra no `expected_duration_seconds`; o servidor persiste início/fim e valida a duração real decodificada com tolerância de 3s.
 
 ---
 
@@ -222,14 +222,14 @@ servidora autorizada, sem expor o gabarito ao cliente.
 | id | uuid | |
 | simulation_attempt_id | uuid → simulation_attempts | |
 | phase | enum | `phase1`, `phase2`, `pilot_interview` |
-| overall_score | text/numeric | Fase 1: percentual. Fase 2/SDEA: estimativa geral (menor dos 6 critérios) |
+| overall_score | text/numeric | Fase 1: percentual. Fase 2/SDEA: menor dos 4 critérios hoje sustentados pela transcrição |
 | pronunciation_score / structure_score / vocabulary_score / fluency_score / comprehension_score / interaction_score | enum `public.proficiency_level` | 4 faixas (**[2026-08-27]**, migration `20260827000000_add_excellent_proficiency_level.sql`): `weak` = Fraco (N1–N3), `moderate` = Moderado (N4), `good` = Ótimo (N5), `excellent` = Excelente (N6). Antes eram 3 (`good` rotulado "Bom"); linhas históricas com `good` passam a ser exibidas como "Ótimo", sem migração de dados. Evolução futura: escala numérica OACI 1–6 |
 | general_feedback | text | |
 | ai_provider | text, nullable | |
 | model_version | text, nullable | |
 | created_at | timestamp | |
 
-**Regra de nota final (Doc 9835 / Manual do Examinando item 5.2):** por segurança operacional, o nível final é sempre o **menor** valor obtido entre os 6 critérios — não uma média. Essa regra deve estar no prompt de correção da IA como instrução explícita, não como algo inferido. Vale igualmente pro SDEA (ver seção 9) — é uma regra da Escala OACI, não específica do exame do controlador.
+**Contrato provisório de avaliação (M6):** enquanto o pipeline não tiver um avaliador acústico validado, `pronunciation_score` e `fluency_score` ficam `null` e não determinam o resultado. O nível final é o menor entre estrutura, vocabulário, compreensão e interações, os quatro critérios sustentados pela transcrição. A interface identifica explicitamente os dois critérios indisponíveis; eles não são apresentados como avaliação acústica.
 
 ---
 

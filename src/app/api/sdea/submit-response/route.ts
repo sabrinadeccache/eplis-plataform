@@ -11,7 +11,7 @@ import { assertAccountStillActive } from "@/lib/simulations/attempt-guards";
 import { getSequenceForAttempt, type PilotItemSequence } from "@/services/simulations/pilot/queries";
 import { responseStagesForPilotItem } from "@/services/simulations/pilot/response-stages";
 import { sdeaAircraftType } from "@/lib/auth/roles";
-import { validateAudioContainer, validateDecodedAudio, MAX_REQUEST_BODY_BYTES } from "@/lib/audio/validate";
+import { validateAudioContainer, validateDecodedAudio, MAX_REQUEST_BODY_BYTES, type AudioContainer } from "@/lib/audio/validate";
 import {
   assertCurrentPrompt,
   assertContentLengthWithinLimit,
@@ -22,6 +22,7 @@ import { assertSubmissionRate } from "@/lib/simulations/rate-limit";
 import { buildRecordingPath } from "@/lib/simulations/recording-access";
 import { recordingExpiresAt } from "@/lib/simulations/retention";
 import { getConsentStatus } from "@/lib/simulations/consent";
+import { validateOfficialTiming, type OfficialWindow } from "@/lib/simulations/official-timing";
 import type { Part, PilotResponseStage, SimulationMode } from "@/types/database";
 
 // Envio da resposta gravada da trilha do piloto/SDEA — mesmo motivo da rota
@@ -68,7 +69,8 @@ export async function POST(request: Request) {
   const promptId = formData.get("promptId");
   const stage = formData.get("stage") as PilotResponseStage | null;
   const slotRaw = formData.get("slot");
-  const repetitionCount = Number(formData.get("repetitionCount") ?? 0);
+  const clientRepetitionCount = Number(formData.get("repetitionCount") ?? 0);
+  const resume = formData.get("resume") === "true";
   const audio = formData.get("audio");
 
   if (
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
     typeof promptId !== "string" ||
     typeof stage !== "string" ||
     typeof slotRaw !== "string" ||
-    !(audio instanceof Blob)
+    (!(audio instanceof Blob) && !resume)
   ) {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
   }
@@ -91,11 +93,15 @@ export async function POST(request: Request) {
 
   // Checagem barata (tamanho/MIME/assinatura) — o decode real vem depois da
   // reserva de slot, mais abaixo.
-  const mimeType = audio.type || "audio/webm";
-  const buffer = Buffer.from(await audio.arrayBuffer());
-  const containerCheck = validateAudioContainer(buffer, mimeType);
-  if (!containerCheck.ok) {
-    return NextResponse.json({ error: containerCheck.reason }, { status: 422 });
+  let mimeType = audio instanceof Blob ? audio.type || "audio/webm" : "audio/webm";
+  let buffer = audio instanceof Blob ? Buffer.from(await audio.arrayBuffer()) : Buffer.alloc(0);
+  let container: AudioContainer = mimeType.includes("mp4") ? "mp4" : "webm";
+  if (!resume) {
+    const containerCheck = validateAudioContainer(buffer, mimeType);
+    if (!containerCheck.ok) {
+      return NextResponse.json({ error: containerCheck.reason }, { status: 422 });
+    }
+    container = containerCheck.container;
   }
 
   // Escrita em pilot_responses só via service_role. Autorização + posse acima.
@@ -113,6 +119,15 @@ export async function POST(request: Request) {
     );
     const expectedPrompt = sequence[currentPart]?.[currentItemIndex];
     assertCurrentPrompt(expectedPrompt?.id, promptId);
+
+    let officialWindow: OfficialWindow | null = null;
+    if (attempt.mode === "official") {
+      const { data } = await admin.from("official_response_windows")
+        .select("id, recording_started_at, recording_finished_at, repetition_count, expected_duration_seconds")
+        .eq("simulation_attempt_id", attemptId).eq("prompt_id", promptId).eq("item_slot", slot).maybeSingle();
+      if (!data) throw new ItemGuardError("A janela oficial desta gravação não foi registrada.", 409);
+      officialWindow = data as OfficialWindow;
+    }
 
     const reservation = await reserveResponseSlot({
       supabase,
@@ -141,10 +156,33 @@ export async function POST(request: Request) {
 
     const responseId = reservation.responseId;
 
+    let storedPath: string | null = null;
+    if (resume) {
+      const { data: stored } = await admin.from("pilot_responses").select("audio_path").eq("id", responseId).single();
+      storedPath = stored?.audio_path ?? null;
+      if (!storedPath) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        return NextResponse.json({ error: "Não há upload concluído para retomar." }, { status: 409 });
+      }
+      const { data: storedAudio, error: downloadError } = await admin.storage.from("pilot-recordings").download(storedPath);
+      if (downloadError || !storedAudio) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        return NextResponse.json({ error: "Não foi possível recuperar o áudio já enviado." }, { status: 503 });
+      }
+      mimeType = storedPath.endsWith(".mp4") ? "audio/mp4" : "audio/webm";
+      buffer = Buffer.from(await storedAudio.arrayBuffer());
+      const containerCheck = validateAudioContainer(buffer, mimeType);
+      if (!containerCheck.ok) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        return NextResponse.json({ error: containerCheck.reason }, { status: 422 });
+      }
+      container = containerCheck.container;
+    }
+
     // Só agora, com o slot já reservado (rate limit e corrida já passaram),
     // decodifica de verdade. Arquivo inválido marca ESTA linha como erro —
     // conta pro teto de retry do slot, não é mais uma tentativa "de graça".
-    const validation = await validateDecodedAudio(buffer, containerCheck.container);
+    const validation = await validateDecodedAudio(buffer, container);
     if (!validation.ok) {
       assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
       // 503 quando o problema é NOSSO (o validador não rodou) — só 422
@@ -154,6 +192,7 @@ export async function POST(request: Request) {
       const status = validation.kind === "unavailable" ? 503 : 422;
       return NextResponse.json({ error: validation.reason }, { status });
     }
+    if (officialWindow) validateOfficialTiming(officialWindow, validation.durationSeconds);
 
     // Rechecagem de UX; a garantia de exclusão é a barreira transacional
     // + reserva de upload em privacy-barrier.ts / migration 070000.
@@ -167,11 +206,11 @@ export async function POST(request: Request) {
     const ext = validation.container === "mp4" ? "mp4" : "webm";
     // Caminho DETERMINÍSTICO por responseId (M3, revisão 2026-09-12) — ver
     // comentário equivalente na rota da Fase 2 e em recording-access.ts.
-    const path = buildRecordingPath({ userId, attemptId, responseId });
+    const path = storedPath ?? buildRecordingPath({ userId, attemptId, responseId });
 
     // Bucket privado, sem policy nenhuma pra `authenticated` (migration
     // 20260912050000) — o upload é SÓ por service_role.
-    const { error: uploadError } = await withPrivacyUpload(
+    const { error: uploadError } = resume ? { error: null } : await withPrivacyUpload(
       admin,
       userId,
       responseId,
@@ -190,11 +229,11 @@ export async function POST(request: Request) {
     // Bucket privado (M3.1): guarda o CAMINHO do objeto, não uma URL
     // pública. O acesso é por URL assinada de vida curta, gerada só depois
     // de confirmar autorização — ver createRecordingSignedUrl.
-    const { error: pathUpdateError } = await admin
+    const { error: pathUpdateError } = resume ? { error: null } : await admin
       .from("pilot_responses")
       .update({
         audio_path: path,
-        repetition_count: repetitionCount,
+        repetition_count: officialWindow?.repetition_count ?? Math.max(0, Math.min(20, clientRepetitionCount || 0)),
         // Prazo de retenção da GRAVAÇÃO (M3.2): practice 30 dias, official
         // 180. Gravado explicitamente pra a retenção ser auditável — ver
         // src/lib/simulations/retention.ts.
@@ -236,6 +275,10 @@ export async function POST(request: Request) {
         .from("pilot_responses")
         .update({ processing_status: "done", finished_at: new Date().toISOString() })
         .eq("id", responseId));
+
+      if (officialWindow) {
+        await admin.from("official_response_windows").update({ submitted_at: new Date().toISOString() }).eq("id", officialWindow.id);
+      }
 
       return NextResponse.json({ transcript, feedback: null });
     }
