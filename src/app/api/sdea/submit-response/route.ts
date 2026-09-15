@@ -1,3 +1,4 @@
+import { withPrivacyUpload, assertPrivacyWrite, privacyWriteError } from "@/lib/simulations/privacy-barrier";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -6,10 +7,11 @@ import { transcribeAudio } from "@/lib/ai/openai";
 import { generatePilotResponseFeedback, MODEL_VERSION, type PilotFeedbackStage } from "@/lib/ai/pilot-track";
 import { pilotResponseContext } from "@/services/simulations/pilot/context";
 import { assertOwnAttemptInProgress } from "@/services/simulations/pilot/actions";
+import { assertAccountStillActive } from "@/lib/simulations/attempt-guards";
 import { getSequenceForAttempt, type PilotItemSequence } from "@/services/simulations/pilot/queries";
 import { responseStagesForPilotItem } from "@/services/simulations/pilot/response-stages";
 import { sdeaAircraftType } from "@/lib/auth/roles";
-import { validateAudioContainer, validateDecodedAudio, MAX_REQUEST_BODY_BYTES } from "@/lib/audio/validate";
+import { validateAudioContainer, validateDecodedAudio, sniffAudioContainer, MAX_REQUEST_BODY_BYTES, type AudioContainer } from "@/lib/audio/validate";
 import {
   assertCurrentPrompt,
   assertContentLengthWithinLimit,
@@ -17,7 +19,11 @@ import {
   ItemGuardError,
 } from "@/lib/simulations/item-guard";
 import { assertSubmissionRate } from "@/lib/simulations/rate-limit";
-import type { Part, PilotResponseStage } from "@/types/database";
+import { buildRecordingPath } from "@/lib/simulations/recording-access";
+import { recordingExpiresAt } from "@/lib/simulations/retention";
+import { getConsentStatus } from "@/lib/simulations/consent";
+import { validateOfficialTiming, type OfficialWindow } from "@/lib/simulations/official-timing";
+import type { Part, PilotResponseStage, SimulationMode } from "@/types/database";
 
 // Envio da resposta gravada da trilha do piloto/SDEA — mesmo motivo da rota
 // equivalente da Fase 2 (route handler comum, não Server Action, por causa do
@@ -51,12 +57,20 @@ export async function POST(request: Request) {
     throw error;
   }
 
+  // Milestone 3.3: ver comentário equivalente na rota da Fase 2 — o gate na
+  // tela é UX, esta é a checagem que de fato impede a gravação.
+  const consent = await getConsentStatus(supabase, userId);
+  if (!consent.accepted) {
+    return NextResponse.json({ error: "Consentimento de gravação ainda não registrado." }, { status: 403 });
+  }
+
   const formData = await request.formData();
   const attemptId = formData.get("attemptId");
   const promptId = formData.get("promptId");
   const stage = formData.get("stage") as PilotResponseStage | null;
   const slotRaw = formData.get("slot");
-  const repetitionCount = Number(formData.get("repetitionCount") ?? 0);
+  const clientRepetitionCount = Number(formData.get("repetitionCount") ?? 0);
+  const resume = formData.get("resume") === "true";
   const audio = formData.get("audio");
 
   if (
@@ -64,7 +78,7 @@ export async function POST(request: Request) {
     typeof promptId !== "string" ||
     typeof stage !== "string" ||
     typeof slotRaw !== "string" ||
-    !(audio instanceof Blob)
+    (!(audio instanceof Blob) && !resume)
   ) {
     return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
   }
@@ -79,11 +93,15 @@ export async function POST(request: Request) {
 
   // Checagem barata (tamanho/MIME/assinatura) — o decode real vem depois da
   // reserva de slot, mais abaixo.
-  const mimeType = audio.type || "audio/webm";
-  const buffer = Buffer.from(await audio.arrayBuffer());
-  const containerCheck = validateAudioContainer(buffer, mimeType);
-  if (!containerCheck.ok) {
-    return NextResponse.json({ error: containerCheck.reason }, { status: 422 });
+  let mimeType = audio instanceof Blob ? audio.type || "audio/webm" : "audio/webm";
+  let buffer = audio instanceof Blob ? Buffer.from(await audio.arrayBuffer()) : Buffer.alloc(0);
+  let container: AudioContainer = mimeType.includes("mp4") ? "mp4" : "webm";
+  if (!resume) {
+    const containerCheck = validateAudioContainer(buffer, mimeType);
+    if (!containerCheck.ok) {
+      return NextResponse.json({ error: containerCheck.reason }, { status: 422 });
+    }
+    container = containerCheck.container;
   }
 
   // Escrita em pilot_responses só via service_role. Autorização + posse acima.
@@ -101,6 +119,15 @@ export async function POST(request: Request) {
     );
     const expectedPrompt = sequence[currentPart]?.[currentItemIndex];
     assertCurrentPrompt(expectedPrompt?.id, promptId);
+
+    let officialWindow: OfficialWindow | null = null;
+    if (attempt.mode === "official") {
+      const { data } = await admin.from("official_response_windows")
+        .select("id, recording_started_at, recording_finished_at, repetition_count, expected_duration_seconds")
+        .eq("simulation_attempt_id", attemptId).eq("prompt_id", promptId).eq("item_slot", slot).maybeSingle();
+      if (!data) throw new ItemGuardError("A janela oficial desta gravação não foi registrada.", 409);
+      officialWindow = data as OfficialWindow;
+    }
 
     const reservation = await reserveResponseSlot({
       supabase,
@@ -129,12 +156,40 @@ export async function POST(request: Request) {
 
     const responseId = reservation.responseId;
 
+    let storedPath: string | null = null;
+    if (resume) {
+      const { data: stored } = await admin.from("pilot_responses").select("audio_path").eq("id", responseId).single();
+      storedPath = stored?.audio_path ?? null;
+      if (!storedPath) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        return NextResponse.json({ error: "Não há upload concluído para retomar." }, { status: 409 });
+      }
+      const { data: storedAudio, error: downloadError } = await admin.storage.from("pilot-recordings").download(storedPath);
+      if (downloadError || !storedAudio) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        return NextResponse.json({ error: "Não foi possível recuperar o áudio já enviado." }, { status: 503 });
+      }
+      buffer = Buffer.from(await storedAudio.arrayBuffer());
+      const storedContainer = sniffAudioContainer(buffer);
+      if (!storedContainer) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        return NextResponse.json({ error: "O áudio armazenado está corrompido ou em formato não reconhecido." }, { status: 422 });
+      }
+      mimeType = storedContainer === "mp4" ? "audio/mp4" : "audio/webm";
+      const containerCheck = validateAudioContainer(buffer, mimeType);
+      if (!containerCheck.ok) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        return NextResponse.json({ error: containerCheck.reason }, { status: 422 });
+      }
+      container = containerCheck.container;
+    }
+
     // Só agora, com o slot já reservado (rate limit e corrida já passaram),
     // decodifica de verdade. Arquivo inválido marca ESTA linha como erro —
     // conta pro teto de retry do slot, não é mais uma tentativa "de graça".
-    const validation = await validateDecodedAudio(buffer, containerCheck.container);
+    const validation = await validateDecodedAudio(buffer, container);
     if (!validation.ok) {
-      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
+      assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
       // 503 quando o problema é NOSSO (o validador não rodou) — só 422
       // quando o arquivo do candidato é que não presta. Sem essa distinção,
       // uma falha de infraestrutura aparecia pro candidato como "seu áudio
@@ -142,40 +197,80 @@ export async function POST(request: Request) {
       const status = validation.kind === "unavailable" ? 503 : 422;
       return NextResponse.json({ error: validation.reason }, { status });
     }
+    if (officialWindow) {
+      try {
+        validateOfficialTiming(officialWindow, validation.durationSeconds);
+      } catch (error) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        throw error;
+      }
+    }
+
+    // Rechecagem de UX; a garantia de exclusão é a barreira transacional
+    // + reserva de upload em privacy-barrier.ts / migration 070000.
+    try {
+      await assertAccountStillActive(admin, userId);
+    } catch {
+      assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+      return NextResponse.json({ error: "Conta não está mais ativa." }, { status: 403 });
+    }
 
     const ext = validation.container === "mp4" ? "mp4" : "webm";
-    const path = `${attemptId}/${promptId}-${stage}-${Date.now()}.${ext}`;
+    // Caminho DETERMINÍSTICO por responseId (M3, revisão 2026-09-12) — ver
+    // comentário equivalente na rota da Fase 2 e em recording-access.ts.
+    const path = storedPath ?? buildRecordingPath({ userId, attemptId, responseId });
 
-    const { error: uploadError } = await supabase.storage
-      .from("pilot-recordings")
-      .upload(path, buffer, { contentType: mimeType, upsert: true });
+    // Bucket privado, sem policy nenhuma pra `authenticated` (migration
+    // 20260912050000) — o upload é SÓ por service_role.
+    const { error: uploadError } = resume ? { error: null } : await withPrivacyUpload(
+      admin,
+      userId,
+      responseId,
+      "pilot",
+      () => admin.storage.from("pilot-recordings").upload(path, buffer, { contentType: mimeType, upsert: true }),
+      () => admin.storage.from("pilot-recordings").remove([path]),
+    );
     if (uploadError) {
-      await admin
+      assertPrivacyWrite(await admin
         .from("pilot_responses")
         .update({ processing_status: "error" })
-        .eq("id", responseId);
+        .eq("id", responseId));
       return NextResponse.json({ error: `Falha ao enviar o áudio: ${uploadError.message}` }, { status: 500 });
     }
 
-    const { data: publicUrlData } = supabase.storage.from("pilot-recordings").getPublicUrl(path);
-    const audioUrl = publicUrlData.publicUrl;
-
-    await admin
+    // Bucket privado (M3.1): guarda o CAMINHO do objeto, não uma URL
+    // pública. O acesso é por URL assinada de vida curta, gerada só depois
+    // de confirmar autorização — ver createRecordingSignedUrl.
+    const { error: pathUpdateError } = resume ? { error: null } : await admin
       .from("pilot_responses")
-      .update({ audio_url: audioUrl, repetition_count: repetitionCount })
+      .update({
+        audio_path: path,
+        repetition_count: officialWindow?.repetition_count ?? Math.max(0, Math.min(20, clientRepetitionCount || 0)),
+        // Prazo de retenção da GRAVAÇÃO (M3.2): practice 30 dias, official
+        // 180. Gravado explicitamente pra a retenção ser auditável — ver
+        // src/lib/simulations/retention.ts.
+        expires_at: recordingExpiresAt(attempt.mode as SimulationMode),
+      })
       .eq("id", responseId);
+    if (pathUpdateError) {
+      // Ver comentário equivalente na rota da Fase 2 — falha rápido em vez
+      // de seguir com a linha em estado inconsistente; um retry encontra o
+      // MESMO objeto (caminho determinístico) e corrige sozinho.
+      assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+      throw privacyWriteError(pathUpdateError);
+    }
 
     let transcript: string;
     try {
       transcript = await transcribeAudio(buffer, `audio.${ext}`);
     } catch {
-      await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId);
+      assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
       return NextResponse.json({ error: "Não foi possível transcrever o áudio." }, { status: 502 });
     }
-    await admin
+    assertPrivacyWrite(await admin
       .from("pilot_responses")
       .update({ transcript, processing_status: "analyzing" })
-      .eq("id", responseId);
+      .eq("id", responseId));
 
     const { data: prompt } = await supabase
       .from("pilot_prompts")
@@ -188,10 +283,14 @@ export async function POST(request: Request) {
     // Modo `official` não dá nenhum feedback durante o simulado (só o
     // relatório final) — mesmo comportamento/motivo já documentado na Fase 2.
     if (attempt.mode === "official") {
-      await admin
+      assertPrivacyWrite(await admin
         .from("pilot_responses")
         .update({ processing_status: "done", finished_at: new Date().toISOString() })
-        .eq("id", responseId);
+        .eq("id", responseId));
+
+      if (officialWindow) {
+        await admin.from("official_response_windows").update({ submitted_at: new Date().toISOString() }).eq("id", officialWindow.id);
+      }
 
       return NextResponse.json({ transcript, feedback: null });
     }
@@ -203,7 +302,7 @@ export async function POST(request: Request) {
       transcript,
       NO_FEEDBACK_STAGES.includes(stage) ? undefined : (stage as PilotFeedbackStage),
     );
-    await admin
+    assertPrivacyWrite(await admin
       .from("pilot_responses")
       .update({
         ai_feedback: feedback,
@@ -212,7 +311,7 @@ export async function POST(request: Request) {
         processing_status: "done",
         finished_at: new Date().toISOString(),
       })
-      .eq("id", responseId);
+      .eq("id", responseId));
 
     return NextResponse.json({ transcript, feedback });
   } catch (error) {

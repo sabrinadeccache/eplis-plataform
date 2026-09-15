@@ -28,9 +28,16 @@ describe("lowestProficiency", () => {
 });
 
 describe("normalizeFinalReport", () => {
-  it("força overall = menor dos 6 critérios, ignorando o que o modelo mandou", () => {
+  it("usa o menor dos quatro critérios textuais e marca os acústicos indisponíveis", () => {
     const out = normalizeFinalReport({ ...base, comprehension: "weak", overall: "excellent" });
     expect(out.overall).toBe("weak");
+    expect(out.pronunciation).toBeNull();
+    expect(out.fluency).toBeNull();
+  });
+
+  it("não deixa uma pseudo-nota acústica determinar o overall", () => {
+    const out = normalizeFinalReport({ ...base, pronunciation: "weak", fluency: "weak" });
+    expect(out.overall).toBe("good");
   });
 
   it("aceita a faixa nova 'excellent'", () => {
@@ -47,10 +54,10 @@ describe("normalizeFinalReport", () => {
     expect(out.overall).toBe("excellent");
   });
 
-  it("substitui valor de faixa desconhecido por 'moderate'", () => {
+  it("não inventa N4 quando um critério recebido é inválido", () => {
     const out = normalizeFinalReport({ ...base, vocabulary: "amazing" as never });
-    expect(out.vocabulary).toBe("moderate");
-    expect(out.overall).toBe("moderate");
+    expect(out.vocabulary).toBeNull();
+    expect(out.overall).toBeNull();
   });
 });
 

@@ -75,7 +75,7 @@ const transcripts = [
 ];
 
 describe("generateFinalReport", () => {
-  it("parseia JSON e força overall = menor dos 6", async () => {
+  it("parseia JSON e força overall = menor dos quatro critérios textuais", async () => {
     reply(strictJson);
     const out = await generateFinalReport(transcripts, "practice");
     expect(out.overall).toBe("moderate");
@@ -91,7 +91,8 @@ describe("generateFinalReport", () => {
   it("cai no fallback quando o JSON é inválido", async () => {
     reply("não foi possível");
     const out = await generateFinalReport(transcripts, "practice");
-    expect(out.overall).toBe("moderate");
+    expect(out.overall).toBeNull();
+    expect(out.structure).toBeNull();
     expect(out.general_feedback).toContain("suporte");
   });
 
@@ -105,7 +106,16 @@ describe("generateFinalReport", () => {
 
   it("lista de transcrições vazia devolve o fallback sem chamar a IA", async () => {
     const out = await generateFinalReport([], "practice");
-    expect(out.overall).toBe("moderate");
+    expect(out.overall).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("ignora transcrições em branco e não inventa uma avaliação", async () => {
+    const out = await generateFinalReport(
+      [{ part: "part1", promptText: "P1", transcript: "   " }],
+      "practice",
+    );
+    expect(out.overall).toBeNull();
     expect(create).not.toHaveBeenCalled();
   });
 

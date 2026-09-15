@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { PilotInterviewRunner } from "./pilot-interview-runner";
 import { advanceState, generateSpeech } from "@/services/simulations/pilot/actions";
 import type { PilotSequence } from "@/services/simulations/pilot/queries";
@@ -152,5 +152,35 @@ describe("PilotInterviewRunner — Parte 2", () => {
     await waitFor(() =>
       expect(generateSpeech).toHaveBeenCalledWith("attempt-1", "Prompt p2-b"),
     );
+  });
+});
+
+describe("PilotInterviewRunner — regras do modo official", () => {
+  it("inicia automaticamente sem oferecer pausa da gravação", async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <PilotInterviewRunner
+          attemptId="attempt-1"
+          mode="official"
+          sequence={makeSequence()}
+          initialPart="part1"
+          initialItemIndex={1}
+          initialElapsedSeconds={0}
+        />,
+      );
+
+      await act(async () => { await Promise.resolve(); });
+      const audio = document.querySelector("audio") as HTMLAudioElement;
+      fireEvent(audio, new Event("ended"));
+      for (let second = 0; second < 6; second += 1) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      }
+
+      expect(screen.getByRole("button", { name: "Concluir e enviar" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Pausar" })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

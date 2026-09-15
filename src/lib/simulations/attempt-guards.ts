@@ -6,9 +6,25 @@
 // `limits.ts`, generalizado por `phase` pra ser reaproveitado pela trilha do
 // piloto sem duplicar a lógica.
 import { createClient } from "@/lib/supabase/server";
+import type { createAdminClient } from "@/lib/supabase/admin";
 import type { Phase } from "@/types/database";
 
 export type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
+// Rechecagem de UX, mantida para recusar cedo uma conta que foi bloqueada
+// durante o decode. Ela NÃO é a garantia contra corrida de exclusão (um
+// SELECT seguido de escrita é TOCTOU). A garantia M3 está nas RPCs/tickets e
+// triggers transacionais de privacy-barrier.ts + migration 070000: upload
+// coordena com exclusão e conteúdo tardio é recusado inclusive via service_role.
+export async function assertAccountStillActive(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<void> {
+  const { data, error } = await admin.from("users").select("status").eq("id", userId).maybeSingle();
+  if (error || !data || data.status !== "active") {
+    throw new Error("Conta não está mais ativa.");
+  }
+}
 
 export async function assertOwnAttemptInProgress(
   supabase: SupabaseServerClient,

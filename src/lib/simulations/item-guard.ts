@@ -43,6 +43,7 @@ export type ExistingResponseRow = {
   transcript: string | null;
   ai_feedback: string | null;
   created_at: string;
+  recording_cleanup_pending?: boolean;
 };
 
 export type ReservationOutcome =
@@ -163,7 +164,7 @@ export async function reserveResponseSlot(params: {
 
   const { data: rows, error: readError } = await supabase
     .from(table)
-    .select("id, item_slot, response_stage, processing_status, retry_count, transcript, ai_feedback, created_at")
+    .select("id, item_slot, response_stage, processing_status, retry_count, transcript, ai_feedback, created_at, recording_cleanup_pending")
     .eq("simulation_attempt_id", attemptId)
     .eq("prompt_id", promptId);
 
@@ -177,6 +178,9 @@ export async function reserveResponseSlot(params: {
   if (existingAtSlot) {
     if (existingAtSlot.processing_status === "done") {
       return { kind: "replay", response: existingAtSlot };
+    }
+    if (existingAtSlot.recording_cleanup_pending) {
+      throw new ItemGuardError("Prazo de gravação deste item encerrado. Inicie uma nova tentativa.", 410);
     }
     if (existingAtSlot.processing_status === "transcribing" || existingAtSlot.processing_status === "analyzing") {
       return { kind: "conflict" };

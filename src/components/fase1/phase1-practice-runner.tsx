@@ -33,12 +33,14 @@ function SoundBarsIcon({ className }: { className?: string }) {
 export function Phase1PracticeRunner({
   attemptId,
   questions,
+  startIndex = 0,
 }: {
   attemptId: string;
   questions: Phase1QuizItem[];
+  startIndex?: number;
 }) {
   const router = useRouter();
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(startIndex);
   const [selected, setSelected] = useState<McqOption | null>(null);
   const [reveal, setReveal] = useState<RecordAnswerResult | null>(null);
   const [playing, setPlaying] = useState(false);

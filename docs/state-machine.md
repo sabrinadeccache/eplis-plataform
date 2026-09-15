@@ -3,7 +3,29 @@
 > Atualiza o documento STATE MACHINE original com o timeout de início de resposta e a
 > regra de repetição diferenciada por parte, confirmados pelo Manual do Examinando.
 
+## Fase 1 — sequência e retomada (M4)
+
+```text
+IN_PROGRESS (item_sequence.phase1 congelada)
+  -> item corrente = quantidade de phase1_answers
+  -> leitura -> áudio -> resposta
+  -> timeout official sem seleção = resposta incorreta persistida
+  -> próximo item
+  -> COMPLETED somente quando respostas = itens
+```
+
+Reload e novo login retomam o primeiro item sem resposta; não há novo sorteio. Practice
+e official podem ser retomados enquanto `status = in_progress`, ou abandonados com
+confirmação. Uma tentativa `abandoned` não volta a abrir. Duas abas convergem pela
+unicidade de tentativa em andamento e de resposta por pergunta.
+
 ## Fluxo geral
+
+**Camada de privacidade M3 (revisão Codex, ainda não implantada):** não muda a
+sequência pedagógica abaixo. A barreira de exclusão invalida persistência de fala
+e feedback, mesmo se a requisição começou antes. Slots reclamados pela retenção
+ficam terminalmente fechados para novo upload (`recording_cleanup_pending`);
+processamento interrompido antigo é marcado `error`. Ver `m3-privacy-handoff.md`.
 
 ```
 INTERVIEW_IDLE
@@ -54,16 +76,16 @@ IA fala → aluno clica Speak → Restart → Stop → Next
 **response stage — official [ALTERADO 2026-08-11]:**
 ```
 IA fala → pausa de 5s (sem botão "Falar") → gravação inicia automaticamente
-        → candidato conclui manualmente (Pausar/Continuar, Concluir e enviar — sem "Recomeçar")
+        → candidato conclui ou o hard-stop encerra e envia (sem pausa ou "Recomeçar")
 ```
 
 Redesenhado a pedido da Sabrina pra ser mais fiel ao exame real: não existe botão "Falar" no
 modo `official` — depois que a IA termina de falar, um cronômetro visível de 5s conta
 regressivamente e a gravação começa sozinha ao chegar a zero, sem exigir clique do candidato.
-Sem segunda chance: o botão "Recomeçar" (que reinicia a gravação do zero) só existe no modo
-`practice`; no `official`, uma vez iniciada a gravação, só dá pra pausar/continuar ou concluir e
-enviar. Timer de duração automática da resposta (cortar e enviar sozinho após 60s/90s) **ainda
-não implementado** — decisão de escopo, ver `docs/project-status.md`.
+Sem segunda chance: os botões "Recomeçar" e "Pausar" só existem no modo `practice`;
+no `official`, uma vez iniciada a gravação, ela segue até a conclusão ou o hard-stop.
+Cada slot reinicializa timers e marcadores locais. Reload não abre outra janela oficial;
+uma rejeição temporal marca o slot como erro e permite reenviar o mesmo áudio.
 
 ## Regra de repetição/esclarecimento por parte [ALTERADO]
 
@@ -92,8 +114,9 @@ Sem alteração em relação ao documento original:
 - **Official**: zero feedback durante a entrevista; relatório completo (pontos fortes,
   pontos fracos, exemplos de melhoria, estimativa por critério) só ao final.
 
-**Regra de nota final:** o nível reportado é sempre o menor entre os 6 critérios —
-nunca uma média (segue a mesma lógica de segurança operacional do exame real).
+**Contrato provisório de nota final (M6):** até existir avaliação acústica validada,
+pronúncia e fluência ficam indisponíveis. O nível reportado é o menor entre estrutura,
+vocabulário, compreensão e interações — nunca uma média.
 
 ---
 
@@ -158,15 +181,15 @@ oficiais do SDEA:
   é específica da foto; itens 1–5 são fixos no runner (`PART4_*` em
   `pilot-interview-runner.tsx`), incluindo o sorteio 1-de-4 da pergunta de "antes".
 
-**Correção — mesma regra do controlador, com uma ressalva própria do exame:** nota final
-sempre o menor dos 6 critérios OACI, nunca média. A ressalva: os documentos oficiais do
+**Correção — mesmo contrato provisório do controlador, com uma ressalva própria do exame:**
+nota final é o menor dos quatro critérios sustentados pela transcrição. A ressalva: os documentos oficiais do
 SDEA são explícitos que a produção oral **não é julgada pela precisão técnica ou
 operacional** — isso inclui fraseologia de radiotelefonia. Mesmo na Parte 2 (readback
-inclusive), a IA avalia só proficiência linguística (estrutura, clareza, fluência,
-compreensão), nunca se a fraseologia usada foi tecnicamente correta — ver
+inclusive), a IA avalia só a evidência linguística da transcrição (estrutura, clareza e
+compreensão), nunca fraseologia técnica, pronúncia ou fluência acústica — ver
 `src/lib/ai/pilot-track.ts`.
 
 `official` vs. `practice` seguem exatamente as mesmas regras já descritas acima pro
-controlador (auto-gravação em 5s / 1 repetição / sem "Recomeçar" / zero feedback ao vivo no
+controlador (auto-gravação em 5s / 1 repetição / sem "Recomeçar" ou pausa / zero feedback ao vivo no
 `official`; botão "Falar" manual / repetição ilimitada / feedback falado por resposta /
 "Pausar simulado" no `practice`) — comportamento comprovado, só reaproveitado.

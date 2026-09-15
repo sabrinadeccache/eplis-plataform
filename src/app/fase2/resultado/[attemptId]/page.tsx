@@ -52,7 +52,7 @@ export default async function Fase2ResultadoPage({
     .eq("simulation_attempt_id", attemptId)
     .order("created_at", { ascending: true });
 
-  const overall = feedback?.overall_score as ProficiencyLevel | undefined;
+  const overall = feedback?.overall_score as ProficiencyLevel | null | undefined;
 
   return (
     <AppShell user={user}>
@@ -66,15 +66,16 @@ export default async function Fase2ResultadoPage({
             <div className="section-head">
               <p className="text-sm font-medium text-ink">Nível geral</p>
               <p className="text-lg font-semibold text-ink">
-                {overall ? LEVEL_LABEL[overall] : feedback.overall_score}
+                {overall ? LEVEL_LABEL[overall] : "Avaliação indisponível"}
               </p>
             </div>
             <div className="mt-5">
               <ProficiencyScale level={overall ?? null} />
             </div>
             <p className="mt-4 text-xs leading-relaxed text-muted">
-              O nível geral é sempre igual ao critério mais fraco entre os seis abaixo —
-              nunca uma média — por segurança operacional (Escala OACI).
+              O nível geral é o critério mais fraco entre estrutura, vocabulário,
+              compreensão e interações. Pronúncia e fluência não recebem nota sem
+              uma análise acústica validada.
             </p>
           </div>
 

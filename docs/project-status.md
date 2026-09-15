@@ -13,6 +13,216 @@ conteúdo próprio, baseado nas especificações públicas do exame.
 
 Responsável: Sabrina Deccache.
 
+## Estado atual — plano de correção M3–M7 concluído em código (2026-09-15)
+
+Branch `reliability/complete-m5-m7`, com PR de homologação aberto. O código inclui M3
+(privacidade/retenção), M4 (consistência da Fase 1), M5 (relógio oficial no servidor e
+pergunta comparativa SDEA), M6 (avaliação textual honesta e versionada) e M7
+(recuperação/UX/documentação). Ainda não considerar produção concluída até aplicar as
+migrations na ordem de `m3-privacy-handoff.md`, configurar `CRON_SECRET`, validar o
+Preview e promover o PR para `main`.
+
+- O modo Official começa a gravação automaticamente, não oferece pausa, limita
+  repetição e persiste a janela temporal no servidor. Retry conserva o slot; áudio MP4
+  sem extensão é reconhecido pelos bytes.
+- Falha técnica, transcrição vazia ou JSON inválido não vira nível N4: os critérios e o
+  overall ficam indisponíveis. Pronúncia/fluência nunca são inferidas da transcrição.
+- Relatórios novos persistem versões do modelo, régua, prompt e pipeline; históricos
+  são marcados como `legacy-unversioned` pela migration 15030000.
+- Dependências de runtime atualizadas para Next 16.3.5 e Sentry 10.74.0. Auditoria de
+  produção (`npm audit --omit=dev`) sem vulnerabilidades; alertas restantes são apenas
+  da árvore de ferramentas ESLint, sem correção upstream disponível.
+- A verificação final obrigatória é: testes, lint, typecheck, build, migrations em branch
+  Supabase, Preview Vercel e E2E das duas trilhas antes do merge.
+
+## Histórico — Milestone 4 (2026-09-14)
+
+Branch `reliability/phase1-resume-performance`, baseada no commit M3 `cbb82f8`.
+Sem push, merge, migration remota ou deploy.
+
+- A Fase 1 persiste a lista ordenada de IDs em `simulation_attempts.item_sequence.phase1`
+  no momento da criação. Reload e novo login carregam os mesmos itens, na mesma ordem.
+  Conteúdo desativado depois do início continua legível somente para a tentativa já
+  autorizada; `correct_option` nunca é enviado ao runner.
+- O item corrente é derivado das respostas persistidas. O servidor recusa pergunta
+  anterior/futura, trata replay concorrente pela constraint única e só finaliza quando
+  o total de respostas coincide com o tamanho da sequência. Timeout official sem
+  seleção grava uma resposta incorreta com `selected_option = NULL`.
+- `/fase1` localiza tentativas `practice` e `official` em andamento, mostra posição,
+  permite continuar e oferece abandono com confirmação. Uma constraint parcial impede
+  duas tentativas simultâneas do mesmo usuário/modo, inclusive em duas abas.
+- Tentativa legada sem sequência é recuperada uma vez: respostas existentes viram o
+  prefixo e o restante é congelado por compare-and-set. O item ainda não respondido que
+  existia apenas no browser antigo não pode ser reconstruído retroativamente.
+- As três páginas de Desempenho usam a mesma query autoritativa:
+  `status = completed AND mode = official`. Practice não entra em lista, gráfico ou nota.
+- Migration `20260914000000_phase1_consistency.sql`: torna `selected_option` anulável,
+  cria unicidade por tentativa/pergunta e unicidade parcial de tentativa em andamento.
+  Aplicar **antes** do código M4. Ela não recalcula nem altera resultados históricos.
+- Verificação local nesta implementação: 285 testes passando, incluindo constraints em
+  PostgreSQL embarcado; `tsc`, `eslint` e build de produção passando. Permanece apenas o
+  aviso conhecido de tracing amplo do ffmpeg no build.
+
+## Milestone 3 — gravações privadas, retenção e LGPD — em revisão (2026-09-12)
+
+### Retomada prioritária — implementação Codex sobre `8c63842`
+
+Sabrina autorizou corrigir os bloqueadores da revisão. Alterações registradas
+localmente no commit `cbb82f8`, sem push/merge e sem tocar em produção. Ler primeiro
+[`m3-privacy-handoff.md`](m3-privacy-handoff.md): desenho, testes, recuperação,
+ordem de implantação e próximos passos para Claude.
+
+- Nova migration **20260912070000**: barreira transacional de exclusão, tickets
+  de upload, proteção contra conteúdo tardio da IA e claim terminal de limpeza.
+  Vai ANTES deste código; **050000 continua DEPOIS**, após confirmar admin.storage.
+- Cron/scripts agora compartilham `retention-core.mjs`; paginação por cursor,
+  progresso persistido e tratamento de crash `transcribing`/`analyzing`. Testado
+  com 1.203 órfãos e 1.203 relatórios. Prazo de gravação permanece 30/180 dias.
+- Upload de resultado incerto fica pendente até reconciliação administrativa;
+  não há liberação por timeout. Não apagar Auth nem declarar exclusão concluída
+  enquanto houver ticket. A barreira impede repovoar conteúdo por IA tardia.
+- Homologação real M3 e `CRON_SECRET` continuam pendentes. Alertas do `npm audit`
+  em dependências existentes foram registrados no handoff para triagem separada:
+  4 em runtime (3 high, 1 critical; correção sugerida leva Next 16.2.12→16.3.5).
+- Verificação local: **274 testes**, `tsc` e `eslint` passando; build isolado
+  com ambiente fictício passou (aviso conhecido de tracing amplo do ffmpeg).
+  23 testes executam a nova migration em PostgreSQL embarcado; não substituem
+  Supabase/Storage/Vercel reais. Sem teste ou operação contra produção nesta sessão.
+
+As seções de revisão abaixo são histórico, não substituem este estado atual.
+
+Branch `privacy/private-recordings-consent`, aguardando aprovação da Sabrina antes do
+merge e da aplicação das migrations. Escopo: 3.1 (storage privado), 3.2 (retenção +
+anonimização na exclusão de conta), 3.3 (consentimento). Uma rodada de revisão
+adversarial já incorporada — achados P0 reais, não só cobertura de teste.
+
+### Achados da revisão (2026-09-12) e como foram corrigidos
+
+1. **O Storage contornava toda a API.** As policies da 1ª versão concediam INSERT e
+   SELECT diretos ao role `authenticated` nos dois buckets de gravação, checando só
+   posse da tentativa — o candidato podia subir áudio (ou baixar/assinar fora do limite
+   de 120s) direto pelo client, sem passar por consentimento, guard de item, decode real
+   ou carimbo de retenção. Comportamento documentado do Supabase: RLS em
+   `storage.objects` dá acesso rw direto ao objeto, independente de regra de aplicação.
+   **Correção:** migration `20260912050000` revoga as duas policies — zero acesso de
+   `authenticated` nesses buckets. As duas rotas de submit-response passaram a subir com
+   `admin.storage` (service_role), nunca `supabase.storage`.
+2. **Retry deixava gravação órfã.** Cada upload gerava um caminho novo com sufixo
+   aleatório; um retry (mesma linha de resposta) criava outro objeto e sobrescrevia
+   `audio_path`, deixando o anterior sem nenhuma referência — invisível pros scripts de
+   retenção/exclusão, que só olhavam `audio_path`. Também não havia checagem de erro na
+   escrita de `audio_path` depois do upload. **Correção:** `buildRecordingPath` passou a
+   ser determinístico por `responseId` (a PK da própria linha, não adivinhável) —
+   `{userId}/{attemptId}/{responseId}`, sem sufixo aleatório nem extensão. Todo upload
+   pra aquela linha, inclusive retry (mesmo com formato diferente), sobrescreve o MESMO
+   objeto (`upsert: true`). A escrita de `audio_path` passou a ser checada; falha marca a
+   linha como erro (um retry recalcula o mesmo caminho e se corrige sozinho).
+3. **Exclusão de conta não garantia a anonimização.** Faltava paginação (uma conta com
+   muitas respostas só era parcialmente limpa), `simulation_feedbacks.general_feedback`
+   (conteúdo derivado da fala) e `audio_url` legado não eram zerados, e nada impedia um
+   envio novo durante a limpeza. **Correção:** `purgeUserRecordings` agora bloqueia a
+   conta (`status = 'blocked'`) ANTES de tocar em qualquer dado — `authorize()` (M1) já
+   rejeita toda ação de conta não-`active`, fechando a janela de novo envio; pagina
+   tentativas/respostas/feedbacks até esgotar; deriva o caminho do Storage pelos IDs (não
+   pela coluna `audio_path`) e remove incondicionalmente — **verificado contra o Supabase
+   real que `DELETE` num objeto inexistente devolve `200`/lista vazia, não erro**, então
+   isso cobre até a linha cujo upload terminou mas nunca chegou a gravar `audio_path`;
+   zera `general_feedback` e `audio_url` junto.
+4. **A promessa de expiração automática não existia de fato.** O texto de consentimento
+   dizia "apagada automaticamente", mas `expireRecordings` só rodava se alguém executasse
+   manualmente — e a assinatura ignorava `expires_at` (uma gravação vencida continuava
+   assinável até o script rodar). **Correção:** nova rota `/api/cron/expire-recordings`
+   (protegida por `CRON_SECRET`) + `vercel.json` com Vercel Cron 1x/dia; `expireRecordings`
+   ganhou paginação de verdade (antes só processava o 1º lote); `createRecordingSignedUrl`
+   passou a checar `expires_at` e tratar gravação vencida como não-encontrada.
+   **Pendente:** `CRON_SECRET` ainda não existe nas env vars da Vercel — a expiração
+   automática só fica real depois de configurado + deploy.
+5. **Consentimento forjável + faltava auditoria administrativa.** A policy de INSERT só
+   checava `auth.uid() = user_id`, sem restringir `consent_version`/`accepted_at` — o
+   cliente podia mandar uma versão inventada ou um timestamp retroativo direto pra
+   PostgREST. O plano (item 3.2) também pede "registrar acesso administrativo [à
+   gravação] sem conteúdo sensível", que não existia. **Correção:** migration
+   `20260912060000` revoga INSERT de `authenticated` em `recording_consents` — só
+   `service_role` escreve (a Server Action usa o client admin; `consent_version` vem
+   sempre da constante do servidor, `accepted_at` sempre do `now()` do banco). Nova
+   tabela `recording_access_log` (só metadado — quem, o quê, quando) registrada sempre
+   que um admin assina a gravação de OUTRO titular (não a própria). Canal de exclusão no
+   texto passou a ser o e-mail real (`sdeccache@gmail.com`), CONSENT_VERSION incrementada.
+6. **Correção de linguagem, não de código:** eu tinha afirmado que a chave privada no
+   bundle "confirmava exposição" — a Sabrina apontou, corretamente, que a presença no
+   pacote do servidor não prova por si só exposição pública (Vercel não serve o código-
+   fonte da função por um endpoint público). Era defesa em profundidade contra uma
+   superfície de ataque desnecessária, não uma exposição pública comprovada.
+
+### 2ª rodada de revisão (2026-09-12) — histórico do commit `8c63842`
+
+A Sabrina revisou o commit `21db9aa` (221/221 testes, tsc e eslint passando) e recusou
+aprovar o merge: passar nos testes não provava a integração real. Recusou também as duas
+"limitações residuais" da rodada anterior como aceitáveis pra documentar em vez de
+corrigir. As alterações abaixo foram implementadas nessa rodada, mas os pontos 6/7
+ainda eram insuficientes: lote de órfãos sem progresso e rechecagem sem coordenação.
+Ver a implementação Codex / handoff acima para a substituição dessas garantias.
+
+1. **A rota de cron era interceptada pelo proxy antes de chegar no `CRON_SECRET`.**
+   Vercel Cron não manda cookie de sessão — só o header `Authorization` que a própria
+   rota confere. `src/proxy.ts` redirecionava `/api/cron/expire-recordings` pra `/login`
+   antes da checagem da rota rodar; configurar `CRON_SECRET` sozinho não bastava, a
+   execução nunca alcançava a rota. **Correção:** `SESSION_EXEMPT_PATHS` em
+   `src/lib/supabase/proxy.ts` — `/api/cron/*` passa direto pelo proxy (sem tocar client
+   Supabase nenhum); a validação do segredo continua só dentro da rota. Testado em
+   `src/lib/supabase/proxy.test.ts`.
+2. **A limpeza de storage parou de olhar `audio_path`, e perdeu gravação legada.** A
+   correção do achado #2 da 1ª rodada (caminho determinístico) trocou a lógica de
+   remoção pra derivar o caminho SÓ pelos IDs — mas isso descartou qualquer gravação cujo
+   `audio_path` real (formato legado, de antes desta mudança, ou do bucket público
+   original) não bate com o caminho novo calculado. Como remover um caminho inexistente
+   não dá erro, o código achava que tinha limpado e zerava a referência mesmo sem ter
+   tocado no objeto real. **Correção:** `src/lib/simulations/retention.ts` agora lê
+   `audio_path` e remove a UNIÃO dele com o caminho determinístico (`candidatePaths`) —
+   cobre os dois casos ao mesmo tempo, em vez de escolher um.
+3. **Paginação de resposta incompleta dentro de cada bloco de tentativas.**
+   `purgeUserRecordings` já paginava a busca de IDs de tentativa, mas agrupava até 200
+   IDs por vez e fazia UMA consulta `.in(...)` de respostas por bloco — com dezenas de
+   respostas por tentativa, um bloco de 200 podia estourar o limite implícito do
+   PostgREST sem aviso nenhum, truncando a limpeza silenciosamente. **Correção:**
+   `fetchAllResponsesForAttempts` pagina de verdade (`.range()`, 500 por página) até
+   esgotar CADA bloco de tentativas, tanto pra respostas quanto pro laço de
+   `simulation_feedbacks`.
+4. **Ordem de deploy da migration 20260912050000 estava invertida.** O cabeçalho dizia
+   "migration antes do código, como o resto do projeto" — mas o CÓDIGO que roda em
+   produção hoje ainda sobe com `supabase.storage` (client do usuário); aplicar a
+   migration primeiro revogaria exatamente esse acesso e quebraria todo envio de
+   gravação em produção, o mesmo erro do M1 que o CLAUDE.md documenta. **Correção:**
+   cabeçalho da migration reescrito — esta é a ÚNICA migration do M3 que segue código
+   primeiro, migration depois (o inverso das demais, que são aditivas); só aplicar depois
+   de confirmar em produção que as rotas já sobem com `admin.storage`.
+5. **`logAdminAccess` ignorava erro do INSERT.** A URL assinada era entregue ao admin
+   mesmo que o registro de auditoria falhasse silenciosamente — sem provar acesso
+   registrado, não tem como provar supervisão. **Correção:** `createRecordingSignedUrl`
+   agora falha fechado (`{ok:false, status:500}`) se o insert em `recording_access_log`
+   retornar erro; nenhum acesso administrativo a gravação de outro titular sai sem
+   auditoria gravada.
+6. **(Residual #1 corrigido) Upload sem `audio_path` gravado ficava invisível pro
+   caminho baseado em tempo.** Se o objeto sobe mas a escrita de `audio_path`/
+   `expires_at` falha logo depois, a linha nunca bate no filtro de `expireRecordings`
+   (que exige `audio_path is not null`) nem tem `expires_at` pra vencer — só o caminho de
+   exclusão de CONTA (100% por ID) alcançava esse caso; uma conta nunca excluída deixava
+   o objeto órfão pra sempre. **Correção:** `sweepOrphanedUploads` — 2ª varredura em
+   `expireRecordings`, por `processing_status = 'error'` + `audio_path is null` + mais
+   velho que o prazo mais curto (30 dias) — tenta remover o caminho determinístico
+   incondicionalmente (sem erro se não existir).
+7. **(Residual #2 corrigido) Bloqueio de conta não parava requisição já em voo.** O
+   `status = 'blocked'` fecha `authorize()` pra requisições NOVAS, mas uma que já tinha
+   passado por `authorize()` no instante do bloqueio continuava até o fim, podendo gravar
+   conteúdo novo depois da "exclusão". A Sabrina recusou aceitar isso como limitação
+   documentada: "documentar a corrida não a resolve". **Correção:** as duas rotas de
+   submit-response fazem uma 2ª checagem de status (`assertAccountStillActive`) logo
+   antes de persistir qualquer conteúdo (upload/`audio_path`/transcrição), não só no
+   início da requisição — reduz a janela de "todo o tempo de processamento" pro intervalo
+   entre essa checagem e a escrita. **Essa mitigação não fechava o caso prático:** IA
+   ainda podia escrever depois da limpeza. Substituída pela barreira no banco e
+   coordenação dos uploads na revisão Codex (migration 070000).
+
 ## Homologação do M2 em produção — 2026-09-12 (CONCLUÍDA)
 
 **M2 mergeado em `main` e homologado no ambiente implantado.** Ordem seguida, conforme

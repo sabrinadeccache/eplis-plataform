@@ -12,6 +12,7 @@ import {
   PROFICIENCY_BADGE_CLASS as LEVEL_CLASS,
 } from "@/lib/proficiency-display";
 import { formatDate } from "@/lib/format-date";
+import { getCompletedOfficialAttempts } from "@/services/simulations/performance";
 
 export default async function DesempenhoSdeaPage() {
   const user = await getCurrentUser();
@@ -20,15 +21,9 @@ export default async function DesempenhoSdeaPage() {
 
   const supabase = await createClient();
 
-  const { data: attempts } = await supabase
-    .from("simulation_attempts")
-    .select("id, started_at, finished_at")
-    .eq("user_id", user.id)
-    .eq("phase", "pilot_interview")
-    .eq("status", "completed")
-    .order("finished_at", { ascending: false });
+  const attempts = await getCompletedOfficialAttempts(supabase, user.id, "pilot_interview");
 
-  const attemptIds = (attempts ?? []).map((a) => a.id);
+  const attemptIds = attempts.map((a) => a.id);
 
   const { data: feedbacks } =
     attemptIds.length > 0
@@ -45,7 +40,7 @@ export default async function DesempenhoSdeaPage() {
     }
   }
 
-  const rows = (attempts ?? []).map((attempt) => ({
+  const rows = attempts.map((attempt) => ({
     id: attempt.id,
     date: formatDate(attempt.finished_at ?? attempt.started_at),
     level: levelByAttempt.get(attempt.id) ?? null,

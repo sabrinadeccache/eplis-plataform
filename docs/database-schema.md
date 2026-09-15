@@ -6,6 +6,9 @@
 
 ## Visão geral
 
+**Estado M3:** alterações descritas nesta revisão ainda pendentes de aplicação;
+não confundir schema da branch com produção. Deploy: `m3-privacy-handoff.md`.
+
 ```
 users
  └─ simulation_attempts
@@ -85,7 +88,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | Campo | Tipo | Observações |
 |---|---|---|
 | id | uuid | |
-| user_id | uuid → users | |
+| user_id | uuid → users, nullable na M3 | `on delete set null` (030000); exclusão só após barreira + limpeza de conteúdo |
 | phase | enum | `phase1`, `phase2` (controlador/EPLIS), `pilot_interview` (piloto/SDEA — **[NOVO, 2026-08-24]**; a trilha do piloto não tem um equivalente de "Fase 1" — o SDEA é uma única entrevista oral de 4 partes, sem prova de compreensão auditiva separada) |
 | mode | enum | `practice`, `official` |
 | status | enum | `in_progress`, `completed`, `abandoned` |
@@ -93,7 +96,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | current_state | enum, nullable | **[NOVO]** espelha os estados da state machine (ver seção "Estados da Fase 2" abaixo). Permite retomar uma tentativa `official` interrompida sem reconstruir a posição a partir das respostas já gravadas |
 | current_part | enum, nullable | **[NOVO]** `part1`..`part4` — parte atual da entrevista |
 | current_item_index | int, nullable | **[NOVO]** índice do item dentro da parte atual (ex: 3ª de 10 situações da Parte 2) |
-| item_sequence | jsonb, nullable | **[NOVO, 2026-09-11 — revisão do M2]** sequência de prompts sorteada pro candidato (Fase 2/SDEA), **congelada no momento da criação da tentativa** — `{ part1: [id, ...], part2: [...], ... }` (ids de `phase2_prompts`/`pilot_prompts`, já na ordem em que aparecem). Antes, `getSequenceForAttempt` recalculava o sorteio a cada carregamento de tela a partir do pool ATIVO e do perfil ATUAL do usuário — se o conteúdo fosse desativado/editado ou o perfil operacional mudasse no meio de uma tentativa em andamento, o "item corrente" podia mudar debaixo do guard de item. `null` só em tentativas de Fase 1 (não usa) ou de antes da migration `20260911010000_m2_review_fixes.sql` — nesse caso o código cai no sorteio ao vivo antigo (`drawSequenceForAttempt`). |
+| item_sequence | jsonb, nullable | **[ATUALIZADO, M4 2026-09-14]** sequência congelada no início. Fase 1 usa `{ phase1: [question_id, ...] }`; Fase 2/SDEA usam `{ part1: [prompt_id, ...], ... }`. Reload nunca sorteia novamente. Tentativa legada com `null` é congelada uma vez; respostas existentes formam o prefixo. |
 | last_submission_at | timestamptz, nullable | **[NOVO, 2026-09-11 — revisão do M2, 2ª rodada]** timestamp do último envio de resposta aceito (qualquer slot, inclusive retry), usado só pelo rate limit (`src/lib/simulations/rate-limit.ts`) como cooldown via compare-and-swap. Existe porque contar LINHAS de resposta (por `created_at` ou `started_at`) não reflete retry — um retry reaproveita a mesma linha (`item_slot`), então a contagem de linhas nunca cresce com ele; só um timestamp dedicado, atualizado em toda submissão, mede a taxa de envio de verdade. |
 | started_at | timestamp | |
 | finished_at | timestamp, nullable | |
@@ -138,13 +141,23 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | id | uuid | |
 | simulation_attempt_id | uuid → simulation_attempts | |
 | question_id | uuid → phase1_questions | |
-| selected_option | enum | `a`, `b`, `c` |
+| selected_option | enum, nullable | `a`, `b`, `c`; `NULL` quando o tempo official termina sem seleção (migration 140000) |
 | is_correct | boolean | calculado no momento da resposta |
 | created_at | timestamp | |
+
+Constraint única `(simulation_attempt_id, question_id)` garante uma resposta por item.
+A migration `20260914000000_phase1_consistency.sql` também cria índice parcial único
+em `simulation_attempts(user_id, mode)` para Fase 1 `in_progress`, impedindo duas abas
+de criarem tentativas concorrentes do mesmo modo.
 
 **Regra de tempo (confirmada pelo Manual do Examinando, item 1.2.1):** 30s de leitura (pode iniciar o áudio antes) → até 45s de áudio → 1 minuto para responder, **incluindo** a reescuta opcional dentro dessa mesma janela (não é tempo adicional). Ao fim de 1 min, avança automaticamente.
 
 **Pool atual (2026-09-10):** 172 áudios ativos / 189 perguntas — audio01–10 + lote `v*` (43/60, batches 1–2) + `audio060–189` (`scripts/add-phase1-audios-batch3.mjs`, dados em `scripts/data/phase1-batch3.json`, do mapa `Material Didático/ATC/Phase 1 - Audios/mapa_questões.xlsx`). `getRandomQuizQuestions(limit, userId?)` prioriza perguntas ainda não respondidas pelo usuário (só repete quando o pool inédito esgota) — ver `src/services/simulations/phase1/queries.ts`.
+
+**Retomada M4:** a lista sorteada é persistida antes do primeiro item. O contador é a
+quantidade de `phase1_answers`; `finishAttempt` exige exatamente o tamanho da sequência.
+Pergunta desativada após o início continua disponível naquela tentativa via leitura
+servidora autorizada, sem expor o gabarito ao cliente.
 
 ---
 
@@ -180,7 +193,9 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | response_stage | enum | **[ALTERADO]** agora cobre todos os sub-estágios da state machine: `main`, `situation_intro`, `situation_check`, `suggestion` (Parte 2), `image_observation`, `image_description`, `story_preparation`, `story_telling` (Parte 4) |
 | item_slot | smallint, nullable | **[NOVO, 2026-09-11 — Milestone 2]** posição (0-based) da resposta dentro da sequência de estágios do item (ver `src/services/simulations/phase2/response-stages.ts`), **mandada pelo cliente e validada pelo servidor** contra essa sequência (revisão de 2026-09-11 — antes o servidor tentava inferir a posição só a partir de quantos slots já tinham linha, o que era ambíguo pra estágios repetidos). Não é redundante com `response_stage`: é a chave de posição/idempotência que o guard de item usa (`src/lib/simulations/item-guard.ts`) — `response_stage` sozinho não é único dentro de um item em toda trilha (a Parte 4 do SDEA repete `narrative` duas vezes). Índice único em `(simulation_attempt_id, prompt_id, item_slot)`, migration `20260911000000_response_item_slot.sql`. `null` só em linhas anteriores a essa migration ou de uma janela de deploy sem o `item_slot` ainda — o guard reconhece essas linhas e atribui posição pela ordem de criação, ver `assignSlots` em `item-guard.ts`. |
 | retry_count | smallint, default 0 | **[NOVO, 2026-09-11 — revisão do M2]** quantas vezes esta MESMA linha (mesmo `item_slot`) foi reprocessada depois de um erro. Um retry reaproveita a linha (não cria outra), então a contagem de LINHAS por tentativa não refletia retries — este contador é o teto (`MAX_RETRIES_PER_SLOT` = 5) que fecha essa brecha. |
-| audio_url | text, nullable | |
+| audio_path | text, nullable | **[NOVO, 2026-09-12 — Milestone 3.1]** caminho do objeto no bucket PRIVADO — `{userId}/{attemptId}/{responseId}`, **determinístico pelo id da própria linha** (revisão de 2026-09-12: a 1ª versão usava um sufixo aleatório por chamada, e um retry criava um objeto novo, deixando o anterior órfão — sem extensão de arquivo no caminho de propósito, pra um retry que troca de formato ainda sobrescrever o MESMO objeto via `upsert: true`). Substitui `audio_url`; acesso só por URL assinada de 120s gerada sob demanda (`src/lib/simulations/recording-access.ts`), nunca por leitura/URL pública direta (bucket sem policy nenhuma pra `authenticated`, migration `20260912050000`). |
+| expires_at | timestamptz, nullable | **[NOVO, 2026-09-12 — Milestone 3.2]** quando a GRAVAÇÃO vence: 30 dias (`practice`) ou 180 dias (`official`), gravado explicitamente no upload (não calculado on-the-fly) pra a retenção ser auditável. Só o áudio expira — transcrição/feedback/nota não. |
+| audio_url | text, nullable | **[LEGADO]** guardava a URL PÚBLICA da gravação, de quando o bucket era público — parou de funcionar quando o bucket virou privado (migration `20260912000000`, intencional). O código novo não escreve mais aqui. |
 | transcript | text, nullable | |
 | ai_feedback | text, nullable | feedback curto em inglês por resposta. `practice`: preenchido em tempo real (mostrado ao candidato após cada resposta). `official`: **[2026-08-27]** preenchido só na finalização (`advanceState`, em lote), para o demonstrativo por parte da tela de resultado — nunca mostrado durante a prova |
 | ai_provider | text, nullable | ex: `anthropic` |
@@ -196,7 +211,7 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 - **Parte 2: só repetição da frase é aceita — esclarecimento de vocabulário NÃO é permitido nessa parte**, porque o item avalia justamente se o candidato entendeu o vocabulário/estrutura sem ajuda.
 - Uso excessivo dessas estratégias não é esperado para candidatos em nível 5/6 — é sinal para a IA considerar na avaliação de "Interações", não motivo de bloqueio técnico.
 
-**Timeout de início de resposta [ALTERADO 2026-08-11]:** no modo `official`, não existe botão manual para começar a falar — 5s depois da pergunta ser apresentada, a gravação começa sozinha (fidelidade ao exame real, decisão da Sabrina). Isso é um timer diferente do timer de duração da resposta (ainda não implementado) e é controlado separadamente na state machine (ver `docs/state-machine.md`).
+**Timeouts oficiais [M5]:** no modo `official`, não existe botão manual para começar a falar: 5s depois da pergunta, a gravação começa sozinha. O cliente encerra no `expected_duration_seconds`; o servidor persiste início/fim e valida a duração real decodificada com tolerância de 3s.
 
 ---
 
@@ -207,14 +222,21 @@ Senha **não** é armazenada aqui — delegada ao Supabase Auth.
 | id | uuid | |
 | simulation_attempt_id | uuid → simulation_attempts | |
 | phase | enum | `phase1`, `phase2`, `pilot_interview` |
-| overall_score | text/numeric | Fase 1: percentual. Fase 2/SDEA: estimativa geral (menor dos 6 critérios) |
+| overall_score | text/numeric | Fase 1: percentual. Fase 2/SDEA: menor dos 4 critérios hoje sustentados pela transcrição |
 | pronunciation_score / structure_score / vocabulary_score / fluency_score / comprehension_score / interaction_score | enum `public.proficiency_level` | 4 faixas (**[2026-08-27]**, migration `20260827000000_add_excellent_proficiency_level.sql`): `weak` = Fraco (N1–N3), `moderate` = Moderado (N4), `good` = Ótimo (N5), `excellent` = Excelente (N6). Antes eram 3 (`good` rotulado "Bom"); linhas históricas com `good` passam a ser exibidas como "Ótimo", sem migração de dados. Evolução futura: escala numérica OACI 1–6 |
 | general_feedback | text | |
 | ai_provider | text, nullable | |
 | model_version | text, nullable | |
+| rubric_version | text, nullable | Versão da régua; históricos são `legacy-unversioned` |
+| prompt_version | text, nullable | Versão do prompt de relatório final |
+| pipeline_version | text, nullable | Versão do pipeline/evidência (`transcript-only-v1` atualmente) |
 | created_at | timestamp | |
 
-**Regra de nota final (Doc 9835 / Manual do Examinando item 5.2):** por segurança operacional, o nível final é sempre o **menor** valor obtido entre os 6 critérios — não uma média. Essa regra deve estar no prompt de correção da IA como instrução explícita, não como algo inferido. Vale igualmente pro SDEA (ver seção 9) — é uma regra da Escala OACI, não específica do exame do controlador.
+**Contrato provisório de avaliação (M6):** enquanto o pipeline não tiver um avaliador acústico validado, `pronunciation_score` e `fluency_score` ficam `null` e não determinam o resultado. O nível final é o menor entre estrutura, vocabulário, compreensão e interações, os quatro critérios sustentados pela transcrição. A interface identifica explicitamente os dois critérios indisponíveis; eles não são apresentados como avaliação acústica.
+
+Relatório incompleto, resposta vazia ou falha de parsing também deixa o resultado
+indisponível, sem fallback artificial para N4. A migration
+`20260915030000_evaluation_provenance.sql` adiciona a proveniência versionada.
 
 ---
 
@@ -307,7 +329,68 @@ regra inegociável de nota final = menor dos 6 critérios (nunca média).
 
 ---
 
+## 10. `recording_consents` e `recording_access_log` **[NOVO, 2026-09-12 — Milestone 3]**
+
+Duas tabelas de auditoria pra gravação de voz — bloqueio prévio (consentimento) e
+rastro de acesso administrativo depois do fato.
+
+**`recording_consents`** — aceite do consentimento de gravação (M3.3, texto e versão em
+`src/lib/simulations/consent.ts`), exigido antes da 1ª gravação de qualquer trilha.
+
+| Campo | Tipo | Observações |
+|---|---|---|
+| id | uuid | |
+| user_id | uuid → users | |
+| consent_version | text | identifica qual versão do texto foi aceita — muda junto quando o texto muda de forma relevante |
+| accepted_at | timestamptz | |
+| created_at | timestamptz | |
+
+Imutável por design: sem policy de update/delete pra `authenticated`. **[2026-09-12,
+revisão]** INSERT também revogado de `authenticated` — a policy original só checava
+`auth.uid() = user_id`, sem restringir `consent_version`/`accepted_at`, então o cliente
+podia mandar uma versão inventada ou um timestamp retroativo direto pra PostgREST. Só
+`service_role` escreve agora (a Server Action `acceptRecordingConsent` usa o client
+admin depois de `authorize()`); SELECT continua liberado pro titular (`getConsentStatus`
+só lê, sem risco de forjar registro passado).
+
+**`recording_access_log`** — registro de acesso ADMINISTRATIVO a uma gravação (item 3.2
+do plano de correção: "registrar acesso administrativo sem conteúdo sensível").
+
+| Campo | Tipo | Observações |
+|---|---|---|
+| id | uuid | |
+| admin_user_id | uuid → users | |
+| track | text | `phase2` \| `pilot` |
+| response_id | uuid | id da linha em `phase2_responses`/`pilot_responses`, conforme `track` |
+| accessed_at | timestamptz | |
+
+Só metadado — nunca a URL assinada nem o áudio. Escrito por
+`src/lib/simulations/recording-access.ts` sempre que um admin assina a gravação de OUTRO
+titular (não quando acessa a própria). Só `service_role` lê/escreve — não é dado do
+titular da gravação, é trilha de auditoria interna.
+
+---
+
 ## Enums de referência
+
+### Barreira e limpeza M3 — migration 20260912070000 (pendente)
+
+- `privacy_deletion_requests`: `user_id` PK/FK para users (cascade), `requested_at`
+  timestamptz. Barreira durável; restaurar status active não remove o pedido.
+- `privacy_uploads`: UUID `id`, `user_id` FK restrict, `response_id`, `track`
+  (`phase2`/`pilot`), `started_at`. Único por trilha/resposta. Sem acesso para
+  anon/authenticated e sem timeout automático; impede exclusão enquanto existir.
+- Nas duas tabelas de resposta: `recording_cleanup_pending boolean default false`
+  e `recording_purged_at timestamptz nullable`. Claim terminal bloqueia novo upload
+  no slot vencido; purged_at só após confirmação da remoção. Sem novo enum.
+- RPCs somente service_role: `begin_privacy_upload`, `finish_privacy_upload`,
+  `request_privacy_deletion`, `claim_recording_cleanup` e
+  `claim_recording_cleanup_batch` (um round-trip por página).
+- Triggers verificam a barreira inclusive em escrita service_role nas respostas /
+  relatórios, recusam tentativa nova e impedem apagar usuário com upload pendente.
+  Conteúdo pode ser limpo para NULL, nunca repovoado depois da exclusão.
+
+Detalhamento e recuperação operacional: `m3-privacy-handoff.md`.
 
 ```
 role: admin | pilot | air_traffic_controller

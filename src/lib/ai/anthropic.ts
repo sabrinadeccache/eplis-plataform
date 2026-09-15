@@ -8,6 +8,12 @@ import {
 export { MODEL_VERSION };
 export type { ProficiencyLevel };
 
+// Proveniência persistida em cada relatório final. Estes identificadores devem
+// mudar sempre que a régua, o prompt ou a forma de produzir a avaliação mudar.
+export const EVALUATION_RUBRIC_VERSION = "icao-textual-four-criteria-v1";
+export const EVALUATION_PROMPT_VERSION = "2026-09-15-transcript-v1";
+export const EVALUATION_PIPELINE_VERSION = "transcript-only-v1";
+
 const SHORT_FEEDBACK_SYSTEM = `You are an EPLIS examiner (Brazilian aeronautical English
 proficiency exam, ICAO scale), speaking directly to the candidate as the interviewer would.
 Given the prompt shown to the candidate and the transcript of their spoken answer, give SHORT
@@ -71,8 +77,9 @@ literally again. Do NOT evaluate whether the story accurately or literally descr
 image, and do NOT suggest the candidate should have described concrete visual details (setting,
 colors, what the person is doing, etc.) instead of telling a story — creative interpretation and
 invented details are expected and must never be penalized or flagged as off-task. Give feedback
-only about the story as spoken English: sentence structure, grammar, simplicity/clarity, and
-fluency — the same kind of feedback given for any other answer in the interview.`;
+only about the story's relevance and the sentence structure, grammar and clarity visible in the
+transcript — the same kind of feedback given for any other answer in the interview. Do not infer
+pronunciation or acoustic fluency from a transcript.`;
 
 const STAGE_RULES: Record<string, string> = {
   situation_check: SITUATION_CHECK_RULE,
@@ -119,13 +126,13 @@ export async function generateResponseFeedback(
 }
 
 export type FinalReport = {
-  pronunciation: ProficiencyLevel;
-  structure: ProficiencyLevel;
-  vocabulary: ProficiencyLevel;
-  fluency: ProficiencyLevel;
-  comprehension: ProficiencyLevel;
-  interaction: ProficiencyLevel;
-  overall: ProficiencyLevel;
+  pronunciation: ProficiencyLevel | null;
+  structure: ProficiencyLevel | null;
+  vocabulary: ProficiencyLevel | null;
+  fluency: ProficiencyLevel | null;
+  comprehension: ProficiencyLevel | null;
+  interaction: ProficiencyLevel | null;
+  overall: ProficiencyLevel | null;
   general_feedback: string;
 };
 
@@ -137,39 +144,51 @@ equivalente ao nível 4), "good" (Ótimo — equivalente ao nível 5) e "excelle
 equivalente ao nível 6). Use "excellent" só para desempenho realmente excepcional no critério, sem
 qualquer limitação perceptível; na dúvida entre "good" e "excellent", fique com "good".`;
 
-const REPORT_CRITERIA: (keyof FinalReport)[] = [
-  "pronunciation",
+const REPORT_CRITERIA = [
   "structure",
   "vocabulary",
-  "fluency",
   "comprehension",
   "interaction",
-];
+] as const;
 
-// O overall SEMPRE é o menor dos 6 critérios — regra de segurança operacional da
-// Escala OACI. Reforçamos no prompt, mas também garantimos no código (o modelo
-// às vezes "arredonda pra cima"). Também valida que cada faixa é um valor conhecido.
+// Enquanto não há avaliador acústico validado, o overall é o menor dos quatro
+// critérios sustentados pela transcrição. Pronúncia e fluência ficam nulas.
 export function normalizeFinalReport(raw: FinalReport): FinalReport {
   const clean = { ...raw };
+  const supportedLevels: ProficiencyLevel[] = [];
   for (const key of REPORT_CRITERIA) {
-    if (!PROFICIENCY_ORDER.includes(clean[key] as ProficiencyLevel)) {
-      clean[key] = "moderate" as never;
+    const value = clean[key];
+    if (!PROFICIENCY_ORDER.includes(value as ProficiencyLevel)) {
+      clean[key] = null;
+    } else {
+      supportedLevels.push(value as ProficiencyLevel);
     }
   }
-  clean.overall = lowestProficiency(REPORT_CRITERIA.map((k) => clean[k] as ProficiencyLevel));
+  // O pipeline recebe somente a transcrição. Sem sinal acústico validado,
+  // pronúncia e fluência oral não podem ser classificadas honestamente.
+  clean.pronunciation = null;
+  clean.fluency = null;
+  // Um relatório incompleto/malformado não pode virar nota N4 por fallback.
+  // Só existe nível geral quando os quatro critérios textuais são válidos.
+  clean.overall = supportedLevels.length === REPORT_CRITERIA.length
+    ? lowestProficiency(supportedLevels)
+    : null;
   return clean;
 }
 
 // A entrevista em si (perguntas, situações, feedback curto por resposta) é
 // toda em inglês — o aluno treina o ouvido antes do exame de verdade. Mas o
 // RELATÓRIO FINAL fica salvo como registro de progresso do aluno, então esse
-// sim é em português, explicando cada um dos 6 critérios individualmente.
-const FINAL_REPORT_SYSTEM = `Você é um examinador do EPLIS avaliando pela Escala de
-Proficiência OACI (Doc 9835), seis critérios: pronúncia, estrutura, vocabulário, fluência,
-compreensão, interações. ${PROFICIENCY_SCALE_PROMPT}
+// sim é em português, explicando os critérios disponíveis individualmente.
+const FINAL_REPORT_SYSTEM = `Você é um examinador do EPLIS avaliando evidências TRANSCRITAS.
+Classifique somente estrutura, vocabulário, compreensão e interações. ${PROFICIENCY_SCALE_PROMPT}
+
+Você não recebe o sinal acústico nesta etapa. Portanto, não atribua nota de pronúncia nem de
+fluência oral: devolva null nesses dois campos e explique no feedback que eles estão indisponíveis
+até haver avaliação acústica validada. Não faça inferências acústicas a partir da transcrição.
 
 REGRA OBRIGATÓRIA E NÃO NEGOCIÁVEL DE SEGURANÇA OPERACIONAL: o nível geral relatado (overall)
-NUNCA é uma média dos seis critérios — é sempre igual ao MENOR valor entre eles (o critério mais
+NUNCA é uma média — é sempre igual ao MENOR valor entre os quatro critérios disponíveis (o critério mais
 fraco determina o resultado geral), pois um único critério fraco pode comprometer a segurança em
 comunicações reais de tráfego aéreo.
 
@@ -196,23 +215,23 @@ como qualquer outra resposta falada, pela estrutura das frases, gramática e cla
 
 Se alguma transcrição estiver vazia, ou for claramente ruído/fragmento cortado em vez de uma
 tentativa real de resposta em inglês, trate isso como um provável problema técnico (microfone) e
-NÃO use essa resposta específica para rebaixar nenhum dos 6 critérios — avalie os critérios com
+NÃO use essa resposta específica para rebaixar nenhum dos critérios disponíveis — avalie-os com
 base nas demais respostas e, se mencionar o caso no general_feedback, deixe claro que foi por
 motivo técnico, não de proficiência.
 
 Este relatório fica salvo como registro de progresso do aluno (mesmo a entrevista tendo sido
 conduzida em inglês) — escreva o campo general_feedback em português, explicando individualmente
-cada um dos 6 critérios (o que motivou a nota dada em cada um, com pelo menos um exemplo concreto
+cada um dos 4 critérios disponíveis (o que motivou a nota dada em cada um, com pelo menos um exemplo concreto
 extraído das respostas do candidato) e não só uma impressão geral, para que o aluno entenda
 exatamente onde está seu progresso e o que precisa melhorar.
 
 Responda APENAS com um JSON estrito, sem texto antes ou depois, no formato:
-{"pronunciation":"weak|moderate|good|excellent","structure":"weak|moderate|good|excellent","vocabulary":"weak|moderate|good|excellent","fluency":"weak|moderate|good|excellent","comprehension":"weak|moderate|good|excellent","interaction":"weak|moderate|good|excellent","overall":"<igual ao menor dos seis>","general_feedback":"<texto em português explicando cada um dos 6 critérios individualmente>"}`;
+{"pronunciation":null,"structure":"weak|moderate|good|excellent","vocabulary":"weak|moderate|good|excellent","fluency":null,"comprehension":"weak|moderate|good|excellent","interaction":"weak|moderate|good|excellent","overall":"<igual ao menor dos quatro critérios disponíveis>","general_feedback":"<texto em português explicando os quatro critérios disponíveis e a limitação acústica>"}`;
 
 // Só se aplica ao modo `official`, que não dá nenhum feedback durante a entrevista
 // (diferente do `practice`, que já mostra um feedback curto após cada resposta) —
 // o relatório final é a única devolutiva que o candidato recebe, então precisa
-// compensar isso olhando pra entrevista como um todo, não só os 6 critérios.
+// compensar isso olhando pra entrevista como um todo.
 // Exportado (não só usado internamente) pra ser reaproveitado pela trilha do
 // piloto/SDEA (src/lib/ai/pilot-track.ts) — o texto já é redigido de forma
 // track-agnóstica ("a entrevista", sem mencionar partes específicas do
@@ -221,12 +240,12 @@ export const OFFICIAL_MODE_ADDENDUM = `
 
 Este candidato fez a entrevista no modo OFFICIAL, que não dá nenhum feedback durante
 a prova — o relatório abaixo é a ÚNICA devolutiva que ele recebe sobre toda a
-entrevista. Além de explicar os 6 critérios individualmente (instrução acima, que
+entrevista. Além de explicar os 4 critérios disponíveis individualmente (instrução acima, que
 continua valendo), o general_feedback também deve, na mesma resposta em português:
 - Destacar as melhores respostas dadas ao longo das 4 partes, com pelo menos um
   exemplo concreto (trecho ou paráfrase da resposta) do que funcionou bem.
 - Apontar os erros ou padrões de erro mais recorrentes ao longo das partes
-  (gramática, vocabulário, estrutura, fluência etc.) — não precisa comentar item
+  (gramática, vocabulário, estrutura etc.) — não precisa comentar item
   por item, mas sim os padrões que mais se repetiram.
 - Mencionar qualquer outro ponto que você julgue relevante para o progresso do
   aluno rumo ao exame real.
@@ -241,7 +260,7 @@ const REPETITION_RULE_PRACTICE = `Sobre o botão "repetir pergunta": no modo pra
 
 const REPETITION_RULE_OFFICIAL = `Sobre o botão "repetir pergunta": no modo official, uma repetição por item é tolerada e não penaliza; só quando um item teve MAIS DE UMA repetição (marca "[pediu repetição 2x neste item]" ou mais) isso deve pesar SOMENTE no critério COMPREENSÃO e ser mencionado no general_feedback.`;
 
-const REPETITION_RULE_COMMON = `Pedidos de repetição nunca afetam os outros 5 critérios e nunca são motivo de bloqueio. Modere o peso: se a compreensão demonstrada nas próprias respostas foi claramente de nível "good" (Ótimo) ou "excellent" (Excelente), NÃO rebaixe COMPREENSÃO abaixo de "good" só por causa das repetições — registre a observação no general_feedback, mas sem rigidez na nota.`;
+const REPETITION_RULE_COMMON = `Pedidos de repetição afetam somente compreensão e nunca são motivo de bloqueio. Modere o peso: se a compreensão demonstrada nas próprias respostas foi claramente de nível "good" (Ótimo) ou "excellent" (Excelente), NÃO rebaixe COMPREENSÃO abaixo de "good" só por causa das repetições — registre a observação no general_feedback, mas sem rigidez na nota.`;
 
 export function repetitionRuleFor(mode: "practice" | "official"): string {
   return `\n\n${mode === "official" ? REPETITION_RULE_OFFICIAL : REPETITION_RULE_PRACTICE}\n${REPETITION_RULE_COMMON}`;
@@ -252,13 +271,13 @@ export function repetitionMarker(count?: number | null): string {
 }
 
 const FALLBACK_REPORT: FinalReport = {
-  pronunciation: "moderate",
-  structure: "moderate",
-  vocabulary: "moderate",
-  fluency: "moderate",
-  comprehension: "moderate",
-  interaction: "moderate",
-  overall: "moderate",
+  pronunciation: null,
+  structure: null,
+  vocabulary: null,
+  fluency: null,
+  comprehension: null,
+  interaction: null,
+  overall: null,
   general_feedback:
     "Não foi possível gerar o relatório detalhado automaticamente. Entre em contato com o suporte.",
 };
@@ -267,7 +286,8 @@ export async function generateFinalReport(
   transcripts: { part: string; promptText: string; transcript: string; repetitionCount?: number }[],
   mode: "practice" | "official",
 ): Promise<FinalReport> {
-  const body = transcripts
+  const usableTranscripts = transcripts.filter((t) => t.transcript.trim().length > 0);
+  const body = usableTranscripts
     .map(
       (t, i) =>
         `[${i + 1}] (${t.part}) Pergunta: ${t.promptText}\nResposta: ${t.transcript}${repetitionMarker(t.repetitionCount)}`,
@@ -276,7 +296,7 @@ export async function generateFinalReport(
 
   // Sem nenhuma resposta transcrita não há o que avaliar — chamar a IA com
   // content vazio dá 400 ("user messages must have non-empty content").
-  if (body.trim() === "") return FALLBACK_REPORT;
+  if (usableTranscripts.length === 0) return FALLBACK_REPORT;
 
   const system =
     (mode === "official" ? `${FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}` : FINAL_REPORT_SYSTEM) +

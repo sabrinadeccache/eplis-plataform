@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { AppShell } from "@/components/layout/app-shell";
 import { isApproved } from "@/lib/phase1/scoring";
 
@@ -26,12 +27,16 @@ export default async function Fase1ResultadoPage({
 
   const isPractice = attempt.mode === "practice";
 
-  const { data: answers } = await supabase
+  // A posse já foi confirmada acima. O admin client permite exibir a questão
+  // congelada mesmo se ela tiver sido desativada depois do início.
+  const admin = createAdminClient();
+  const { data: answers } = await admin
     .from("phase1_answers")
     .select(
       "selected_option, is_correct, phase1_questions(prompt, option_a, option_b, option_c, correct_option)",
     )
-    .eq("simulation_attempt_id", attemptId);
+    .eq("simulation_attempt_id", attemptId)
+    .order("created_at", { ascending: true });
 
   const total = answers?.length ?? 0;
   const score = attempt.score ?? 0;
@@ -75,12 +80,9 @@ export default async function Fase1ResultadoPage({
             correct_option: string;
           } | null;
 
-          // A RLS de phase1_questions só libera leitura de perguntas com
-          // is_active = true — uma pergunta desativada depois da tentativa (ex.:
-          // trocada por outra no mesmo áudio) vira null aqui no join em vez de
-          // barrar a query inteira. Sem esse guard, a página quebra ao tentar
-          // ler campos de um objeto null (era exatamente o crash reportado após
-          // finalizar o simulado da Fase 1).
+          // Defesa para conteúdo removido de forma administrativa apesar das
+          // regras de seed/FK. Desativação comum não torna a questão invisível
+          // aqui, pois a leitura server-side autorizada usa o admin client.
           if (!question) {
             return (
               <div key={i} className="card p-4 text-sm text-muted">
@@ -105,7 +107,7 @@ export default async function Fase1ResultadoPage({
             >
               <p className="font-medium text-ink">{question.prompt}</p>
               <p className="mt-1 text-muted">
-                Sua resposta: {optionLabel[answer.selected_option as string]}
+                Sua resposta: {answer.selected_option ? optionLabel[answer.selected_option as string] : "Sem resposta (tempo esgotado)"}
               </p>
               {!isCorrect && (
                 <p className="mt-1 text-muted">

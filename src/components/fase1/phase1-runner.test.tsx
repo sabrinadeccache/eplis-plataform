@@ -41,6 +41,18 @@ beforeEach(() => {
 });
 
 describe("Phase1Runner — trava de concorrência no avanço", () => {
+  it("retoma no índice derivado das respostas persistidas", () => {
+    render(
+      <Phase1Runner
+        attemptId="attempt-1"
+        questions={[makeQuestion("q1"), makeQuestion("q2"), makeQuestion("q3")]}
+        startIndex={1}
+      />,
+    );
+    expect(screen.getByText("2/3")).toBeInTheDocument();
+    expect(screen.getByText("Prompt q2")).toBeInTheDocument();
+  });
+
   it("clique duplo no botão de avanço não pula uma questão nem chama recordAnswer duas vezes", async () => {
     render(
       <Phase1Runner attemptId="attempt-1" questions={[makeQuestion("q1"), makeQuestion("q2")]} />,
@@ -71,5 +83,13 @@ describe("Phase1Runner — trava de concorrência no avanço", () => {
 
     expect(finishAttempt).toHaveBeenCalledTimes(1);
     expect(pushMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("persiste uma resposta incorreta mesmo quando avança sem seleção", async () => {
+    render(<Phase1Runner attemptId="attempt-1" questions={[makeQuestion("q1")]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ouvir áudio" }));
+    fireEvent.ended(document.querySelector("audio")!);
+    fireEvent.click(await screen.findByRole("button", { name: "Finalizar simulado" }));
+    await waitFor(() => expect(recordAnswer).toHaveBeenCalledWith("attempt-1", "q1", null));
   });
 });

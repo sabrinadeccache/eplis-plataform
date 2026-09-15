@@ -20,9 +20,10 @@ vi.mock("@/services/simulations/pilot/queries", () => ({ getSequenceForAttempt }
 
 const validateAudioContainer = vi.fn();
 const validateDecodedAudio = vi.fn();
+const sniffAudioContainer = vi.fn();
 vi.mock("@/lib/audio/validate", async (importOriginal) => {
   const actual = (await importOriginal()) as object;
-  return { ...actual, validateAudioContainer, validateDecodedAudio };
+  return { ...actual, validateAudioContainer, validateDecodedAudio, sniffAudioContainer };
 });
 
 const reserveResponseSlot = vi.fn();
@@ -34,6 +35,12 @@ vi.mock("@/lib/simulations/item-guard", async (importOriginal) => {
 const assertSubmissionRate = vi.fn();
 vi.mock("@/lib/simulations/rate-limit", () => ({ assertSubmissionRate }));
 
+const getConsentStatus = vi.fn();
+vi.mock("@/lib/simulations/consent", async (importOriginal) => {
+  const actual = (await importOriginal()) as object;
+  return { ...actual, getConsentStatus };
+});
+
 const transcribeAudio = vi.fn();
 vi.mock("@/lib/ai/openai", () => ({ transcribeAudio }));
 
@@ -44,36 +51,65 @@ vi.mock("@/lib/ai/pilot-track", () => ({
 }));
 
 const storageUpload = vi.fn();
+const storageRemove = vi.fn();
+const storageDownload = vi.fn();
 const adminUpdate = vi.fn();
+let accountStatus = "active";
+let privacyWriteDenied = false;
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    from() {
+    async rpc(name: string) {
+      if (name === "begin_privacy_upload" && accountStatus !== "active") return { data: null, error: { message: "blocked" } };
+      return { data: name === "begin_privacy_upload" ? "upload-token" : null, error: null };
+    },
+    from(table: string) {
       return {
         update(payload: Record<string, unknown>) {
           adminUpdate(payload);
           return this;
         },
+        select() {
+          return this;
+        },
         eq() {
           return this;
         },
-        then(resolve: (v: { data: null; error: null }) => void) {
-          resolve({ data: null, error: null });
+        // Recheck de UX; a barreira transacional tem testes próprios.
+        async maybeSingle() {
+          if (table === "users") return { data: { status: accountStatus }, error: null };
+          if (table === "official_response_windows") return {
+            data: {
+              id: "window-1",
+              recording_started_at: "2026-09-14T12:00:00.000Z",
+              recording_finished_at: "2026-09-14T12:00:12.000Z",
+              repetition_count: 1,
+              expected_duration_seconds: 45,
+            },
+            error: null,
+          };
+          return { data: null, error: null };
+        },
+        async single() {
+          if (table === "pilot_responses") return { data: { audio_path: "user/attempt/response.webm" }, error: null };
+          return { data: null, error: null };
+        },
+        then(resolve: (v: { data: null; error: { code: string; message: string } | null }) => void) {
+          resolve({ data: null, error: privacyWriteDenied ? { code: "42501", message: "privacy fence" } : null });
         },
       };
+    },
+    // Upload das gravações passou a ser SÓ pelo client admin (service_role)
+    // desde a revisão do M3 — ver comentário equivalente na suíte da Fase 2.
+    storage: {
+      from() {
+        return { upload: storageUpload, remove: storageRemove, download: storageDownload };
+      },
     },
   }),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    storage: {
-      from() {
-        return {
-          upload: storageUpload,
-          getPublicUrl: () => ({ data: { publicUrl: "https://cdn.test/audio.webm" } }),
-        };
-      },
-    },
     from() {
       return {
         select() {
@@ -103,6 +139,7 @@ function makeRequest(
   formData.set("stage", overrides.stage ?? "picture_description");
   formData.set("slot", overrides.slot ?? "0");
   formData.set("repetitionCount", overrides.repetitionCount ?? "0");
+  if (overrides.resume) formData.set("resume", overrides.resume);
   if (audio) formData.set("audio", audio, "audio.webm");
   return {
     formData: async () => formData,
@@ -151,18 +188,43 @@ const sequence = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  accountStatus = "active";
+  privacyWriteDenied = false;
   authorize.mockResolvedValue({ user: { id: "user-1", operational_profile: "fixed_wing" } });
   assertOwnAttemptInProgress.mockResolvedValue(attempt);
   getSequenceForAttempt.mockResolvedValue(sequence);
   validateAudioContainer.mockReturnValue({ ok: true, container: "webm" });
   validateDecodedAudio.mockResolvedValue({ ok: true, container: "webm", durationSeconds: 12 });
+  sniffAudioContainer.mockReturnValue("webm");
   assertSubmissionRate.mockResolvedValue(undefined);
+  getConsentStatus.mockResolvedValue({ accepted: true, version: "test", acceptedAt: "2026-01-01T00:00:00Z" });
   storageUpload.mockResolvedValue({ error: null });
+  storageRemove.mockResolvedValue({ error: null });
+  storageDownload.mockResolvedValue({ data: new Blob(["stored"], { type: "audio/webm" }), error: null });
   transcribeAudio.mockResolvedValue("This is a picture of an airport.");
   generatePilotResponseFeedback.mockResolvedValue("Nice description.");
 });
 
 describe("POST /api/sdea/submit-response", () => {
+  it("IA retorna depois da barreira: escrita recusada não vira sucesso 200", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "response-1", slot: 0 });
+    let release!: (text: string) => void;
+    transcribeAudio.mockImplementation(() => new Promise<string>((resolve) => { release = resolve; }));
+    const pending = POST(makeRequest());
+    await vi.waitFor(() => expect(transcribeAudio).toHaveBeenCalledOnce());
+    privacyWriteDenied = true;
+    release("conteúdo tardio");
+    expect((await pending).status).toBe(403);
+  });
+  it("rejeita quando o consentimento de gravação ainda não foi aceito — Milestone 3.3, antes até de parsear o formulário", async () => {
+    getConsentStatus.mockResolvedValue({ accepted: false, version: "test", acceptedAt: null });
+    const formDataSpy = vi.fn();
+    const res = await POST({ formData: formDataSpy, headers: { get: () => null } } as unknown as Request);
+    expect(res.status).toBe(403);
+    expect(formDataSpy).not.toHaveBeenCalled();
+    expect(reserveResponseSlot).not.toHaveBeenCalled();
+  });
+
   it("rejeita corpo maior que o limite pelo Content-Length, sem autenticar", async () => {
     const res = await POST(makeRequest({}, { contentLength: String(50 * 1024 * 1024) }));
     expect(res.status).toBe(413);
@@ -221,6 +283,15 @@ describe("POST /api/sdea/submit-response", () => {
     );
   });
 
+  it("recheca a conta perto da persistência: bloqueio no meio do processamento barra o upload (achado da revisão)", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    accountStatus = "blocked";
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(403);
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).not.toHaveBeenCalled();
+  });
+
   it("fluxo normal: reserva, sobe o áudio, transcreve e gera feedback (practice)", async () => {
     reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
     const res = await POST(makeRequest());
@@ -233,6 +304,36 @@ describe("POST /api/sdea/submit-response", () => {
     expect(transcribeAudio).toHaveBeenCalledOnce();
     expect(generatePilotResponseFeedback).toHaveBeenCalledOnce();
     expect(body).toEqual({ transcript: "This is a picture of an airport.", feedback: "Nice description." });
+  });
+
+  it("retoma do upload persistido sem exigir nova gravação nem novo upload", async () => {
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    const res = await POST(makeRequest({ resume: "true" }, { audio: null }));
+    expect(res.status).toBe(200);
+    expect(storageDownload).toHaveBeenCalledWith("user/attempt/response.webm");
+    expect(storageUpload).not.toHaveBeenCalled();
+    expect(transcribeAudio).toHaveBeenCalledOnce();
+  });
+
+  it("retoma MP4 armazenado em caminho sem extensão usando a assinatura real dos bytes", async () => {
+    sniffAudioContainer.mockReturnValue("mp4");
+    validateAudioContainer.mockReturnValue({ ok: true, container: "mp4" });
+    validateDecodedAudio.mockResolvedValue({ ok: true, container: "mp4", durationSeconds: 12 });
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    const res = await POST(makeRequest({ resume: "true" }, { audio: null }));
+    expect(res.status).toBe(200);
+    expect(validateAudioContainer).toHaveBeenCalledWith(expect.any(Buffer), "audio/mp4");
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("marca o slot como erro quando o relógio official rejeita a duração", async () => {
+    assertOwnAttemptInProgress.mockResolvedValue({ ...attempt, mode: "official" });
+    validateDecodedAudio.mockResolvedValue({ ok: true, container: "webm", durationSeconds: 90 });
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(422);
+    expect(adminUpdate).toHaveBeenCalledWith({ processing_status: "error" });
+    expect(storageUpload).not.toHaveBeenCalled();
   });
 
   it("modo official não chama geração de feedback", async () => {

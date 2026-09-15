@@ -26,7 +26,18 @@ async function main() {
       Authorization: `Bearer ${SERVICE_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ id: "phase2-recordings", name: "phase2-recordings", public: true }),
+    // PRIVADO (M3.1): gravação de voz do candidato nunca em bucket
+    // público — leitura só por URL assinada de vida curta, gerada após
+    // autorização (src/lib/simulations/recording-access.ts). Um bucket
+    // público ignora RLS na leitura: o endpoint /object/public/ não
+    // consulta policy nenhuma.
+    body: JSON.stringify({
+      id: "phase2-recordings",
+      name: "phase2-recordings",
+      public: false,
+      file_size_limit: 3932160,
+      allowed_mime_types: ["audio/webm", "audio/mp4"],
+    }),
   });
 
   if (res.ok) {

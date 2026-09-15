@@ -793,6 +793,45 @@ body {
     text-transform: uppercase;
     color: var(--brand);
   }
+
+  @media (max-width: 640px) {
+    .iv-strip {
+      flex-wrap: wrap;
+    }
+    .iv-strip > div {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .iv-strip .iv-segs {
+      order: 3;
+      flex-basis: 100%;
+    }
+    .iv-stage {
+      min-height: 19rem;
+      padding: 2.75rem 1rem 1.75rem;
+    }
+    .iv-orb-wrap {
+      width: min(11.5rem, 62vw);
+      height: min(11.5rem, 62vw);
+    }
+    .iv-deck {
+      justify-content: center;
+      gap: 0.75rem;
+      padding-inline: 0.85rem;
+    }
+    .iv-deck .iv-spacer {
+      display: none;
+    }
+    .iv-deck .iv-note {
+      flex-basis: 100%;
+      justify-content: center;
+      text-align: center;
+    }
+    .iv-keylabel {
+      max-width: 6.5rem;
+      text-align: center;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

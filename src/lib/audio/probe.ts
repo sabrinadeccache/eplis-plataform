@@ -166,7 +166,7 @@ export async function probeAudioDecodable(buffer: Buffer, ext: "webm" | "mp4"): 
 
   try {
     const stdout = await new Promise<string>((resolve, reject) => {
-      execFile(
+      execFile(/* turbopackIgnore: true */
         ffmpegBinaryPath,
         // -v error: silencia log verboso, mas erros reais (dados inválidos)
         // ainda aparecem no stderr.
@@ -219,7 +219,7 @@ export async function probeAudioDecodable(buffer: Buffer, ext: "webm" | "mp4"): 
       const e = error as { code?: unknown; errno?: unknown; syscall?: unknown; killed?: boolean };
       let binaryState = "desconhecido";
       try {
-        const st = statSync(ffmpegBinaryPath);
+        const st = statSync(/* turbopackIgnore: true */ ffmpegBinaryPath);
         binaryState = `existe, mode=${(st.mode & 0o777).toString(8)}, ${st.size} bytes`;
       } catch {
         binaryState = "arquivo inexistente no caminho resolvido";

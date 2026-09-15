@@ -6,6 +6,13 @@
 
 ## Novos requisitos
 
+**M3 — privacidade operacional (2026-09-12, revisão Codex):** exclusão de conta
+deve bloquear novos uploads e invalidar conteúdo tardio de IA no banco. Upload
+não finalizado exige pendência/reconciliação, nunca sucesso por timeout. Expiração
+deve persistir progresso e não disputar o mesmo slot com retry. Scripts e cron
+devem executar a mesma implementação. Detalhes: `m3-privacy-handoff.md`; ainda
+não implantado. Mantidos os prazos 30 dias practice / 180 dias official.
+
 **RF-52** — O sistema deve suportar o campo `operational_profile` (`TWR`, `APP`, `ACC`,
 `AFIS`, `FIS`, `COpM`, `ab_initio`) em `users`, definindo qual versão de prova da Fase 2
 o candidato recebe. *Fase: F1 (junto com RF-05/RF-06).*
@@ -38,6 +45,30 @@ reintroduzindo perguntas já vistas quando o pool inédito se esgota — para re
 memorização do banco com o tempo. Implementado em
 `getRandomQuizQuestions(limit, userId?)`. *(Melhoria de produto, pedido da Sabrina —
 não vem de especificação oficial. Fase 2/SDEA ainda não têm equivalente.)*
+
+**RF-58** — A tentativa da Fase 1 deve congelar a lista ordenada de questões no início,
+derivar o item corrente das respostas persistidas e sobreviver a reload/login sem novo
+sorteio. Deve existir no máximo uma tentativa `in_progress` por usuário e modo. Cada item
+gera exatamente uma resposta; timeout official sem seleção conta como incorreto. Practice
+nunca integra histórico, gráfico ou nota Official. *Implementado localmente na M4 em
+2026-09-14; migration 140000 deve preceder o código.*
+
+**RF-59** — No modo Official da Fase 2 e do SDEA, a gravação deve iniciar
+automaticamente, não admitir pausa e ser encerrada pelo limite do item. O servidor deve
+registrar os eventos e validar a duração decodificada com tolerância explícita; reload
+não pode reiniciar silenciosamente uma janela já iniciada. *M5.*
+
+**RF-60** — O item aplicável do SDEA deve incluir pergunta comparativa versionada no
+banco e no sorteio, com compatibilidade para itens legados. *M5.*
+
+**RF-61** — Enquanto a avaliação receber somente transcrições, pronúncia e fluência
+devem ficar indisponíveis e fora do cálculo geral. Transcrição vazia, relatório
+malformado ou falha técnica não pode produzir nota padrão. Todo relatório deve registrar
+as versões do modelo, régua, prompt e pipeline. *M6.*
+
+**RF-62** — Upload, transcrição e avaliação devem ter estados distintos, timeout,
+mensagem acionável, código de suporte e retry idempotente sem exigir nova gravação.
+Preferência de legendas deve ser restaurada no dispositivo. *M7.*
 
 ## Requisitos existentes alterados
 

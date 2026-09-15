@@ -10,6 +10,7 @@ import {
 } from "@/components/desempenho/fase1-progress-chart";
 import { HistoryRow } from "@/components/desempenho/history-row";
 import { BackLink } from "@/components/layout/back-link";
+import { getCompletedOfficialAttempts } from "@/services/simulations/performance";
 
 export default async function DesempenhoFase1Page() {
   const user = await getCurrentUser();
@@ -18,17 +19,9 @@ export default async function DesempenhoFase1Page() {
 
   const supabase = await createClient();
 
-  // Só o modo official conta como "prova" — o practice é treino livre.
-  const { data: attempts } = await supabase
-    .from("simulation_attempts")
-    .select("id, score, started_at, finished_at")
-    .eq("user_id", user.id)
-    .eq("phase", "phase1")
-    .eq("mode", "official")
-    .eq("status", "completed")
-    .order("finished_at", { ascending: false });
+  const attempts = await getCompletedOfficialAttempts(supabase, user.id, "phase1");
 
-  const attemptIds = (attempts ?? []).map((a) => a.id);
+  const attemptIds = attempts.map((a) => a.id);
 
   const { data: answers } =
     attemptIds.length > 0
@@ -46,7 +39,7 @@ export default async function DesempenhoFase1Page() {
     );
   }
 
-  const rows = (attempts ?? []).map((attempt) => {
+  const rows = attempts.map((attempt) => {
     const total = totalByAttempt.get(attempt.id) ?? 0;
     const score = attempt.score ?? 0;
     const approved = isApproved(score, total);

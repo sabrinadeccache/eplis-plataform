@@ -45,7 +45,8 @@ export type ProcessingStatus = "queued" | "transcribing" | "analyzing" | "done" 
 // good=Ótimo (N5), excellent=Excelente (N6). Ordem do enum no banco é a mesma.
 export type ProficiencyLevel = "weak" | "moderate" | "good" | "excellent";
 
-// Ordem crescente — usada pra calcular o overall como o MENOR dos 6 critérios.
+// Ordem crescente — usada pra calcular o overall como o menor dos critérios
+// que o pipeline atual consegue sustentar com evidência.
 export const PROFICIENCY_ORDER: readonly ProficiencyLevel[] = [
   "weak",
   "moderate",
@@ -83,7 +84,12 @@ export type UserRow = {
 
 export type SimulationAttemptRow = {
   id: string;
-  user_id: string;
+  // Anulável desde a migration 20260912030000 (`on delete set null`): ao
+  // excluir a conta, a tentativa sobrevive ANONIMIZADA (sem dono) pra
+  // estatística agregada — ver M3.2 em docs/project-status.md. As checagens
+  // de posse (`attempt.user_id !== user.id`) e os filtros
+  // `.eq("user_id", ...)` rejeitam nulo naturalmente.
+  user_id: string | null;
   phase: Phase;
   mode: SimulationMode;
   status: AttemptStatus;
@@ -93,8 +99,8 @@ export type SimulationAttemptRow = {
   current_item_index: number | null;
   elapsed_seconds: number;
   // Sequência de prompts sorteada pro candidato, congelada no momento da
-  // criação da tentativa — { part1: string[], part2: string[], ... } (ids de
-  // phase2_prompts/pilot_prompts, na ordem em que aparecem no simulado). Sem
+  // criação da tentativa — { phase1: string[] } para a Fase 1 ou
+  // { part1: string[], part2: string[], ... } para Fase 2/SDEA. Sem
   // isso, `getSequenceForAttempt` recalculava a cada chamada a partir do
   // pool ativo e do perfil atual do usuário, que podem mudar no meio de uma
   // tentativa em andamento. `null` só em tentativas anteriores a essa coluna
@@ -139,7 +145,9 @@ export type Phase1AnswerRow = {
   id: string;
   simulation_attempt_id: string;
   question_id: string;
-  selected_option: McqOption;
+  // Nulo quando o tempo da questão official termina sem seleção. Ainda é uma
+  // resposta persistida e incorreta, preservando N itens = N respostas.
+  selected_option: McqOption | null;
   is_correct: boolean;
   created_at: string;
 };
@@ -174,6 +182,21 @@ export type Phase2ResponseRow = {
   // Existe porque um retry reusa a linha (só muda processing_status/started_at),
   // então a contagem de LINHAS por tentativa não reflete retries.
   retry_count: number;
+  // Caminho do objeto no bucket PRIVADO (M3.1, migration 20260912010000) —
+  // `{userId}/{attemptId}/{...}`. Substitui `audio_url`: com bucket privado
+  // não existe URL estável, o acesso é por URL assinada de vida curta
+  // gerada sob demanda (src/lib/simulations/recording-access.ts).
+  audio_path: string | null;
+  // Quando a GRAVAÇÃO vence e passa a ser apagada pelo processo de retenção
+  // (M3.2, migration 20260912020000): practice 30 dias, official 180.
+  // Transcrição, feedback e notas não expiram — só o áudio.
+  expires_at: string | null;
+  recording_cleanup_pending: boolean;
+  recording_purged_at: string | null;
+  // **Legado.** Guardava a URL PÚBLICA da gravação, de quando os buckets
+  // eram públicos — as URLs gravadas aqui deixaram de funcionar quando os
+  // buckets viraram privados (migration 20260912000000), o que era o
+  // objetivo. O código novo não escreve mais nesta coluna.
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
@@ -200,6 +223,7 @@ export type PilotPromptRow = {
   expected_confirmation: string | null;
   discussion_question: string | null;
   discussion_question_2: string | null;
+  comparison_question: string | null;
   image_url: string | null;
   agree_disagree_statement: string | null;
   order_index: number | null;
@@ -213,9 +237,14 @@ export type PilotResponseRow = {
   simulation_attempt_id: string;
   prompt_id: string;
   response_stage: PilotResponseStage;
-  // Ver comentários equivalentes em Phase2ResponseRow.item_slot/retry_count.
+  // Ver comentários equivalentes em Phase2ResponseRow (item_slot,
+  // retry_count, audio_path, audio_url).
   item_slot: number | null;
   retry_count: number;
+  audio_path: string | null;
+  expires_at: string | null;
+  recording_cleanup_pending: boolean;
+  recording_purged_at: string | null;
   audio_url: string | null;
   transcript: string | null;
   ai_feedback: string | null;
@@ -242,6 +271,9 @@ export type SimulationFeedbackRow = {
   general_feedback: string | null;
   ai_provider: string | null;
   model_version: string | null;
+  rubric_version: string | null;
+  prompt_version: string | null;
+  pipeline_version: string | null;
   created_at: string;
 };
 
@@ -262,7 +294,11 @@ type UserInsert = Partial<Omit<UserRow, "id" | "created_at">> &
 type SimulationAttemptInsert = Partial<
   Omit<SimulationAttemptRow, "started_at" | "status">
 > &
-  Pick<SimulationAttemptRow, "user_id" | "phase" | "mode"> & {
+  Pick<SimulationAttemptRow, "phase" | "mode"> & {
+    // `user_id` é anulável na LINHA (anonimização pós-exclusão de conta),
+    // mas obrigatório no INSERT: criar tentativa sem dono nunca é o
+    // caminho válido — o desvínculo só acontece via `on delete set null`.
+    user_id: string;
     // Opcional: startAttempt() gera o id explicitamente (crypto.randomUUID())
     // quando precisa computar+persistir `item_sequence` no mesmo INSERT (a
     // seed da sequência é o próprio attemptId — ver queries.ts).
@@ -296,6 +332,50 @@ type PilotPromptInsert = Partial<Omit<PilotPromptRow, "id" | "created_at">> &
 type PilotResponseInsert = Partial<Omit<PilotResponseRow, "id" | "created_at">> &
   Pick<PilotResponseRow, "simulation_attempt_id" | "prompt_id" | "response_stage">;
 
+export type OfficialResponseWindowRow = {
+  id: string;
+  simulation_attempt_id: string;
+  prompt_id: string;
+  track: "phase2" | "pilot_interview";
+  item_slot: number;
+  response_stage: string;
+  expected_duration_seconds: number;
+  question_started_at: string;
+  question_finished_at: string | null;
+  recording_started_at: string | null;
+  recording_finished_at: string | null;
+  client_session_token: string | null;
+  repetition_count: number;
+  submitted_at: string | null;
+  created_at: string;
+};
+type OfficialResponseWindowInsert = Partial<Omit<OfficialResponseWindowRow, "id" | "created_at">> &
+  Pick<OfficialResponseWindowRow, "simulation_attempt_id" | "prompt_id" | "track" | "item_slot" | "response_stage" | "expected_duration_seconds">;
+
+// Registro do aceite de consentimento pra gravação de voz — M3.3 (migration
+// 20260912040000). Imutável por design: sem update/delete pra
+// `authenticated`, ver src/lib/simulations/consent.ts.
+export type RecordingConsentRow = {
+  id: string;
+  user_id: string;
+  consent_version: string;
+  accepted_at: string;
+  created_at: string;
+};
+type RecordingConsentInsert = Pick<RecordingConsentRow, "user_id" | "consent_version">;
+
+// Auditoria de acesso ADMINISTRATIVO a uma gravação (item 3.2 do plano de
+// correção) — só metadado, nunca conteúdo. Escrita/leitura só por
+// service_role (migration 20260912060000).
+export type RecordingAccessLogRow = {
+  id: string;
+  admin_user_id: string;
+  track: "phase2" | "pilot";
+  response_id: string;
+  accessed_at: string;
+};
+type RecordingAccessLogInsert = Pick<RecordingAccessLogRow, "admin_user_id" | "track" | "response_id">;
+
 export type Database = {
   public: {
     Tables: {
@@ -309,11 +389,22 @@ export type Database = {
       pilot_prompts: TableDef<PilotPromptRow, PilotPromptInsert>;
       pilot_responses: TableDef<PilotResponseRow, PilotResponseInsert>;
       simulation_feedbacks: TableDef<SimulationFeedbackRow, SimulationFeedbackInsert>;
+      recording_consents: TableDef<RecordingConsentRow, RecordingConsentInsert>;
+      recording_access_log: TableDef<RecordingAccessLogRow, RecordingAccessLogInsert>;
+      official_response_windows: TableDef<OfficialResponseWindowRow, OfficialResponseWindowInsert>;
+      privacy_deletion_requests: TableDef<{ user_id: string; requested_at: string }, { user_id: string }>;
+      privacy_uploads: TableDef<{ id: string; user_id: string; response_id: string; track: "phase2" | "pilot"; started_at: string }, { user_id: string; response_id: string; track: "phase2" | "pilot" }>;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      begin_privacy_upload: { Args: { p_user_id: string; p_response_id: string; p_track: string }; Returns: string };
+      finish_privacy_upload: { Args: { p_upload_id: string }; Returns: undefined };
+      request_privacy_deletion: { Args: { p_user_id: string }; Returns: boolean };
+      claim_recording_cleanup: { Args: { p_track: string; p_response_id: string; p_now: string; p_orphan: boolean; p_expected_path?: string | null }; Returns: boolean };
+      claim_recording_cleanup_batch: { Args: { p_track: string; p_candidates: { id: string; audio_path: string | null }[]; p_now: string; p_orphan: boolean }; Returns: { response_id: string; claimed: boolean; upload_pending: boolean }[] };
+      increment_official_repetition: { Args: { p_window_id: string }; Returns: number };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
 };
-

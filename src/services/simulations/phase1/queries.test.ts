@@ -26,7 +26,10 @@ function builder(table: string) {
   const state: { filters: Record<string, unknown> } = { filters: {} };
 
   function resolve(): { data: unknown; error: null } {
-    if (table === "phase1_questions") return { data: QUESTIONS, error: null };
+    if (table === "phase1_questions") {
+      const ids = state.filters.id as string[] | undefined;
+      return { data: ids ? QUESTIONS.filter((question) => ids.includes(question.id)) : QUESTIONS, error: null };
+    }
     if (table === "simulation_attempts") {
       return { data: ATTEMPT_IDS.map((id) => ({ id })), error: null };
     }
@@ -56,12 +59,31 @@ function builder(table: string) {
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({ from: (table: string) => builder(table) })),
 }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(() => ({ from: (table: string) => builder(table) })),
+}));
 
-const { getRandomQuizQuestions } = await import("./queries");
+const { assertPhase1CompletionCount, currentPhase1QuestionId, getQuizQuestionsByIds, getRandomQuizQuestions, phase1SequenceIds } = await import("./queries");
 
 beforeEach(() => {
   ATTEMPT_IDS = [];
   ANSWERED_QUESTION_IDS = [];
+});
+
+describe("sequência persistida da Fase 1", () => {
+  it("valida o formato e deriva o item corrente das respostas persistidas", () => {
+    expect(phase1SequenceIds({ phase1: ["q1", "q2", "q3"] })).toEqual(["q1", "q2", "q3"]);
+    expect(currentPhase1QuestionId(["q1", "q2", "q3"], ["q1"])).toBe("q2");
+    expect(currentPhase1QuestionId(["q1", "q2", "q3"], ["q1", "q2", "q3"])).toBeNull();
+    expect(() => currentPhase1QuestionId(["q1", "q2"], ["q2"])).toThrow(/inconsistente/);
+    expect(() => assertPhase1CompletionCount(["q1", "q2"], 1)).toThrow(/pendentes/);
+    expect(() => assertPhase1CompletionCount(["q1", "q2"], 2)).not.toThrow();
+  });
+
+  it("recarrega exatamente os IDs congelados, na ordem original", async () => {
+    const items = await getQuizQuestionsByIds(["q3", "q1", "q2"]);
+    expect(items.map((item) => item.id)).toEqual(["q3", "q1", "q2"]);
+  });
 });
 
 describe("getRandomQuizQuestions", () => {

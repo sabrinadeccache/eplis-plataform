@@ -26,6 +26,7 @@ type FakeRow = {
   aircraft_type: string;
   is_active: boolean;
   complication_image_url: string | null;
+  comparison_question: string | null;
 };
 
 function makeRows(part: Part, aircraftType: string, count: number, orderStart = 1): FakeRow[] {
@@ -40,6 +41,7 @@ function makeRows(part: Part, aircraftType: string, count: number, orderStart = 
       aircraft_type: aircraftType,
       is_active: true,
       complication_image_url: part === "part2" && orderIndex >= 31 ? `img-${orderIndex}.jpg` : null,
+      comparison_question: part === "part3" ? `Compare question ${orderIndex}` : null,
     };
   });
 }
@@ -71,8 +73,10 @@ vi.mock("@/lib/supabase/server", () => ({
               const partMatch = this._filters.part ? row.part === this._filters.part : true;
               const activeMatch =
                 this._filters.is_active === undefined || row.is_active === this._filters.is_active;
-              const typeMatch = (values as string[]).includes(row.aircraft_type);
-              return partMatch && activeMatch && typeMatch;
+              const inMatch = column === "id"
+                ? (values as string[]).includes(row.id)
+                : (values as string[]).includes(row.aircraft_type);
+              return partMatch && activeMatch && inMatch;
             }),
           });
         },
@@ -113,6 +117,21 @@ describe("getSequenceForAttempt (piloto)", () => {
     const { part2 } = await getSequenceForAttempt("attempt-3", "fixed_wing");
     expect(part2.slice(0, 3).every((p) => p.complicationImageUrl === null)).toBe(true);
     expect(part2.slice(3).every((p) => p.complicationImageUrl !== null)).toBe(true);
+  });
+
+  it("carrega a pergunta comparativa junto do conteúdo sorteado e persistido", async () => {
+    const drawn = await getSequenceForAttempt("attempt-comparison", "fixed_wing");
+    expect(drawn.part3.every((prompt) => prompt.comparisonQuestion?.startsWith("Compare question"))).toBe(true);
+    const persisted = {
+      part1: drawn.part1.map((prompt) => prompt.id),
+      part2: drawn.part2.map((prompt) => prompt.id),
+      part3: drawn.part3.map((prompt) => prompt.id),
+      part4: drawn.part4.map((prompt) => prompt.id),
+    };
+    const resumed = await getSequenceForAttempt("attempt-comparison", "fixed_wing", persisted);
+    expect(resumed.part3.map((prompt) => prompt.comparisonQuestion)).toEqual(
+      drawn.part3.map((prompt) => prompt.comparisonQuestion),
+    );
   });
 
   it("Parte 2 sem situações com imagem no pool → conteúdo insuficiente", async () => {

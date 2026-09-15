@@ -5,10 +5,18 @@ import {
   normalizeFinalReport,
   repetitionRuleFor,
   repetitionMarker,
+  EVALUATION_RUBRIC_VERSION,
+  EVALUATION_PROMPT_VERSION,
+  EVALUATION_PIPELINE_VERSION,
   type FinalReport,
 } from "@/lib/ai/anthropic";
 
-export { MODEL_VERSION };
+export {
+  MODEL_VERSION,
+  EVALUATION_RUBRIC_VERSION,
+  EVALUATION_PROMPT_VERSION,
+  EVALUATION_PIPELINE_VERSION,
+};
 
 // Mesmo tom/formato do feedback curto do controlador (ver anthropic.ts) —
 // 2-3 frases, sem nota, em inglês, texto puro pra ser narrado por TTS, mesmo
@@ -38,8 +46,8 @@ Important, exam-specific rule: the SDEA does NOT grade radiotelephony phraseolog
 official exam instructions state explicitly that oral production is not judged by technical or
 operational precision, only by linguistic proficiency. Never comment on whether the candidate used
 correct/standard aviation phraseology, and never suggest a "more correct" phraseology wording — only
-evaluate the answer as spoken English (clarity, structure, grammar, fluency) and whether it
-communicated the relevant facts.`;
+evaluate the linguistic evidence visible in the transcript (clarity, structure and grammar) and
+whether it communicated the relevant facts. Do not infer pronunciation or acoustic fluency.`;
 
 // Regra da página 8 do modelo anotado do SDEA: nas etapas da Parte 2 em que o
 // candidato atua como piloto, se a resposta claramente não é uma interação de
@@ -82,7 +90,7 @@ their own words. This is primarily a comprehension check: give feedback about th
 accuracy of what was reported, as well as clarity of the English used.`;
 
 const QUESTION_RULE = `This answer is the open technical/opinion question that follows a Part 3
-situation — evaluate it as free spoken English (relevance, clarity, structure, fluency), same as
+situation — evaluate it as free English visible in the transcript (relevance, clarity, structure), same as
 any other open answer in the interview.`;
 
 const COMPARISON_RULE = `This answer is the closing comparison of the three Part 3 situations
@@ -101,10 +109,10 @@ evaluate whether the narrative accurately or literally matches what is in the pi
 suggest the candidate should have described concrete visual details instead — creative
 interpretation and invented details are expected and must never be penalized or flagged as
 off-task. Give feedback only about it as spoken English: sentence structure, grammar,
-simplicity/clarity, and fluency.`;
+simplicity and clarity visible in the transcript. Do not infer acoustic fluency.`;
 
 const DISCUSSION_RULE = `This answer is an open discussion question about the Part 4 picture's
-topic — evaluate it as free spoken English (relevance, clarity, structure, fluency).`;
+topic — evaluate it as free English visible in the transcript (relevance, clarity, structure).`;
 
 const AGREE_DISAGREE_RULE = `This answer is the closing "agree or disagree with this statement"
 step of Part 4 — evaluate the clarity of the opinion expressed and how well it is justified with
@@ -157,22 +165,25 @@ export async function generatePilotResponseFeedback(
   return extractText(msg.content);
 }
 
-// Mesma regra inegociável de segurança operacional do relatório final do
-// controlador (nunca média, sempre o menor dos 6 critérios) — é uma regra da
-// Escala OACI, não específica de nenhuma trilha.
+// Mesmo contrato provisório do controlador: só critérios sustentados pela
+// transcrição determinam o overall até existir avaliador acústico validado.
 const PILOT_FINAL_REPORT_SYSTEM = `Você é um examinador do Santos Dumont English Assessment (SDEA)
-avaliando pela Escala de Proficiência OACI (Doc 9835), seis critérios: pronúncia, estrutura,
-vocabulário, fluência, compreensão, interações. ${PROFICIENCY_SCALE_PROMPT}
+avaliando evidências TRANSCRITAS. Classifique somente estrutura, vocabulário, compreensão e
+interações. ${PROFICIENCY_SCALE_PROMPT}
+
+Você não recebe o sinal acústico nesta etapa. Portanto, não atribua nota de pronúncia nem de
+fluência oral: devolva null nesses dois campos e explique no feedback que eles estão indisponíveis
+até haver avaliação acústica validada. Não faça inferências acústicas a partir da transcrição.
 
 REGRA OBRIGATÓRIA E NÃO NEGOCIÁVEL DE SEGURANÇA OPERACIONAL: o nível geral relatado (overall)
-NUNCA é uma média dos seis critérios — é sempre igual ao MENOR valor entre eles (o critério mais
+NUNCA é uma média — é sempre igual ao MENOR valor entre os quatro critérios disponíveis (o critério mais
 fraco determina o resultado geral), pois um único critério fraco pode comprometer a segurança em
 comunicações reais de tráfego aéreo.
 
 Regra específica deste exame: a produção oral do candidato NÃO é julgada pela precisão técnica ou
 operacional — isso inclui fraseologia de radiotelefonia. Nunca rebaixe nenhum critério, nem
 mencione no general_feedback, por causa de fraseologia incorreta ou não-padrão; avalie somente a
-proficiência linguística em si (pronúncia, estrutura, vocabulário, fluência, compreensão,
+proficiência linguística observável na transcrição (estrutura, vocabulário, compreensão,
 interações).
 
 Regra da Parte 2 (role-play em que o candidato interpreta o piloto, 4 respostas distintas por
@@ -199,27 +210,27 @@ gramática e clareza.
 
 Se alguma transcrição estiver vazia, ou for claramente ruído/fragmento cortado em vez de uma
 tentativa real de resposta em inglês, trate isso como um provável problema técnico (microfone) e
-NÃO use essa resposta específica para rebaixar nenhum dos 6 critérios — avalie os critérios com
+NÃO use essa resposta específica para rebaixar nenhum dos critérios disponíveis — avalie-os com
 base nas demais respostas e, se mencionar o caso no general_feedback, deixe claro que foi por
 motivo técnico, não de proficiência.
 
 Este relatório fica salvo como registro de progresso do aluno (mesmo a entrevista tendo sido
 conduzida em inglês) — escreva o campo general_feedback em português, explicando individualmente
-cada um dos 6 critérios (o que motivou a nota dada em cada um, com pelo menos um exemplo concreto
+cada um dos 4 critérios disponíveis (o que motivou a nota dada em cada um, com pelo menos um exemplo concreto
 extraído das respostas do candidato) e não só uma impressão geral, para que o aluno entenda
 exatamente onde está seu progresso e o que precisa melhorar.
 
 Responda APENAS com um JSON estrito, sem texto antes ou depois, no formato:
-{"pronunciation":"weak|moderate|good|excellent","structure":"weak|moderate|good|excellent","vocabulary":"weak|moderate|good|excellent","fluency":"weak|moderate|good|excellent","comprehension":"weak|moderate|good|excellent","interaction":"weak|moderate|good|excellent","overall":"<igual ao menor dos seis>","general_feedback":"<texto em português explicando cada um dos 6 critérios individualmente>"}`;
+{"pronunciation":null,"structure":"weak|moderate|good|excellent","vocabulary":"weak|moderate|good|excellent","fluency":null,"comprehension":"weak|moderate|good|excellent","interaction":"weak|moderate|good|excellent","overall":"<igual ao menor dos quatro critérios disponíveis>","general_feedback":"<texto em português explicando os quatro critérios disponíveis e a limitação acústica>"}`;
 
 const FALLBACK_REPORT: FinalReport = {
-  pronunciation: "moderate",
-  structure: "moderate",
-  vocabulary: "moderate",
-  fluency: "moderate",
-  comprehension: "moderate",
-  interaction: "moderate",
-  overall: "moderate",
+  pronunciation: null,
+  structure: null,
+  vocabulary: null,
+  fluency: null,
+  comprehension: null,
+  interaction: null,
+  overall: null,
   general_feedback:
     "Não foi possível gerar o relatório detalhado automaticamente. Entre em contato com o suporte.",
 };
@@ -228,7 +239,8 @@ export async function generatePilotFinalReport(
   transcripts: { part: string; promptText: string; transcript: string; repetitionCount?: number }[],
   mode: "practice" | "official",
 ): Promise<FinalReport> {
-  const body = transcripts
+  const usableTranscripts = transcripts.filter((t) => t.transcript.trim().length > 0);
+  const body = usableTranscripts
     .map(
       (t, i) =>
         `[${i + 1}] (${t.part}) Contexto: ${t.promptText}\nResposta: ${t.transcript}${repetitionMarker(t.repetitionCount)}`,
@@ -238,7 +250,7 @@ export async function generatePilotFinalReport(
   // Sem nenhuma resposta transcrita (ex.: candidato pulou tudo, ou todas as
   // gravações falharam) não há o que avaliar — chamar a IA com content vazio
   // dá 400 ("user messages must have non-empty content").
-  if (body.trim() === "") return FALLBACK_REPORT;
+  if (usableTranscripts.length === 0) return FALLBACK_REPORT;
 
   const system =
     (mode === "official"
