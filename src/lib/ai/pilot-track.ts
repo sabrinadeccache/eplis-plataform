@@ -1,4 +1,4 @@
-import { client, MODEL_VERSION, extractText } from "@/lib/ai/anthropic-client";
+import { getAnthropicClient, MODEL_VERSION, extractText } from "@/lib/ai/anthropic-client";
 import {
   OFFICIAL_MODE_ADDENDUM,
   PROFICIENCY_SCALE_PROMPT,
@@ -155,7 +155,7 @@ export async function generatePilotResponseFeedback(
   const stageRule = stage ? STAGE_RULES[stage] : undefined;
   const system = stageRule ? `${SHORT_FEEDBACK_SYSTEM}\n\n${stageRule}` : SHORT_FEEDBACK_SYSTEM;
 
-  const msg = await client.messages.create({
+  const msg = await getAnthropicClient().messages.create({
     model: MODEL_VERSION,
     max_tokens: 300,
     thinking: { type: "disabled" },
@@ -257,7 +257,7 @@ export async function generatePilotFinalReport(
       ? `${PILOT_FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}`
       : PILOT_FINAL_REPORT_SYSTEM) + repetitionRuleFor(mode);
 
-  const msg = await client.messages.create({
+  const msg = await getAnthropicClient().messages.create({
     model: MODEL_VERSION,
     max_tokens: 2000,
     thinking: { type: "disabled" },

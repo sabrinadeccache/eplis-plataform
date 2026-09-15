@@ -12,7 +12,7 @@ vi.mock("@/lib/ai/anthropic-client", async () => {
   );
   return {
     ...actual,
-    client: { messages: { create } },
+    getAnthropicClient: () => ({ messages: { create } }),
   };
 });
 

@@ -8,7 +8,7 @@ vi.mock("@/lib/ai/anthropic-client", async () => {
   const actual = await vi.importActual<typeof import("@/lib/ai/anthropic-client")>(
     "@/lib/ai/anthropic-client",
   );
-  return { ...actual, client: { messages: { create } } };
+  return { ...actual, getAnthropicClient: () => ({ messages: { create } }) };
 });
 
 function reply(text: string) {

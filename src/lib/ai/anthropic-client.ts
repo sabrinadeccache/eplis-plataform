@@ -2,7 +2,14 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // Base do SDK compartilhada entre os prompts do controlador (anthropic.ts) e
 // os da trilha do piloto/SDEA (pilot-track.ts) — sem regra de negócio aqui.
-export const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+let client: Anthropic | null = null;
+
+export function getAnthropicClient(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("Anthropic não configurada no servidor.");
+  client ??= new Anthropic({ apiKey });
+  return client;
+}
 
 export const MODEL_VERSION = "claude-sonnet-5";
 

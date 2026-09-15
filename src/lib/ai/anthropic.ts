@@ -1,4 +1,4 @@
-import { client, MODEL_VERSION, extractText } from "@/lib/ai/anthropic-client";
+import { getAnthropicClient, MODEL_VERSION, extractText } from "@/lib/ai/anthropic-client";
 import {
   type ProficiencyLevel,
   PROFICIENCY_ORDER,
@@ -113,7 +113,7 @@ export async function generateResponseFeedback(
   const effectivePromptText =
     stage === "story_telling" ? "Tell a short story related to the image you were shown." : promptText;
 
-  const msg = await client.messages.create({
+  const msg = await getAnthropicClient().messages.create({
     model: MODEL_VERSION,
     max_tokens: 300,
     thinking: { type: "disabled" },
@@ -302,7 +302,7 @@ export async function generateFinalReport(
     (mode === "official" ? `${FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}` : FINAL_REPORT_SYSTEM) +
     repetitionRuleFor(mode);
 
-  const msg = await client.messages.create({
+  const msg = await getAnthropicClient().messages.create({
     model: MODEL_VERSION,
     max_tokens: 2000,
     thinking: { type: "disabled" },
