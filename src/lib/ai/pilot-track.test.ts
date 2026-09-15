@@ -85,7 +85,7 @@ const transcripts = [
 ];
 
 describe("generatePilotFinalReport", () => {
-  it("parseia JSON estrito e força overall = menor dos 6", async () => {
+  it("parseia JSON estrito e força overall = menor dos quatro critérios textuais", async () => {
     reply(strictJson);
     const out = await generatePilotFinalReport(transcripts, "practice");
     expect(out.overall).toBe("weak");
@@ -101,13 +101,23 @@ describe("generatePilotFinalReport", () => {
   it("cai no relatório de fallback quando o JSON é inválido", async () => {
     reply("desculpa, não consegui");
     const out = await generatePilotFinalReport(transcripts, "practice");
-    expect(out.overall).toBe("moderate");
+    expect(out.overall).toBeNull();
+    expect(out.structure).toBeNull();
     expect(out.general_feedback).toContain("suporte");
   });
 
   it("lista de transcrições vazia devolve o fallback sem chamar a IA", async () => {
     const out = await generatePilotFinalReport([], "practice");
-    expect(out.overall).toBe("moderate");
+    expect(out.overall).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("ignora transcrições em branco e não inventa uma avaliação", async () => {
+    const out = await generatePilotFinalReport(
+      [{ part: "part1", promptText: "contexto", transcript: "\n\t" }],
+      "practice",
+    );
+    expect(out.overall).toBeNull();
     expect(create).not.toHaveBeenCalled();
   });
 

@@ -286,6 +286,24 @@ export function InterviewRunner({
     });
   }, [attemptId, currentPrompt.id, currentStep.stage, currentSlot]);
 
+  // Cada estágio de resposta tem sua própria janela oficial. Sem este reset,
+  // o término confirmado do primeiro áudio fazia os estágios seguintes
+  // reutilizarem o mesmo sinalizador e deixarem de registrar o fim.
+  useEffect(() => {
+    officialFinishedRef.current = false;
+    submittingRef.current = false;
+    if (recordingLimitRef.current) {
+      clearTimeout(recordingLimitRef.current);
+      recordingLimitRef.current = null;
+    }
+    return () => {
+      if (recordingLimitRef.current) {
+        clearTimeout(recordingLimitRef.current);
+        recordingLimitRef.current = null;
+      }
+    };
+  }, [part, itemIndex, stepIndex]);
+
   // Mesma trava usada no Phase1Runner (advancingRef): o timer automático de
   // 3s do step "auto" e o clique manual em "Continuar" podem disparar
   // goToNextItem quase ao mesmo tempo no último step de um item — sem essa
@@ -431,18 +449,29 @@ export function InterviewRunner({
       .catch(() => {});
   }
 
-  function replayAudio() {
+  async function replayAudio() {
     const audio = audioRef.current;
     if (!audio) return;
-    if (mode === "official") void officialEvent("repeat").catch(() => {});
+    let officialCount: number | null = null;
+    if (mode === "official") {
+      try {
+        const result = await officialEvent("repeat");
+        const count = Number(result.repetition_count);
+        officialCount = Number.isFinite(count) ? count : null;
+        setMicError(null);
+      } catch (error) {
+        setMicError(error instanceof Error ? error.message : "Não foi possível repetir esta pergunta.");
+        return;
+      }
+    }
     if (!audio.src || stepSpeechFailed) {
       setSpeechNonce((n) => n + 1);
-      setRepetitionCount((c) => c + 1);
+      setRepetitionCount((current) => officialCount ?? current + 1);
       return;
     }
     audio.currentTime = 0;
     audio.play().catch(() => {});
-    setRepetitionCount((c) => c + 1);
+    setRepetitionCount((current) => officialCount ?? current + 1);
   }
 
   async function startRecording() {
@@ -776,15 +805,17 @@ export function InterviewRunner({
     if (isRecording) {
       return (
         <>
-          {recorderState === "recording" ? (
-            <KeyButton icon="pause" label="Pausar" variant="accent" onClick={pauseRecording} />
-          ) : (
-            <KeyButton
-              icon="play"
-              label="Continuar falando"
-              variant="accent"
-              onClick={resumeRecording}
-            />
+          {mode === "practice" && (
+            recorderState === "recording" ? (
+              <KeyButton icon="pause" label="Pausar" variant="accent" onClick={pauseRecording} />
+            ) : (
+              <KeyButton
+                icon="play"
+                label="Continuar falando"
+                variant="accent"
+                onClick={resumeRecording}
+              />
+            )
           )}
           {mode === "practice" && (
             <KeyButton icon="restart" label="Recomeçar" onClick={restartRecording} />

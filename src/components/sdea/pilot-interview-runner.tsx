@@ -331,6 +331,23 @@ export function PilotInterviewRunner({
     });
   }, [attemptId, currentPrompt.id, currentStep.stage, currentSlot]);
 
+  // A confirmação de término pertence ao estágio atual, não à entrevista
+  // inteira. Também desmonta qualquer hard-stop deixado pelo estágio anterior.
+  useEffect(() => {
+    officialFinishedRef.current = false;
+    submittingRef.current = false;
+    if (recordingLimitRef.current) {
+      clearTimeout(recordingLimitRef.current);
+      recordingLimitRef.current = null;
+    }
+    return () => {
+      if (recordingLimitRef.current) {
+        clearTimeout(recordingLimitRef.current);
+        recordingLimitRef.current = null;
+      }
+    };
+  }, [part, itemIndex, stepIndex]);
+
   useEffect(() => {
     if (part === "part3" && itemIndex === PART_SIZES.part3 - 1 && !currentPrompt.comparisonQuestion) {
       Sentry.captureMessage("pilot_comparison_question_legacy_fallback", {
@@ -495,20 +512,31 @@ export function PilotInterviewRunner({
       .catch(() => {});
   }
 
-  function replayAudio() {
+  async function replayAudio() {
     const audio = audioRef.current;
     if (!audio) return;
     // Sem áudio carregado (a geração da fala falhou) — tenta gerar de novo em
     // vez de "repetir" um elemento vazio.
-    if (mode === "official") void officialEvent("repeat").catch(() => {});
+    let officialCount: number | null = null;
+    if (mode === "official") {
+      try {
+        const result = await officialEvent("repeat");
+        const count = Number(result.repetition_count);
+        officialCount = Number.isFinite(count) ? count : null;
+        setMicError(null);
+      } catch (error) {
+        setMicError(error instanceof Error ? error.message : "Não foi possível repetir esta pergunta.");
+        return;
+      }
+    }
     if (!audio.src || stepSpeechFailed) {
       setSpeechNonce((n) => n + 1);
-      setRepetitionCount((c) => c + 1);
+      setRepetitionCount((current) => officialCount ?? current + 1);
       return;
     }
     audio.currentTime = 0;
     audio.play().catch(() => {});
-    setRepetitionCount((c) => c + 1);
+    setRepetitionCount((current) => officialCount ?? current + 1);
   }
 
   async function startRecording() {
@@ -662,7 +690,7 @@ export function PilotInterviewRunner({
         clearTimeout(transcribingTimer);
         if (evaluatingTimer) clearTimeout(evaluatingTimer);
         if (res.status === 401) {
-          window.location.href = "/login?erro=sessao";
+          router.push("/login?erro=sessao");
           return;
         }
         if (!res.ok) {
@@ -810,15 +838,17 @@ export function PilotInterviewRunner({
     if (isRecording) {
       return (
         <>
-          {recorderState === "recording" ? (
-            <KeyButton icon="pause" label="Pausar" variant="accent" onClick={pauseRecording} />
-          ) : (
-            <KeyButton
-              icon="play"
-              label="Continuar falando"
-              variant="accent"
-              onClick={resumeRecording}
-            />
+          {mode === "practice" && (
+            recorderState === "recording" ? (
+              <KeyButton icon="pause" label="Pausar" variant="accent" onClick={pauseRecording} />
+            ) : (
+              <KeyButton
+                icon="play"
+                label="Continuar falando"
+                variant="accent"
+                onClick={resumeRecording}
+              />
+            )
           )}
           {mode === "practice" && (
             <KeyButton icon="restart" label="Recomeçar" onClick={restartRecording} />

@@ -11,7 +11,7 @@ import { assertAccountStillActive } from "@/lib/simulations/attempt-guards";
 import { getSequenceForAttempt, type PilotItemSequence } from "@/services/simulations/pilot/queries";
 import { responseStagesForPilotItem } from "@/services/simulations/pilot/response-stages";
 import { sdeaAircraftType } from "@/lib/auth/roles";
-import { validateAudioContainer, validateDecodedAudio, MAX_REQUEST_BODY_BYTES, type AudioContainer } from "@/lib/audio/validate";
+import { validateAudioContainer, validateDecodedAudio, sniffAudioContainer, MAX_REQUEST_BODY_BYTES, type AudioContainer } from "@/lib/audio/validate";
 import {
   assertCurrentPrompt,
   assertContentLengthWithinLimit,
@@ -169,8 +169,13 @@ export async function POST(request: Request) {
         assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
         return NextResponse.json({ error: "Não foi possível recuperar o áudio já enviado." }, { status: 503 });
       }
-      mimeType = storedPath.endsWith(".mp4") ? "audio/mp4" : "audio/webm";
       buffer = Buffer.from(await storedAudio.arrayBuffer());
+      const storedContainer = sniffAudioContainer(buffer);
+      if (!storedContainer) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        return NextResponse.json({ error: "O áudio armazenado está corrompido ou em formato não reconhecido." }, { status: 422 });
+      }
+      mimeType = storedContainer === "mp4" ? "audio/mp4" : "audio/webm";
       const containerCheck = validateAudioContainer(buffer, mimeType);
       if (!containerCheck.ok) {
         assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
@@ -192,7 +197,14 @@ export async function POST(request: Request) {
       const status = validation.kind === "unavailable" ? 503 : 422;
       return NextResponse.json({ error: validation.reason }, { status });
     }
-    if (officialWindow) validateOfficialTiming(officialWindow, validation.durationSeconds);
+    if (officialWindow) {
+      try {
+        validateOfficialTiming(officialWindow, validation.durationSeconds);
+      } catch (error) {
+        assertPrivacyWrite(await admin.from("pilot_responses").update({ processing_status: "error" }).eq("id", responseId));
+        throw error;
+      }
+    }
 
     // Rechecagem de UX; a garantia de exclusão é a barreira transacional
     // + reserva de upload em privacy-barrier.ts / migration 070000.

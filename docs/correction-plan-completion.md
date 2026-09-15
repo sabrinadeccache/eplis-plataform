@@ -9,6 +9,7 @@
 | Reload/relógio adulterado | gravação iniciada não reinicia silenciosamente | segundo `recording_started` recebe 409; relógio é do servidor | unicidade por tentativa, prompt e slot | validação de timing |
 | Pergunta comparativa SDEA | conteúdo do item sorteado, com fallback legado | seleção inclui `comparison_question` | migration `20260903000000` | `queries.test.ts` + typecheck |
 | Evidência acústica | pronúncia/fluência aparecem como indisponíveis | transcrição não gera pseudo-nota acústica; overall usa 4 critérios textuais | colunas ficam `null` em novos relatórios | `final-report.test.ts` e suítes de IA |
+| Proveniência da avaliação | não aplicável | constantes explícitas para régua, prompt e pipeline | versões persistidas; legado marcado | suítes de actions + typecheck |
 | Processamento e recuperação | upload/transcrição/avaliação distintos, expectativa de 20–60 s, timeout e retry sem regravar, código de suporte | reserva idempotente mantém o mesmo slot/objeto | caminho determinístico da resposta e status de processamento | suítes dos runners e das rotas |
 | Legendas | preferência restaurada no dispositivo | não aplicável | `localStorage` (sem dado pessoal) | suítes dos runners |
 | Estado REC | somente gravação/pausa mostra REC; demais estados mostram espera | não aplicável | não aplicável | suíte de componentes/runners |
@@ -20,3 +21,11 @@
 - O cliente encerra no limite do item e o servidor rejeita duração real ou janela acima do limite mais a tolerância.
 - Em falha de rede após a gravação, os chunks permanecem na sessão da página e o botão de retry reenvia o mesmo áudio para o mesmo slot idempotente.
 - Após reload, se a gravação oficial já começou e o blob local se perdeu, a plataforma bloqueia reinício silencioso e orienta pelo erro com código de suporte.
+
+## Fechamentos da revisão final
+
+- O modo Official não exibe pausa e reinicializa timers/flags a cada slot.
+- Resume identifica WebM, Ogg, MP4 e WAV pelos bytes; o caminho privado não depende de extensão.
+- Rejeição temporal marca o processamento como erro para permitir retry idempotente.
+- Transcrições vazias e respostas inválidas deixam a avaliação indisponível, sem nota padrão.
+- Relatórios armazenam versões do modelo, régua, prompt e pipeline.

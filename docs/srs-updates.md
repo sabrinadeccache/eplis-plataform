@@ -53,6 +53,23 @@ gera exatamente uma resposta; timeout official sem seleção conta como incorret
 nunca integra histórico, gráfico ou nota Official. *Implementado localmente na M4 em
 2026-09-14; migration 140000 deve preceder o código.*
 
+**RF-59** — No modo Official da Fase 2 e do SDEA, a gravação deve iniciar
+automaticamente, não admitir pausa e ser encerrada pelo limite do item. O servidor deve
+registrar os eventos e validar a duração decodificada com tolerância explícita; reload
+não pode reiniciar silenciosamente uma janela já iniciada. *M5.*
+
+**RF-60** — O item aplicável do SDEA deve incluir pergunta comparativa versionada no
+banco e no sorteio, com compatibilidade para itens legados. *M5.*
+
+**RF-61** — Enquanto a avaliação receber somente transcrições, pronúncia e fluência
+devem ficar indisponíveis e fora do cálculo geral. Transcrição vazia, relatório
+malformado ou falha técnica não pode produzir nota padrão. Todo relatório deve registrar
+as versões do modelo, régua, prompt e pipeline. *M6.*
+
+**RF-62** — Upload, transcrição e avaliação devem ter estados distintos, timeout,
+mensagem acionável, código de suporte e retry idempotente sem exigir nova gravação.
+Preferência de legendas deve ser restaurada no dispositivo. *M7.*
+
 ## Requisitos existentes alterados
 
 **RF-12 (esclarecimento)** — O tempo de reescuta do áudio na Fase 1 (segunda escuta

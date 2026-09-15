@@ -13,7 +13,29 @@ conteúdo próprio, baseado nas especificações públicas do exame.
 
 Responsável: Sabrina Deccache.
 
-## Milestone 4 — consistência da Fase 1 e do Desempenho — implementada localmente (2026-09-14)
+## Estado atual — plano de correção M3–M7 concluído em código (2026-09-15)
+
+Branch `reliability/complete-m5-m7`, com PR de homologação aberto. O código inclui M3
+(privacidade/retenção), M4 (consistência da Fase 1), M5 (relógio oficial no servidor e
+pergunta comparativa SDEA), M6 (avaliação textual honesta e versionada) e M7
+(recuperação/UX/documentação). Ainda não considerar produção concluída até aplicar as
+migrations na ordem de `m3-privacy-handoff.md`, configurar `CRON_SECRET`, validar o
+Preview e promover o PR para `main`.
+
+- O modo Official começa a gravação automaticamente, não oferece pausa, limita
+  repetição e persiste a janela temporal no servidor. Retry conserva o slot; áudio MP4
+  sem extensão é reconhecido pelos bytes.
+- Falha técnica, transcrição vazia ou JSON inválido não vira nível N4: os critérios e o
+  overall ficam indisponíveis. Pronúncia/fluência nunca são inferidas da transcrição.
+- Relatórios novos persistem versões do modelo, régua, prompt e pipeline; históricos
+  são marcados como `legacy-unversioned` pela migration 15030000.
+- Dependências de runtime atualizadas para Next 16.3.5 e Sentry 10.74.0. Auditoria de
+  produção (`npm audit --omit=dev`) sem vulnerabilidades; alertas restantes são apenas
+  da árvore de ferramentas ESLint, sem correção upstream disponível.
+- A verificação final obrigatória é: testes, lint, typecheck, build, migrations em branch
+  Supabase, Preview Vercel e E2E das duas trilhas antes do merge.
+
+## Histórico — Milestone 4 (2026-09-14)
 
 Branch `reliability/phase1-resume-performance`, baseada no commit M3 `cbb82f8`.
 Sem push, merge, migration remota ou deploy.

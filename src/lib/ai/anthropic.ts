@@ -8,6 +8,12 @@ import {
 export { MODEL_VERSION };
 export type { ProficiencyLevel };
 
+// Proveniência persistida em cada relatório final. Estes identificadores devem
+// mudar sempre que a régua, o prompt ou a forma de produzir a avaliação mudar.
+export const EVALUATION_RUBRIC_VERSION = "icao-textual-four-criteria-v1";
+export const EVALUATION_PROMPT_VERSION = "2026-09-15-transcript-v1";
+export const EVALUATION_PIPELINE_VERSION = "transcript-only-v1";
+
 const SHORT_FEEDBACK_SYSTEM = `You are an EPLIS examiner (Brazilian aeronautical English
 proficiency exam, ICAO scale), speaking directly to the candidate as the interviewer would.
 Given the prompt shown to the candidate and the transcript of their spoken answer, give SHORT
@@ -71,8 +77,9 @@ literally again. Do NOT evaluate whether the story accurately or literally descr
 image, and do NOT suggest the candidate should have described concrete visual details (setting,
 colors, what the person is doing, etc.) instead of telling a story — creative interpretation and
 invented details are expected and must never be penalized or flagged as off-task. Give feedback
-only about the story as spoken English: sentence structure, grammar, simplicity/clarity, and
-fluency — the same kind of feedback given for any other answer in the interview.`;
+only about the story's relevance and the sentence structure, grammar and clarity visible in the
+transcript — the same kind of feedback given for any other answer in the interview. Do not infer
+pronunciation or acoustic fluency from a transcript.`;
 
 const STAGE_RULES: Record<string, string> = {
   situation_check: SITUATION_CHECK_RULE,
@@ -120,12 +127,12 @@ export async function generateResponseFeedback(
 
 export type FinalReport = {
   pronunciation: ProficiencyLevel | null;
-  structure: ProficiencyLevel;
-  vocabulary: ProficiencyLevel;
+  structure: ProficiencyLevel | null;
+  vocabulary: ProficiencyLevel | null;
   fluency: ProficiencyLevel | null;
-  comprehension: ProficiencyLevel;
-  interaction: ProficiencyLevel;
-  overall: ProficiencyLevel;
+  comprehension: ProficiencyLevel | null;
+  interaction: ProficiencyLevel | null;
+  overall: ProficiencyLevel | null;
   general_feedback: string;
 };
 
@@ -137,27 +144,35 @@ equivalente ao nível 4), "good" (Ótimo — equivalente ao nível 5) e "excelle
 equivalente ao nível 6). Use "excellent" só para desempenho realmente excepcional no critério, sem
 qualquer limitação perceptível; na dúvida entre "good" e "excellent", fique com "good".`;
 
-const REPORT_CRITERIA: (keyof FinalReport)[] = [
+const REPORT_CRITERIA = [
   "structure",
   "vocabulary",
   "comprehension",
   "interaction",
-];
+] as const;
 
 // Enquanto não há avaliador acústico validado, o overall é o menor dos quatro
 // critérios sustentados pela transcrição. Pronúncia e fluência ficam nulas.
 export function normalizeFinalReport(raw: FinalReport): FinalReport {
   const clean = { ...raw };
+  const supportedLevels: ProficiencyLevel[] = [];
   for (const key of REPORT_CRITERIA) {
-    if (!PROFICIENCY_ORDER.includes(clean[key] as ProficiencyLevel)) {
-      clean[key] = "moderate" as never;
+    const value = clean[key];
+    if (!PROFICIENCY_ORDER.includes(value as ProficiencyLevel)) {
+      clean[key] = null;
+    } else {
+      supportedLevels.push(value as ProficiencyLevel);
     }
   }
   // O pipeline recebe somente a transcrição. Sem sinal acústico validado,
   // pronúncia e fluência oral não podem ser classificadas honestamente.
   clean.pronunciation = null;
   clean.fluency = null;
-  clean.overall = lowestProficiency(REPORT_CRITERIA.map((k) => clean[k] as ProficiencyLevel));
+  // Um relatório incompleto/malformado não pode virar nota N4 por fallback.
+  // Só existe nível geral quando os quatro critérios textuais são válidos.
+  clean.overall = supportedLevels.length === REPORT_CRITERIA.length
+    ? lowestProficiency(supportedLevels)
+    : null;
   return clean;
 }
 
@@ -257,12 +272,12 @@ export function repetitionMarker(count?: number | null): string {
 
 const FALLBACK_REPORT: FinalReport = {
   pronunciation: null,
-  structure: "moderate",
-  vocabulary: "moderate",
+  structure: null,
+  vocabulary: null,
   fluency: null,
-  comprehension: "moderate",
-  interaction: "moderate",
-  overall: "moderate",
+  comprehension: null,
+  interaction: null,
+  overall: null,
   general_feedback:
     "Não foi possível gerar o relatório detalhado automaticamente. Entre em contato com o suporte.",
 };
@@ -271,7 +286,8 @@ export async function generateFinalReport(
   transcripts: { part: string; promptText: string; transcript: string; repetitionCount?: number }[],
   mode: "practice" | "official",
 ): Promise<FinalReport> {
-  const body = transcripts
+  const usableTranscripts = transcripts.filter((t) => t.transcript.trim().length > 0);
+  const body = usableTranscripts
     .map(
       (t, i) =>
         `[${i + 1}] (${t.part}) Pergunta: ${t.promptText}\nResposta: ${t.transcript}${repetitionMarker(t.repetitionCount)}`,
@@ -280,7 +296,7 @@ export async function generateFinalReport(
 
   // Sem nenhuma resposta transcrita não há o que avaliar — chamar a IA com
   // content vazio dá 400 ("user messages must have non-empty content").
-  if (body.trim() === "") return FALLBACK_REPORT;
+  if (usableTranscripts.length === 0) return FALLBACK_REPORT;
 
   const system =
     (mode === "official" ? `${FINAL_REPORT_SYSTEM}${OFFICIAL_MODE_ADDENDUM}` : FINAL_REPORT_SYSTEM) +

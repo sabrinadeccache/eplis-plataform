@@ -227,9 +227,16 @@ servidora autorizada, sem expor o gabarito ao cliente.
 | general_feedback | text | |
 | ai_provider | text, nullable | |
 | model_version | text, nullable | |
+| rubric_version | text, nullable | Versão da régua; históricos são `legacy-unversioned` |
+| prompt_version | text, nullable | Versão do prompt de relatório final |
+| pipeline_version | text, nullable | Versão do pipeline/evidência (`transcript-only-v1` atualmente) |
 | created_at | timestamp | |
 
 **Contrato provisório de avaliação (M6):** enquanto o pipeline não tiver um avaliador acústico validado, `pronunciation_score` e `fluency_score` ficam `null` e não determinam o resultado. O nível final é o menor entre estrutura, vocabulário, compreensão e interações, os quatro critérios sustentados pela transcrição. A interface identifica explicitamente os dois critérios indisponíveis; eles não são apresentados como avaliação acústica.
+
+Relatório incompleto, resposta vazia ou falha de parsing também deixa o resultado
+indisponível, sem fallback artificial para N4. A migration
+`20260915030000_evaluation_provenance.sql` adiciona a proveniência versionada.
 
 ---
 

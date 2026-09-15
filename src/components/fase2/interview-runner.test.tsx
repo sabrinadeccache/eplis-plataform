@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { InterviewRunner } from "./interview-runner";
 import { advanceState } from "@/services/simulations/phase2/actions";
 import type { Phase2Sequence } from "@/services/simulations/phase2/queries";
@@ -124,5 +124,35 @@ describe("InterviewRunner — trava de concorrência no avanço de item", () => 
 
     await waitFor(() => expect(advanceState).toHaveBeenCalled());
     expect(advanceState).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("InterviewRunner — regras do modo official", () => {
+  it("inicia automaticamente sem oferecer pausa da gravação", async () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <InterviewRunner
+          attemptId="attempt-1"
+          mode="official"
+          sequence={makeSequence()}
+          initialPart="part1"
+          initialItemIndex={1}
+          initialElapsedSeconds={0}
+        />,
+      );
+
+      await act(async () => { await Promise.resolve(); });
+      const audio = document.querySelector("audio") as HTMLAudioElement;
+      fireEvent(audio, new Event("ended"));
+      for (let second = 0; second < 6; second += 1) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      }
+
+      expect(screen.getByRole("button", { name: "Concluir e enviar" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Pausar" })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

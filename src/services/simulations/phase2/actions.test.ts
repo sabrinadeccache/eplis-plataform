@@ -16,6 +16,9 @@ vi.mock("@/lib/ai/anthropic", () => ({
   generateFinalReport: vi.fn(),
   generateResponseFeedback: vi.fn(),
   MODEL_VERSION: "test-model",
+  EVALUATION_RUBRIC_VERSION: "test-rubric",
+  EVALUATION_PROMPT_VERSION: "test-prompt",
+  EVALUATION_PIPELINE_VERSION: "test-pipeline",
 }));
 
 type FakeAttempt = {

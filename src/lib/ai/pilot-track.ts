@@ -5,10 +5,18 @@ import {
   normalizeFinalReport,
   repetitionRuleFor,
   repetitionMarker,
+  EVALUATION_RUBRIC_VERSION,
+  EVALUATION_PROMPT_VERSION,
+  EVALUATION_PIPELINE_VERSION,
   type FinalReport,
 } from "@/lib/ai/anthropic";
 
-export { MODEL_VERSION };
+export {
+  MODEL_VERSION,
+  EVALUATION_RUBRIC_VERSION,
+  EVALUATION_PROMPT_VERSION,
+  EVALUATION_PIPELINE_VERSION,
+};
 
 // Mesmo tom/formato do feedback curto do controlador (ver anthropic.ts) —
 // 2-3 frases, sem nota, em inglês, texto puro pra ser narrado por TTS, mesmo
@@ -38,8 +46,8 @@ Important, exam-specific rule: the SDEA does NOT grade radiotelephony phraseolog
 official exam instructions state explicitly that oral production is not judged by technical or
 operational precision, only by linguistic proficiency. Never comment on whether the candidate used
 correct/standard aviation phraseology, and never suggest a "more correct" phraseology wording — only
-evaluate the answer as spoken English (clarity, structure, grammar, fluency) and whether it
-communicated the relevant facts.`;
+evaluate the linguistic evidence visible in the transcript (clarity, structure and grammar) and
+whether it communicated the relevant facts. Do not infer pronunciation or acoustic fluency.`;
 
 // Regra da página 8 do modelo anotado do SDEA: nas etapas da Parte 2 em que o
 // candidato atua como piloto, se a resposta claramente não é uma interação de
@@ -82,7 +90,7 @@ their own words. This is primarily a comprehension check: give feedback about th
 accuracy of what was reported, as well as clarity of the English used.`;
 
 const QUESTION_RULE = `This answer is the open technical/opinion question that follows a Part 3
-situation — evaluate it as free spoken English (relevance, clarity, structure, fluency), same as
+situation — evaluate it as free English visible in the transcript (relevance, clarity, structure), same as
 any other open answer in the interview.`;
 
 const COMPARISON_RULE = `This answer is the closing comparison of the three Part 3 situations
@@ -101,10 +109,10 @@ evaluate whether the narrative accurately or literally matches what is in the pi
 suggest the candidate should have described concrete visual details instead — creative
 interpretation and invented details are expected and must never be penalized or flagged as
 off-task. Give feedback only about it as spoken English: sentence structure, grammar,
-simplicity/clarity, and fluency.`;
+simplicity and clarity visible in the transcript. Do not infer acoustic fluency.`;
 
 const DISCUSSION_RULE = `This answer is an open discussion question about the Part 4 picture's
-topic — evaluate it as free spoken English (relevance, clarity, structure, fluency).`;
+topic — evaluate it as free English visible in the transcript (relevance, clarity, structure).`;
 
 const AGREE_DISAGREE_RULE = `This answer is the closing "agree or disagree with this statement"
 step of Part 4 — evaluate the clarity of the opinion expressed and how well it is justified with
@@ -217,12 +225,12 @@ Responda APENAS com um JSON estrito, sem texto antes ou depois, no formato:
 
 const FALLBACK_REPORT: FinalReport = {
   pronunciation: null,
-  structure: "moderate",
-  vocabulary: "moderate",
+  structure: null,
+  vocabulary: null,
   fluency: null,
-  comprehension: "moderate",
-  interaction: "moderate",
-  overall: "moderate",
+  comprehension: null,
+  interaction: null,
+  overall: null,
   general_feedback:
     "Não foi possível gerar o relatório detalhado automaticamente. Entre em contato com o suporte.",
 };
@@ -231,7 +239,8 @@ export async function generatePilotFinalReport(
   transcripts: { part: string; promptText: string; transcript: string; repetitionCount?: number }[],
   mode: "practice" | "official",
 ): Promise<FinalReport> {
-  const body = transcripts
+  const usableTranscripts = transcripts.filter((t) => t.transcript.trim().length > 0);
+  const body = usableTranscripts
     .map(
       (t, i) =>
         `[${i + 1}] (${t.part}) Contexto: ${t.promptText}\nResposta: ${t.transcript}${repetitionMarker(t.repetitionCount)}`,
@@ -241,7 +250,7 @@ export async function generatePilotFinalReport(
   // Sem nenhuma resposta transcrita (ex.: candidato pulou tudo, ou todas as
   // gravações falharam) não há o que avaliar — chamar a IA com content vazio
   // dá 400 ("user messages must have non-empty content").
-  if (body.trim() === "") return FALLBACK_REPORT;
+  if (usableTranscripts.length === 0) return FALLBACK_REPORT;
 
   const system =
     (mode === "official"

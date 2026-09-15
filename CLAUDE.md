@@ -4,12 +4,11 @@ Plataforma de treinamento para o EPLIS (Exame de Proficiência em Inglês Aeron�
 SISCEAB). Ver `docs/project-status.md` primeiro em qualquer nova sessão — tem o status
 atual, o que já foi feito, o que falta, e as decisões de design já fechadas.
 
-**M3 verificada localmente e registrada em `cbb82f8` (2026-09-14):** ler
-`docs/m3-privacy-handoff.md` antes de mergear ou implantar. A migration 070000 vai
-antes do código M3; 050000 continua depois. Não liberar tickets de upload por
-timeout nem duplicar a retenção nos scripts (núcleo único `.mjs`). A M4 está na
-branch separada `reliability/phase1-resume-performance`; sua migration 140000 vai
-antes do código M4.
+**Plano M3–M7 implementado na branch `reliability/complete-m5-m7` (2026-09-15):**
+ler `docs/m3-privacy-handoff.md` e `docs/correction-plan-completion.md` antes de
+implantar. A migration M3 070000 vai antes do código; 050000 continua depois de
+confirmar o upload por `admin.storage`. As demais migrations aditivas precedem o
+código. Não liberar tickets de upload por timeout nem duplicar a retenção nos scripts.
 
 ## Leitura obrigatória antes de mexer em modelagem ou regras de negócio
 
@@ -22,8 +21,8 @@ antes do código M4.
 
 Next.js (App Router) + TypeScript, Tailwind, Supabase (Postgres + Auth + Storage),
 OpenAI (transcrição), Anthropic Claude (engine de entrevista/correção), Sentry
-(observabilidade — código real, desligado até `SENTRY_DSN` ser configurado, ver
-`docs/project-status.md`), Vercel (deploy em produção: https://eplis-trainer.vercel.app,
+(observabilidade — ativado quando `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` estão configurados,
+ver `docs/project-status.md`), Vercel (deploy em produção: https://eplis-trainer.vercel.app,
 deploy automático a cada push em `main`).
 
 ## Rodando localmente

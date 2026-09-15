@@ -21,9 +21,10 @@ vi.mock("@/services/simulations/phase2/queries", () => ({ getSequenceForAttempt 
 
 const validateAudioContainer = vi.fn();
 const validateDecodedAudio = vi.fn();
+const sniffAudioContainer = vi.fn();
 vi.mock("@/lib/audio/validate", async (importOriginal) => {
   const actual = (await importOriginal()) as object;
-  return { ...actual, validateAudioContainer, validateDecodedAudio };
+  return { ...actual, validateAudioContainer, validateDecodedAudio, sniffAudioContainer };
 });
 
 const reserveResponseSlot = vi.fn();
@@ -180,6 +181,7 @@ beforeEach(() => {
   getSequenceForAttempt.mockResolvedValue(sequence);
   validateAudioContainer.mockReturnValue({ ok: true, container: "webm" });
   validateDecodedAudio.mockResolvedValue({ ok: true, container: "webm", durationSeconds: 12 });
+  sniffAudioContainer.mockReturnValue("webm");
   assertSubmissionRate.mockResolvedValue(undefined);
   getConsentStatus.mockResolvedValue({ accepted: true, version: "test", acceptedAt: "2026-01-01T00:00:00Z" });
   storageUpload.mockResolvedValue({ error: null });
@@ -332,6 +334,27 @@ describe("POST /api/phase2/submit-response", () => {
     expect(storageDownload).toHaveBeenCalledWith("user/attempt/response.webm");
     expect(storageUpload).not.toHaveBeenCalled();
     expect(transcribeAudio).toHaveBeenCalledOnce();
+  });
+
+  it("retoma MP4 armazenado em caminho sem extensão usando a assinatura real dos bytes", async () => {
+    sniffAudioContainer.mockReturnValue("mp4");
+    validateAudioContainer.mockReturnValue({ ok: true, container: "mp4" });
+    validateDecodedAudio.mockResolvedValue({ ok: true, container: "mp4", durationSeconds: 12 });
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    const res = await POST(makeRequest({ resume: "true" }, { audio: null }));
+    expect(res.status).toBe(200);
+    expect(validateAudioContainer).toHaveBeenCalledWith(expect.any(Buffer), "audio/mp4");
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("marca o slot como erro quando o relógio official rejeita a duração", async () => {
+    assertOwnAttemptInProgress.mockResolvedValue({ ...attempt, mode: "official" });
+    validateDecodedAudio.mockResolvedValue({ ok: true, container: "webm", durationSeconds: 90 });
+    reserveResponseSlot.mockResolvedValue({ kind: "reserved", responseId: "resp-1", slot: 0 });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(422);
+    expect(adminUpdate).toHaveBeenCalledWith({ processing_status: "error" });
+    expect(storageUpload).not.toHaveBeenCalled();
   });
 
   it("modo official não chama geração de feedback (só transcreve)", async () => {

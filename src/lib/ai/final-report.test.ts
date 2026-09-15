@@ -54,10 +54,10 @@ describe("normalizeFinalReport", () => {
     expect(out.overall).toBe("excellent");
   });
 
-  it("substitui valor de faixa desconhecido por 'moderate'", () => {
+  it("não inventa N4 quando um critério recebido é inválido", () => {
     const out = normalizeFinalReport({ ...base, vocabulary: "amazing" as never });
-    expect(out.vocabulary).toBe("moderate");
-    expect(out.overall).toBe("moderate");
+    expect(out.vocabulary).toBeNull();
+    expect(out.overall).toBeNull();
   });
 });
 

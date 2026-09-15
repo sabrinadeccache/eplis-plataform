@@ -11,6 +11,9 @@ import {
   generateFinalReport,
   generateResponseFeedback,
   MODEL_VERSION,
+  EVALUATION_RUBRIC_VERSION,
+  EVALUATION_PROMPT_VERSION,
+  EVALUATION_PIPELINE_VERSION,
   type FeedbackStage,
 } from "@/lib/ai/anthropic";
 import { computeNextPosition } from "@/services/simulations/phase2/state-machine";
@@ -194,6 +197,9 @@ export async function advanceState(attemptId: string): Promise<{ finished: boole
       general_feedback: report.general_feedback,
       ai_provider: "anthropic",
       model_version: MODEL_VERSION,
+      rubric_version: EVALUATION_RUBRIC_VERSION,
+      prompt_version: EVALUATION_PROMPT_VERSION,
+      pipeline_version: EVALUATION_PIPELINE_VERSION,
     }));
 
     await admin

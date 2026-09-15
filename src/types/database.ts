@@ -45,7 +45,8 @@ export type ProcessingStatus = "queued" | "transcribing" | "analyzing" | "done" 
 // good=Ótimo (N5), excellent=Excelente (N6). Ordem do enum no banco é a mesma.
 export type ProficiencyLevel = "weak" | "moderate" | "good" | "excellent";
 
-// Ordem crescente — usada pra calcular o overall como o MENOR dos 6 critérios.
+// Ordem crescente — usada pra calcular o overall como o menor dos critérios
+// que o pipeline atual consegue sustentar com evidência.
 export const PROFICIENCY_ORDER: readonly ProficiencyLevel[] = [
   "weak",
   "moderate",
@@ -270,6 +271,9 @@ export type SimulationFeedbackRow = {
   general_feedback: string | null;
   ai_provider: string | null;
   model_version: string | null;
+  rubric_version: string | null;
+  prompt_version: string | null;
+  pipeline_version: string | null;
   created_at: string;
 };
 
