@@ -2,6 +2,14 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
+  // A integração atual Supabase→Vercel fornece `SUPABASE_URL` por branch,
+  // enquanto o browser precisa da mesma URL com prefixo público. A URL do
+  // projeto não é segredo; este alias mantém compatibilidade com as envs
+  // legadas e permite que cada Preview use sua própria branch Supabase.
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL:
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "",
+  },
   // Sem isso, o Next dev bloqueia o WebSocket de HMR quando acessado por IP de
   // rede (ex.: testando pelo celular no mesmo wifi), o que quebra a
   // hidratação do React na página inteira — sintoma real: selects
